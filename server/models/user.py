@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, List, Optional
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -147,7 +148,7 @@ class UserAddress(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     contact_name: Mapped[str] = mapped_column(
         String(50), nullable=False, comment="收货人"
@@ -187,7 +188,7 @@ class UserIdentity(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     name: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True, comment="姓名"
@@ -233,11 +234,11 @@ class IdentityFieldConfig(Base):
         comment="登记模式: required/optional/none"
     )
     builtin_fields: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default="'{}'",
+        JSONB, nullable=False, server_default="{}",
         comment="内置字段配置 {name:{enabled,required}, id_card:{...}, phone:{...}}"
     )
     custom_fields: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="'[]'",
+        JSONB, nullable=False, server_default="[]",
         comment="自定义字段 [{field_name,field_type,required,options,sort_order}]"
     )
     site_id: Mapped[int] = mapped_column(

@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "某露营地",
+  "navigationBarTitleText": "一月一露",
   "usingComponents": {
     "product-card": "../../components/product-card/index",
     "countdown": "../../components/countdown/index"

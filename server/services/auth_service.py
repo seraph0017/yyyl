@@ -216,10 +216,20 @@ async def admin_login(username: str, password: str, db: AsyncSession) -> Dict[st
         "refresh_token": refresh_token,
         "token_type": "Bearer",
         "expires_in": get_token_expire_seconds("access"),
-        "admin_id": admin.id,
-        "username": admin.username,
-        "real_name": admin.real_name,
-        "role_code": role_code,
+        "user": {
+            "id": admin.id,
+            "username": admin.username,
+            "real_name": admin.real_name,
+            "phone": admin.phone,
+            "role": {
+                "id": admin.role.id if admin.role else None,
+                "role_name": admin.role.role_name if admin.role else None,
+                "role_code": role_code,
+                "description": admin.role.description if admin.role else None,
+            },
+            "status": admin.status,
+            "last_login_at": admin.last_login_at.isoformat() if admin.last_login_at else None,
+        },
         "permissions": permissions,
     }
 

@@ -1,8 +1,8 @@
 {
   "miniprogramRoot": "./",
-  "projectname": "某露营地",
-  "description": "某露营地微信小程序",
-  "appid": "touristappid",
+  "projectname": "一月一露",
+  "description": "一月一露露营地微信小程序",
+  "appid": "wx04ddb70329942e2d",
   "setting": {
     "urlCheck": false,
     "es6": true,
@@ -40,9 +40,21 @@
     "useCompilerPlugins": [
       "typescript",
       "sass"
-    ]
+    ],
+    "compileWorklet": false,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "condition": false,
+    "swc": false,
+    "disableSWC": true
   },
   "compileType": "miniprogram",
   "condition": {},
-  "libVersion": "3.3.4"
+  "libVersion": "3.3.4",
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
 }

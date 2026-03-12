@@ -8,9 +8,9 @@
       circular
       bind:change="onSwiperChange"
     >
-      <swiper-item wx:for="{{product.images.length > 0 ? product.images : [1]}}" wx:key="*this">
+      <swiper-item wx:for="{{product.images.length > 0 ? product.images : ['placeholder']}}" wx:key="*this">
         <view class="detail-swiper__slide">
-          <image src="{{item}}" mode="aspectFill" wx:if="{{item && typeof item === 'string' && item.length > 5}}" />
+          <image src="{{item}}" mode="aspectFill" wx:if="{{item !== 'placeholder'}}" />
           <view class="detail-swiper__placeholder" wx:else>
             <text>🏕️</text>
             <text class="detail-swiper__placeholder-text">{{product.name}}</text>

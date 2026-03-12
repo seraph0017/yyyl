@@ -42,6 +42,7 @@ yyyl/
 ├── miniprogram/          # 微信小程序前端（C端 + 员工验票端）
 │   ├── pages/            # 17个页面
 │   ├── components/       # 4个通用组件
+│   ├── config/           # 品牌配置
 │   ├── utils/            # 工具函数（请求、认证、存储）
 │   ├── app.ts            # 小程序入口
 │   └── app.json          # 小程序配置
@@ -51,6 +52,7 @@ yyyl/
 │   ├── schemas/          # Pydantic 请求/响应模型
 │   ├── routers/          # API 路由（11个模块，71条API）
 │   ├── services/         # 业务逻辑层（7个服务）
+│   ├── tasks/            # Celery 异步任务（23个定时任务）
 │   ├── middleware/       # 中间件
 │   ├── utils/            # 工具函数（加密、认证、微信SDK等）
 │   ├── alembic/          # 数据库迁移
@@ -58,6 +60,9 @@ yyyl/
 │   ├── config.py         # 配置管理
 │   ├── database.py       # 数据库连接
 │   ├── redis_client.py   # Redis 连接
+│   ├── celery_app.py     # Celery 实例初始化
+│   ├── celery_config.py  # Celery Beat 定时任务调度
+│   ├── seed_admin.py     # 管理员种子数据脚本
 │   └── requirements.txt  # Python 依赖
 │
 ├── admin/                # Web管理后台前端（B端）
@@ -67,6 +72,7 @@ yyyl/
 │   │   ├── stores/       # Pinia 状态管理
 │   │   ├── router/       # 路由配置 + 权限守卫
 │   │   ├── layout/       # 主布局
+│   │   ├── config/       # 品牌配置
 │   │   ├── types/        # TypeScript 类型定义
 │   │   ├── utils/        # 工具函数
 │   │   └── styles/       # 主题样式（SCSS）
@@ -176,6 +182,9 @@ cp .env.example .env
 # 数据库迁移
 alembic upgrade head
 
+# 初始化管理员账号（首次运行时执行）
+python seed_admin.py
+
 # 启动开发服务器
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -184,6 +193,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 - API 文档（Swagger UI）：http://localhost:8000/docs
 - API 文档（ReDoc）：http://localhost:8000/redoc
 - 健康检查：http://localhost:8000/health
+- **默认管理员账号**：`admin` / `admin123456`（⚠️ 生产环境必须修改！）
 
 #### 后端 Python 依赖清单
 
@@ -457,6 +467,20 @@ npm run preview
 
 ---
 
+## 🎨 品牌配置
+
+项目品牌名、Slogan 等信息已抽取为可配置项，修改品牌只需编辑以下文件：
+
+| 文件 | 说明 |
+|------|------|
+| `miniprogram/config/brand.ts` | 小程序品牌名、Slogan、分享标题 |
+| `admin/src/config/brand.ts` | 管理后台品牌名、描述 |
+| `server/.env` → `APP_NAME` | 后端应用名称 |
+| `miniprogram/app.json` | 小程序导航栏标题（JSON 不支持动态化） |
+| `admin/index.html` | 管理后台 HTML 标题 |
+
+---
+
 ## 📋 技术栈总结
 
 | 层级 | 技术 |
@@ -467,7 +491,7 @@ npm run preview
 | **ORM** | SQLAlchemy 2.0 (Async) |
 | **数据库** | PostgreSQL 15 |
 | **缓存/队列** | Redis 7 |
-| **异步任务** | Celery + Redis Broker |
+| **异步任务** | Celery + Redis Broker（23个定时任务） |
 | **数据库迁移** | Alembic |
 | **API 文档** | Swagger UI / ReDoc（自动生成） |
 
@@ -494,6 +518,8 @@ docker run -d --name yyyl-redis -p 6379:6379 redis:7-alpine
 
 # 2. 后端 API
 cd server && source venv/bin/activate
+alembic upgrade head          # 数据库迁移
+python seed_admin.py          # 初始化管理员账号（首次）
 uvicorn main:app --reload --port 8000
 
 # 3. Celery Worker（新终端）

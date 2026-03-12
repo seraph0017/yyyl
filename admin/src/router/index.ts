@@ -3,6 +3,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
 import { getToken } from '@/utils/request'
+import { brandConfig } from '@/config/brand'
 
 NProgress.configure({ showSpinner: false })
 
@@ -156,7 +157,7 @@ const router = createRouter({
 // 路由守卫
 router.beforeEach((to, _from, next) => {
   NProgress.start()
-  document.title = `${to.meta.title || '管理后台'} - 某露营地`
+  document.title = `${to.meta.title || '管理后台'} - ${brandConfig.name}`
 
   const token = getToken()
 

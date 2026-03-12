@@ -19,6 +19,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -118,10 +119,10 @@ class Order(Base):
         String(32), unique=True, nullable=False, comment="订单号"
     )
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     parent_order_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True, comment="父订单ID(购物车拆单)"
+        BigInteger, ForeignKey("order.id"), nullable=True, comment="父订单ID(购物车拆单)"
     )
     order_type: Mapped[str] = mapped_column(
         String(30), nullable=False,
@@ -233,7 +234,7 @@ class OrderItem(Base):
     )
 
     order_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="订单ID"
+        BigInteger, ForeignKey("order.id"), nullable=False, comment="订单ID"
     )
     product_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="商品ID"
@@ -287,7 +288,7 @@ class Cart(Base):
     __table_args__ = {"comment": "购物车表"}
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), unique=True, nullable=False, comment="用户ID"
     )
 
     # 关系
@@ -307,13 +308,13 @@ class CartItem(Base):
     )
 
     cart_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="购物车ID"
+        BigInteger, ForeignKey("cart.id"), nullable=False, comment="购物车ID"
     )
     product_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="商品ID"
     )
     sku_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True, comment="SKU ID"
+        BigInteger, ForeignKey("sku.id"), nullable=True, comment="SKU ID"
     )
     quantity: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1",
@@ -341,13 +342,13 @@ class Ticket(Base):
     )
 
     order_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="订单ID"
+        BigInteger, ForeignKey("order.id"), nullable=False, comment="订单ID"
     )
     order_item_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True, comment="订单项ID"
+        BigInteger, ForeignKey("order_item.id"), nullable=True, comment="订单项ID"
     )
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     ticket_no: Mapped[str] = mapped_column(
         String(32), unique=True, nullable=False, comment="票号"

@@ -5,7 +5,7 @@
     <view class="header__brand">
       <text class="header__logo">🏕️</text>
       <view class="header__title">
-        <text class="header__name">某露营地</text>
+        <text class="header__name">{{brandName}}</text>
         <text class="header__slogan">享受户外生活</text>
       </view>
     </view>

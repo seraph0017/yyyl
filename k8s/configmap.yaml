@@ -5,7 +5,7 @@ metadata:
   name: yyyl-config
   namespace: yyyl
 data:
-  APP_NAME: "某露营地"
+  APP_NAME: "一月一露"
   APP_ENV: "production"
   DEBUG: "false"
   API_PREFIX: "/api/v1"

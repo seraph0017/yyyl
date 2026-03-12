@@ -16,6 +16,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     String,
@@ -82,7 +83,7 @@ class DisclaimerSignature(Base):
         BigInteger, nullable=False, comment="用户ID"
     )
     template_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="模板ID"
+        BigInteger, ForeignKey("disclaimer_template.id"), nullable=False, comment="模板ID"
     )
     order_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="订单ID"
@@ -149,7 +150,7 @@ class FaqItem(Base):
     )
 
     category_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="分类ID"
+        BigInteger, ForeignKey("faq_category.id"), nullable=False, comment="分类ID"
     )
     question: Mapped[str] = mapped_column(
         String(200), nullable=False, comment="问题"
@@ -195,7 +196,7 @@ class PageConfig(Base):
         comment="页面标识: home_banner/home_recommend/home_notice"
     )
     config_data: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default="'{}'",
+        JSONB, nullable=False, server_default="{}",
         comment="配置数据"
     )
     status: Mapped[str] = mapped_column(

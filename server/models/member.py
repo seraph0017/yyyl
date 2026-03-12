@@ -22,6 +22,7 @@ from sqlalchemy import (
     BigInteger,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -97,7 +98,7 @@ class AnnualCardConfig(Base):
         comment="有效天数"
     )
     privileges: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default="'{}'",
+        JSONB, nullable=False, server_default="{}",
         comment="权益 {product_id: {free:true, limit:0/N}}"
     )
     daily_limit_position: Mapped[int] = mapped_column(
@@ -147,10 +148,10 @@ class AnnualCard(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     config_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="配置ID"
+        BigInteger, ForeignKey("annual_card_config.id"), nullable=False, comment="配置ID"
     )
     order_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="购买订单ID"
@@ -203,7 +204,7 @@ class AnnualCardBookingRecord(Base):
     )
 
     annual_card_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="年卡ID"
+        BigInteger, ForeignKey("annual_card.id"), nullable=False, comment="年卡ID"
     )
     booking_date: Mapped[date] = mapped_column(
         Date, nullable=False, comment="预定日期"
@@ -246,7 +247,7 @@ class TimesCardConfig(Base):
         Integer, nullable=False, comment="有效天数(从激活日算)"
     )
     applicable_products: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="'[]'",
+        JSONB, nullable=False, server_default="[]",
         comment="适用商品白名单 [product_id,...]"
     )
     daily_limit: Mapped[Optional[int]] = mapped_column(
@@ -286,10 +287,10 @@ class TimesCard(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     config_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="配置ID"
+        BigInteger, ForeignKey("times_card_config.id"), nullable=False, comment="配置ID"
     )
     activation_code_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="激活码ID"
@@ -342,7 +343,7 @@ class ActivationCode(Base):
         String(16), unique=True, nullable=False, comment="16位字母数字激活码"
     )
     config_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="次数卡配置ID"
+        BigInteger, ForeignKey("times_card_config.id"), nullable=False, comment="次数卡配置ID"
     )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False,
@@ -384,7 +385,7 @@ class TimesConsumptionRule(Base):
     )
 
     config_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="次数卡配置ID"
+        BigInteger, ForeignKey("times_card_config.id"), nullable=False, comment="次数卡配置ID"
     )
     product_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, comment="商品ID(须在白名单内)"
@@ -412,7 +413,7 @@ class PointsRecord(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     change_amount: Mapped[int] = mapped_column(
         Integer, nullable=False, comment="变动量(正增负减)"

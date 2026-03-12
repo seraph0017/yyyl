@@ -1,4 +1,5 @@
 // pages/product-detail/index.ts
+import { brandConfig } from '../../config/brand';
 
 interface DetailPageData {
   product: IProduct | null;
@@ -60,7 +61,7 @@ Page<DetailPageData, WechatMiniprogram.IAnyObject>({
   onShareAppMessage() {
     const product = this.data.product;
     return {
-      title: product ? product.name : '某露营地露营',
+      title: product ? product.name : brandConfig.shareDefaultTitle,
       path: `/pages/product-detail/index?id=${product?.id || 1}`,
     };
   },

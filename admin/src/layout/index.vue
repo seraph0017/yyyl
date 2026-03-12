@@ -4,7 +4,7 @@
     <el-aside :width="appStore.sidebarCollapsed ? '64px' : '220px'" class="layout-aside">
       <div class="logo-container">
         <img src="@/assets/logo.svg" alt="logo" class="logo-icon" />
-        <span v-if="!appStore.sidebarCollapsed" class="logo-text">某露营地</span>
+        <span v-if="!appStore.sidebarCollapsed" class="logo-text">{{ brand.name }}</span>
       </div>
       <el-scrollbar>
         <el-menu
@@ -100,6 +100,7 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useUserStore } from '@/stores/user'
+import { brandConfig as brand } from '@/config/brand'
 import {
   Fold, Expand, ArrowDown, SwitchButton,
   DataAnalysis, Calendar, Goods, List, User,

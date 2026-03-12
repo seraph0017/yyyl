@@ -25,6 +25,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -164,7 +165,7 @@ class Product(Base):
         server_default="0", comment="基础价格（兜底）"
     )
     images: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="'[]'",
+        JSONB, nullable=False, server_default="[]",
         comment="商品图片 [{url, sort_order}]"
     )
     description: Mapped[Optional[str]] = mapped_column(
@@ -251,7 +252,7 @@ class ProductExtCamping(Base):
     __table_args__ = {"comment": "露营票扩展表"}
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, nullable=False, comment="商品ID"
+        BigInteger, ForeignKey("product.id"), unique=True, nullable=False, comment="商品ID"
     )
     has_electricity: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false",
@@ -291,7 +292,7 @@ class ProductExtRental(Base):
     __table_args__ = {"comment": "装备租赁扩展表"}
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, nullable=False, comment="商品ID"
+        BigInteger, ForeignKey("product.id"), unique=True, nullable=False, comment="商品ID"
     )
     deposit_amount: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, default=0,
@@ -302,7 +303,7 @@ class ProductExtRental(Base):
         comment="租赁分类: overnight/lighting/furniture/vehicle/other"
     )
     damage_config: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="'[]'",
+        JSONB, nullable=False, server_default="[]",
         comment="损坏配置 [{level,rate}]"
     )
 
@@ -317,7 +318,7 @@ class ProductExtActivity(Base):
     __table_args__ = {"comment": "活动扩展表"}
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, nullable=False, comment="商品ID"
+        BigInteger, ForeignKey("product.id"), unique=True, nullable=False, comment="商品ID"
     )
     booking_unit: Mapped[str] = mapped_column(
         String(20), nullable=False, default=BookingUnit.PERSON.value,
@@ -325,7 +326,7 @@ class ProductExtActivity(Base):
         comment="预约单位: person/group"
     )
     time_slots: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="'[]'",
+        JSONB, nullable=False, server_default="[]",
         comment="场次 [{start,end,capacity}]"
     )
     event_date: Mapped[Optional[date]] = mapped_column(
@@ -343,7 +344,7 @@ class ProductExtShop(Base):
     __table_args__ = {"comment": "商品售卖扩展表"}
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, unique=True, nullable=False, comment="商品ID"
+        BigInteger, ForeignKey("product.id"), unique=True, nullable=False, comment="商品ID"
     )
     has_sku: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false",
@@ -377,13 +378,13 @@ class SKU(Base):
     )
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="所属商品"
+        BigInteger, ForeignKey("product.id"), nullable=False, comment="所属商品"
     )
     sku_code: Mapped[str] = mapped_column(
         String(50), unique=True, nullable=False, comment="SKU编码"
     )
     spec_values: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, server_default="'{}'",
+        JSONB, nullable=False, server_default="{}",
         comment='规格值 {color:"红",size:"M"}'
     )
     price: Mapped[Decimal] = mapped_column(
@@ -423,7 +424,7 @@ class PricingRule(Base):
     )
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="商品ID"
+        BigInteger, ForeignKey("product.id"), nullable=False, comment="商品ID"
     )
     rule_type: Mapped[str] = mapped_column(
         String(20), nullable=False,
@@ -480,7 +481,7 @@ class DiscountRule(Base):
     )
 
     product_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True, comment="商品ID, NULL=全局"
+        BigInteger, ForeignKey("product.id"), nullable=True, comment="商品ID, NULL=全局"
     )
     rule_type: Mapped[str] = mapped_column(
         String(20), nullable=False,
@@ -520,10 +521,10 @@ class Inventory(Base):
     )
 
     product_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="商品ID"
+        BigInteger, ForeignKey("product.id"), nullable=False, comment="商品ID"
     )
     sku_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True, comment="SKU ID"
+        BigInteger, ForeignKey("sku.id"), nullable=True, comment="SKU ID"
     )
     date: Mapped[Optional[date]] = mapped_column(
         Date, nullable=True, comment="日期"
@@ -576,7 +577,7 @@ class InventoryLog(Base):
     )
 
     inventory_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="库存ID"
+        BigInteger, ForeignKey("inventory.id"), nullable=False, comment="库存ID"
     )
     change_type: Mapped[str] = mapped_column(
         String(30), nullable=False,

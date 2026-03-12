@@ -1,4 +1,5 @@
 // pages/cart/index.ts
+import { brandConfig } from '../../config/brand';
 
 interface CartPageData {
   cartItems: ICartItem[];
@@ -39,7 +40,7 @@ Page<CartPageData, WechatMiniprogram.IAnyObject>({
         category: 'camp_shop',
       },
       {
-        id: 3, product_id: 8, product_name: '某露营地品牌T恤 · 绿色',
+        id: 3, product_id: 8, product_name: `${brandConfig.name}品牌T恤 · 绿色`,
         cover_image: '', price: 128, quantity: 1, selected: false, stock: 20,
         category: 'merchandise',
       },

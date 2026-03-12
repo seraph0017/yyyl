@@ -13,6 +13,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    ForeignKey,
     Index,
     String,
     Text,
@@ -53,7 +54,7 @@ class Notification(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="用户ID"
+        BigInteger, ForeignKey("user.id"), nullable=False, comment="用户ID"
     )
     type: Mapped[str] = mapped_column(
         String(30), nullable=False, comment="通知类型(13种)"

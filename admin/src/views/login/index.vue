@@ -6,7 +6,7 @@
     <div class="login-card">
       <div class="login-header">
         <img src="@/assets/logo.svg" alt="logo" class="login-logo" />
-        <h1 class="login-title">某露营地</h1>
+        <h1 class="login-title">{{ brand.name }}</h1>
         <p class="login-subtitle">露营地管理后台</p>
       </div>
 
@@ -65,6 +65,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { User, Lock, ChatDotRound } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
+import { brandConfig as brand } from '@/config/brand'
 
 const router = useRouter()
 const route = useRoute()

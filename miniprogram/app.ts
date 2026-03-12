@@ -1,4 +1,5 @@
 import { checkLoginStatus, getUserInfo, wxLogin } from './utils/auth';
+import { brandConfig } from './config/brand';
 
 App<IAppOption>({
   globalData: {
@@ -10,6 +11,7 @@ App<IAppOption>({
     statusBarHeight: 44,
     navBarHeight: 44,
     isStaff: false,
+    brandConfig,
   },
 
   onLaunch() {

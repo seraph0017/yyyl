@@ -2,7 +2,7 @@ import { post, get } from '@/utils/request'
 import type { AdminLoginRequest, LoginResponse, AdminUserInfo } from '@/types'
 
 export function login(data: AdminLoginRequest) {
-  return post<{ data: LoginResponse }>('/admin/auth/login', data)
+  return post<{ data: LoginResponse }>('/auth/admin-login', data)
 }
 
 export function refreshToken(refresh_token: string) {

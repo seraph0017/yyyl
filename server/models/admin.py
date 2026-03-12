@@ -21,6 +21,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     Numeric,
@@ -103,7 +104,7 @@ class AdminUser(Base):
         String(50), nullable=True, comment="真实姓名"
     )
     role_id: Mapped[Optional[int]] = mapped_column(
-        BigInteger, nullable=True, comment="角色ID"
+        BigInteger, ForeignKey("admin_role.id"), nullable=True, comment="角色ID"
     )
     operation_password_hash: Mapped[Optional[str]] = mapped_column(
         String(256), nullable=True, comment="操作密码哈希"
@@ -171,7 +172,7 @@ class AdminPermission(Base):
     )
 
     role_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, comment="角色ID"
+        BigInteger, ForeignKey("admin_role.id"), nullable=False, comment="角色ID"
     )
     resource: Mapped[str] = mapped_column(
         String(30), nullable=False,
