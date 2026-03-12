@@ -1,0 +1,50 @@
+# Celery Worker — 异步任务处理
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yyyl-celery-worker
+  namespace: yyyl
+  labels:
+    app: yyyl-celery-worker
+spec:
+  replicas: 2  # 2 个 Worker Pod
+  selector:
+    matchLabels:
+      app: yyyl-celery-worker
+  template:
+    metadata:
+      labels:
+        app: yyyl-celery-worker
+    spec:
+      containers:
+        - name: worker
+          image: your-registry.com/yyyl/api:latest  # 与 API 共用镜像
+          command: ["celery", "-A", "celery_app", "worker",
+                    "--loglevel=info", "--concurrency=4"]
+          envFrom:
+            - configMapRef:
+                name: yyyl-config
+            - secretRef:
+                name: yyyl-secret
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # Worker 没有 HTTP 端口，用 exec 探针
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - "-A"
+                - celery_app
+                - inspect
+                - ping
+                - "--timeout"
+                - "10"
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 15
+      terminationGracePeriodSeconds: 60  # Worker 需要更长时间优雅关闭

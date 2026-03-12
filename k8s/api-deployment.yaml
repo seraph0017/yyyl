@@ -1,0 +1,85 @@
+# FastAPI 后端 API — Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yyyl-api
+  namespace: yyyl
+  labels:
+    app: yyyl-api
+spec:
+  replicas: 2  # 平时 2 副本，秒杀时 HPA 自动扩到 8
+  selector:
+    matchLabels:
+      app: yyyl-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1          # 滚动更新：最多多 1 个 Pod
+      maxUnavailable: 0    # 不允许不可用，确保零停机
+  template:
+    metadata:
+      labels:
+        app: yyyl-api
+    spec:
+      containers:
+        - name: api
+          image: your-registry.com/yyyl/api:latest  # 替换为实际镜像地址
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: yyyl-config
+            - secretRef:
+                name: yyyl-secret
+          # ---- 资源限制 ----
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          # ---- 就绪探针：Pod 准备好才接流量 ----
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # ---- 存活探针：异常时自动重启 ----
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
+          # ---- 启动探针：首次启动慢的容器不被杀 ----
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 12  # 最多等 60 秒启动
+      # 优雅关闭
+      terminationGracePeriodSeconds: 30
+---
+# FastAPI Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: yyyl-api-svc
+  namespace: yyyl
+spec:
+  selector:
+    app: yyyl-api
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP

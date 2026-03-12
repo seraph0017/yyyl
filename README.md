@@ -73,6 +73,23 @@ yyyl/
 │   ├── vite.config.ts    # Vite 配置
 │   └── package.json      # Node.js 依赖
 │
+├── nginx/                # Nginx 网关配置
+│   ├── nginx.conf        # 反向代理 + 多级限流（秒杀/登录/普通API）
+│   └── Dockerfile        # Nginx 镜像
+│
+├── k8s/                  # K8s 部署清单（腾讯云 TKE）
+│   ├── namespace.yaml    # 命名空间
+│   ├── configmap.yaml    # 非敏感配置
+│   ├── secret.yaml       # 敏感配置模板（⚠️ 不提交真实值）
+│   ├── api-deployment.yaml   # FastAPI Deployment + Service
+│   ├── api-hpa.yaml      # 自动水平扩缩容（秒杀扩容 2→8 Pod）
+│   ├── worker-deployment.yaml # Celery Worker
+│   ├── beat-deployment.yaml   # Celery Beat（单副本）
+│   ├── admin-deployment.yaml  # 管理后台 + Service
+│   └── ingress.yaml      # Ingress（SSL + 限流）
+│
+├── docker-compose.yml    # Docker Compose 部署配置
+│
 ├── docs/                 # 项目文档
 │   ├── architecture.md   # 技术架构设计文档 v1.1
 │   └── test_report.md    # 测试与合规报告
@@ -453,6 +470,114 @@ npm run preview
 | **异步任务** | Celery + Redis Broker |
 | **数据库迁移** | Alembic |
 | **API 文档** | Swagger UI / ReDoc（自动生成） |
+
+---
+
+## 🐳 Docker & K8s 部署
+
+### 部署策略分层
+
+| 环境 | 方式 | 说明 |
+|------|------|------|
+| **开发/测试** | 本地直接启动 | 各服务独立运行，简单直接 |
+| **集成测试** | `docker-compose up` | 一键拉起全套，验证服务间协作 |
+| **线上生产** | 腾讯云 TKE (K8s) | HPA 自动扩缩容，秒杀场景弹性伸缩 |
+
+### 本地开发（推荐方式）
+
+各服务独立启动，便于调试：
+
+```bash
+# 1. 基础设施（PG + Redis）— 本地安装或 Docker
+docker run -d --name yyyl-postgres -e POSTGRES_DB=yyyl -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:15
+docker run -d --name yyyl-redis -p 6379:6379 redis:7-alpine
+
+# 2. 后端 API
+cd server && source venv/bin/activate
+uvicorn main:app --reload --port 8000
+
+# 3. Celery Worker（新终端）
+cd server && source venv/bin/activate
+celery -A celery_app worker --loglevel=info
+
+# 4. Celery Beat（新终端）
+cd server && source venv/bin/activate
+celery -A celery_app beat --loglevel=info
+
+# 5. 管理后台（新终端）
+cd admin && npm run dev
+```
+
+### Docker Compose 部署
+
+适合服务器上快速部署或集成测试：
+
+```bash
+# 先在 server/.env 中配置好环境变量
+# 然后设置数据库密码
+export DB_PASSWORD=your_secure_password
+
+# 构建并启动全部服务
+docker-compose up -d --build
+
+# 查看服务状态
+docker-compose ps
+
+# 查看 API 日志
+docker-compose logs -f api
+
+# 停止全部
+docker-compose down
+```
+
+### 腾讯云 TKE (K8s) 部署
+
+线上生产环境使用 K8s，支持秒杀场景自动扩容：
+
+```bash
+# 1. 创建命名空间
+kubectl apply -f k8s/namespace.yaml
+
+# 2. 创建配置和密钥（⚠️ 修改 secret.yaml 中的真实值）
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/secret.yaml
+
+# 3. 部署服务
+kubectl apply -f k8s/api-deployment.yaml
+kubectl apply -f k8s/api-hpa.yaml
+kubectl apply -f k8s/worker-deployment.yaml
+kubectl apply -f k8s/beat-deployment.yaml
+kubectl apply -f k8s/admin-deployment.yaml
+
+# 4. 配置 Ingress（需先配置域名和 TLS 证书）
+kubectl apply -f k8s/ingress.yaml
+
+# 查看 Pod 状态
+kubectl get pods -n yyyl
+
+# 查看 HPA 扩缩容状态
+kubectl get hpa -n yyyl
+```
+
+#### 秒杀扩容能力
+
+| 指标 | 配置 |
+|------|------|
+| 平时副本数 | 2 Pod |
+| 最大副本数 | 8 Pod |
+| 扩容触发 | CPU > 60% 或 内存 > 75% |
+| 扩容速度 | 30 秒内判定，一次最多加 4 Pod |
+| 缩容速度 | 5 分钟稳定窗口，一次减 1 Pod |
+
+#### 线上数据层建议
+
+| 组件 | 推荐方案 | 理由 |
+|------|---------|------|
+| PostgreSQL | 腾讯云 TDSQL-C | 自动备份、主从高可用、免运维 |
+| Redis | 腾讯云 Redis | 持久化、主从切换、监控告警 |
+| 对象存储 | 腾讯云 COS | 图片 CDN 加速 |
+
+> K8s 里只跑无状态服务（API、Worker、Beat、Admin），有状态的数据层交给云服务托管。
 
 ---
 

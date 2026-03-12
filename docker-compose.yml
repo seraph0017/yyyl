@@ -1,0 +1,190 @@
+# ============================================
+# 一月一露 — Docker Compose 部署配置
+# 用途：线上部署 / 集成测试
+#
+# 本地开发测试不需要用这个，直接各服务单独启动即可：
+#   - uvicorn main:app --reload --port 8000
+#   - celery -A celery_app worker --loglevel=info
+#   - celery -A celery_app beat --loglevel=info
+#   - cd admin && npm run dev
+#
+# 使用方式：
+#   docker-compose up -d          # 启动全部服务
+#   docker-compose up -d --build  # 重新构建并启动
+#   docker-compose logs -f api    # 查看 API 日志
+#   docker-compose down           # 停止全部服务
+# ============================================
+
+version: "3.9"
+
+services:
+  # ============================================
+  # PostgreSQL 数据库
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: yyyl-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: yyyl
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d yyyl"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yyyl-net
+
+  # ============================================
+  # Redis 缓存 + 消息队列
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: yyyl-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - yyyl-net
+
+  # ============================================
+  # FastAPI 后端 API
+  # ============================================
+  api:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: production
+    container_name: yyyl-api
+    restart: unless-stopped
+    env_file:
+      - ./server/.env
+    environment:
+      # 覆盖 .env 中的地址，使用容器内部网络
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/yyyl
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+      DEBUG: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 不直接暴露端口，通过 nginx 代理
+    # ports:
+    #   - "8000:8000"
+    networks:
+      - yyyl-net
+
+  # ============================================
+  # Celery Worker（异步任务）
+  # ============================================
+  celery-worker:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: production
+    container_name: yyyl-celery-worker
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info --concurrency=4
+    env_file:
+      - ./server/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/yyyl
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - yyyl-net
+
+  # ============================================
+  # Celery Beat（定时任务调度）
+  # ============================================
+  celery-beat:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: production
+    container_name: yyyl-celery-beat
+    restart: unless-stopped
+    command: celery -A celery_app beat --loglevel=info
+    env_file:
+      - ./server/.env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/yyyl
+      REDIS_URL: redis://redis:6379/0
+      APP_ENV: production
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - yyyl-net
+
+  # ============================================
+  # Web 管理后台（Vue3 静态资源）
+  # ============================================
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile
+      target: production
+    container_name: yyyl-admin
+    restart: unless-stopped
+    # 不直接暴露端口，通过 nginx 代理
+    networks:
+      - yyyl-net
+
+  # ============================================
+  # Nginx 网关（反向代理 + 限流）
+  # ============================================
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: yyyl-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    # 如果有 SSL 证书，挂载进来：
+    # volumes:
+    #   - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - admin
+    networks:
+      - yyyl-net
+
+# ============================================
+# 数据卷
+# ============================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ============================================
+# 网络
+# ============================================
+networks:
+  yyyl-net:
+    driver: bridge

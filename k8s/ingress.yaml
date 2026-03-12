@@ -1,0 +1,74 @@
+# Ingress — Nginx Ingress Controller
+# 腾讯云 TKE 默认支持 Nginx Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: yyyl-ingress
+  namespace: yyyl
+  annotations:
+    # ---- Nginx Ingress 限流注解 ----
+    nginx.ingress.kubernetes.io/limit-rps: "30"           # 每秒 30 请求
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5" # 突发倍数
+    nginx.ingress.kubernetes.io/limit-connections: "20"    # 每 IP 最大连接数
+    # ---- SSL ----
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # ---- 安全头 ----
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Frame-Options "SAMEORIGIN" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      # 秒杀接口专用限流（更严格）
+      location /api/v1/orders/seckill {
+          limit_req zone=seckill burst=5 nodelay;
+      }
+    # ---- 请求体大小 ----
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # ---- 超时 ----
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "30"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "30"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - your-domain.com
+        - admin.your-domain.com
+      secretName: yyyl-tls  # TLS 证书 Secret（通过 TKE 控制台或 cert-manager 创建）
+  rules:
+    # ---- API 服务（小程序 + 管理后台都调这个） ----
+    - host: your-domain.com
+      http:
+        paths:
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: yyyl-api-svc
+                port:
+                  number: 8000
+          # 健康检查
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: yyyl-api-svc
+                port:
+                  number: 8000
+    # ---- 管理后台（独立子域名） ----
+    - host: admin.your-domain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: yyyl-admin-svc
+                port:
+                  number: 80
+          # 管理后台也要能访问 API
+          - path: /api/
+            pathType: Prefix
+            backend:
+              service:
+                name: yyyl-api-svc
+                port:
+                  number: 8000

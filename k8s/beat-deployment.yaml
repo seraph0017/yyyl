@@ -1,0 +1,37 @@
+# Celery Beat — 定时任务调度（⚠️ 必须单副本）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yyyl-celery-beat
+  namespace: yyyl
+  labels:
+    app: yyyl-celery-beat
+spec:
+  replicas: 1  # ⚠️ Beat 必须只有 1 个副本，否则定时任务会重复执行
+  strategy:
+    type: Recreate  # 先停旧的再启新的，防止短时间内两个 Beat 并存
+  selector:
+    matchLabels:
+      app: yyyl-celery-beat
+  template:
+    metadata:
+      labels:
+        app: yyyl-celery-beat
+    spec:
+      containers:
+        - name: beat
+          image: your-registry.com/yyyl/api:latest  # 与 API 共用镜像
+          command: ["celery", "-A", "celery_app", "beat",
+                    "--loglevel=info"]
+          envFrom:
+            - configMapRef:
+                name: yyyl-config
+            - secretRef:
+                name: yyyl-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "200m"
+              memory: "256Mi"

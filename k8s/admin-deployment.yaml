@@ -1,0 +1,56 @@
+# Web 管理后台 — Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yyyl-admin
+  namespace: yyyl
+  labels:
+    app: yyyl-admin
+spec:
+  replicas: 1  # 管理后台访问量小，1 个副本即可
+  selector:
+    matchLabels:
+      app: yyyl-admin
+  template:
+    metadata:
+      labels:
+        app: yyyl-admin
+    spec:
+      containers:
+        - name: admin
+          image: your-registry.com/yyyl/admin:latest  # 替换为实际镜像地址
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 30
+---
+# 管理后台 Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: yyyl-admin-svc
+  namespace: yyyl
+spec:
+  selector:
+    app: yyyl-admin
+  ports:
+    - port: 80
+      targetPort: 80
+  type: ClusterIP

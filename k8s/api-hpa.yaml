@@ -1,0 +1,48 @@
+# FastAPI — 自动水平扩缩容 (HPA)
+# 秒杀场景：CPU > 60% 时自动扩容，最多 8 个 Pod
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: yyyl-api-hpa
+  namespace: yyyl
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: yyyl-api
+  minReplicas: 2   # 平时最少 2 个
+  maxReplicas: 8   # 秒杀高峰最多 8 个
+  metrics:
+    # CPU 使用率超过 60% 触发扩容
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    # 内存使用率超过 75% 触发扩容
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    # 扩容行为：快速扩（秒杀突发流量）
+    scaleUp:
+      stabilizationWindowSeconds: 30   # 30 秒稳定窗口
+      policies:
+        - type: Pods
+          value: 4                     # 一次最多加 4 个 Pod
+          periodSeconds: 60
+        - type: Percent
+          value: 100                   # 或翻倍
+          periodSeconds: 60
+      selectPolicy: Max
+    # 缩容行为：慢慢缩（避免来回抖动）
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 分钟稳定窗口
+      policies:
+        - type: Pods
+          value: 1                     # 一次最多减 1 个
+          periodSeconds: 60
