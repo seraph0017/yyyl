@@ -1,7 +1,7 @@
 {
   "miniprogramRoot": "./",
-  "projectname": "一月一露",
-  "description": "一月一露露营地微信小程序",
+  "projectname": "某露营地",
+  "description": "某露营地微信小程序",
   "appid": "touristappid",
   "setting": {
     "urlCheck": false,

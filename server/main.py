@@ -1,5 +1,5 @@
 """
-一月一露 - FastAPI 应用入口
+某露营地 - FastAPI 应用入口
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 # 创建 FastAPI 应用实例
 app = FastAPI(
     title=settings.APP_NAME,
-    description="一月一露露营地微信小程序后端API",
+    description="某露营地微信小程序后端API",
     version="1.0.0",
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,

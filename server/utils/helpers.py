@@ -23,7 +23,7 @@ def generate_order_no(prefix: str = "YY") -> str:
     示例：YY20260312143025_8527
 
     Args:
-        prefix: 订单号前缀，默认 "YY"（一月一露）
+        prefix: 订单号前缀，默认 "YY"（某露营地）
 
     Returns:
         唯一订单号（约24位）

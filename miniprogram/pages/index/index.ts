@@ -61,7 +61,7 @@ Page<IndexPageData, WechatMiniprogram.IAnyObject>({
 
   onShareAppMessage() {
     return {
-      title: '一月一露 · 享受户外生活',
+      title: '某露营地 · 享受户外生活',
       path: '/pages/index/index',
     };
   },

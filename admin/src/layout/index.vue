@@ -4,7 +4,7 @@
     <el-aside :width="appStore.sidebarCollapsed ? '64px' : '220px'" class="layout-aside">
       <div class="logo-container">
         <img src="@/assets/logo.svg" alt="logo" class="logo-icon" />
-        <span v-if="!appStore.sidebarCollapsed" class="logo-text">一月一露</span>
+        <span v-if="!appStore.sidebarCollapsed" class="logo-text">某露营地</span>
       </div>
       <el-scrollbar>
         <el-menu

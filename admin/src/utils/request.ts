@@ -1,4 +1,4 @@
-// 一月一露 — HTTP 请求封装
+// 某露营地 — HTTP 请求封装
 import axios, { type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import router from '@/router'

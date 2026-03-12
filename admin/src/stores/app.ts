@@ -1,4 +1,4 @@
-// 一月一露 — 应用全局状态
+// 某露营地 — 应用全局状态
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 

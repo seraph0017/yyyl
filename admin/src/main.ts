@@ -1,4 +1,4 @@
-// 一月一露 — Web管理后台入口
+// 某露营地 — Web管理后台入口
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import ElementPlus from 'element-plus'

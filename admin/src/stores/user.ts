@@ -1,4 +1,4 @@
-// 一月一露 — 用户状态管理
+// 某露营地 — 用户状态管理
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { AdminUserInfo } from '@/types'

@@ -60,7 +60,7 @@ Page<DetailPageData, WechatMiniprogram.IAnyObject>({
   onShareAppMessage() {
     const product = this.data.product;
     return {
-      title: product ? product.name : '一月一露露营',
+      title: product ? product.name : '某露营地露营',
       path: `/pages/product-detail/index?id=${product?.id || 1}`,
     };
   },

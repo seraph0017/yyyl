@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     # ---- 应用配置 ----
-    APP_NAME: str = "一月一露"
+    APP_NAME: str = "某露营地"
     APP_ENV: str = "development"
     DEBUG: bool = True
     API_PREFIX: str = "/api/v1"
