@@ -1,0 +1,122 @@
+.page-payment {
+  min-height: 100vh;
+  background-color: var(--color-bg);
+  padding: 32rpx;
+}
+
+.payment-card {
+  padding: 48rpx 32rpx;
+}
+
+.payment-amount {
+  text-align: center;
+  padding-bottom: 40rpx;
+  border-bottom: 1rpx solid #F0F0F0;
+
+  &__label {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+    display: block;
+    margin-bottom: 16rpx;
+  }
+
+  &__value {
+    display: flex;
+    justify-content: center;
+    align-items: baseline;
+  }
+
+  &__symbol {
+    font-size: var(--font-size-xl);
+    color: var(--color-text);
+    font-weight: 700;
+  }
+
+  &__num {
+    font-size: 72rpx;
+    color: var(--color-text);
+    font-weight: 700;
+    margin-left: 4rpx;
+  }
+}
+
+.payment-info {
+  padding: 24rpx 0;
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12rpx 0;
+  }
+
+  &__label {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+  }
+
+  &__value {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+  }
+}
+
+.payment-mock-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8rpx;
+  padding: 20rpx;
+  background-color: rgba(33, 150, 243, 0.08);
+  border-radius: var(--radius-md);
+  margin-top: 16rpx;
+
+  &__icon {
+    font-size: 28rpx;
+    flex-shrink: 0;
+  }
+
+  &__text {
+    font-size: var(--font-size-sm);
+    color: var(--color-blue);
+    line-height: 1.5;
+  }
+}
+
+.payment-actions {
+  margin-top: 48rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.payment-btn {
+  height: 96rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: var(--radius-xl);
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  gap: 12rpx;
+
+  &:active { opacity: 0.85; transform: scale(0.98); }
+
+  &__icon {
+    font-size: 32rpx;
+  }
+
+  &--success {
+    background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
+    color: #fff;
+  }
+
+  &--fail {
+    background: linear-gradient(135deg, #FF8A50, var(--color-orange));
+    color: #fff;
+  }
+
+  &--cancel {
+    background-color: var(--color-bg-grey);
+    color: var(--color-text-secondary);
+  }
+}

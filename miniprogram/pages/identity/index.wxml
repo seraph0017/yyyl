@@ -1,0 +1,41 @@
+<view class="page-identity">
+  <view class="identity-card card" wx:for="{{identities}}" wx:key="id">
+    <view class="identity-card__header">
+      <text class="identity-card__name">{{item.name}}</text>
+      <text class="identity-card__default tag tag--primary" wx:if="{{item.is_default}}">默认</text>
+    </view>
+    <text class="identity-card__info">身份证：{{item.id_card}}</text>
+    <text class="identity-card__info">手机号：{{item.phone}}</text>
+    <view class="identity-card__actions">
+      <text class="identity-card__btn" data-id="{{item.id}}" bind:tap="onEditIdentity">编辑</text>
+      <text class="identity-card__btn identity-card__btn--del" data-id="{{item.id}}" bind:tap="onDeleteIdentity">删除</text>
+    </view>
+  </view>
+
+  <view class="add-btn" bind:tap="onAddIdentity"><text>+ 添加出行人</text></view>
+
+  <empty-state wx:if="{{identities.length === 0 && !showForm}}" icon="👤" title="暂无出行人信息" buttonText="添加出行人" bind:action="onAddIdentity" />
+
+  <!-- 表单弹窗 -->
+  <view class="form-mask" wx:if="{{showForm}}" bind:tap="onCancelForm">
+    <view class="form-popup card" catch:tap="">
+      <text class="form-popup__title">{{editingId ? '编辑' : '添加'}}出行人</text>
+      <view class="form-group">
+        <text class="form-label">姓名</text>
+        <input class="form-input" placeholder="请输入姓名" value="{{formData.name}}" data-field="name" bindinput="onFormInput" />
+      </view>
+      <view class="form-group">
+        <text class="form-label">身份证号</text>
+        <input class="form-input" placeholder="请输入身份证号" value="{{formData.id_card}}" data-field="id_card" bindinput="onFormInput" maxlength="18" />
+      </view>
+      <view class="form-group">
+        <text class="form-label">手机号</text>
+        <input class="form-input" placeholder="请输入手机号" value="{{formData.phone}}" data-field="phone" bindinput="onFormInput" type="number" maxlength="11" />
+      </view>
+      <view class="form-actions">
+        <view class="form-btn form-btn--cancel" bind:tap="onCancelForm"><text>取消</text></view>
+        <view class="form-btn form-btn--save" bind:tap="onSaveIdentity"><text>保存</text></view>
+      </view>
+    </view>
+  </view>
+</view>

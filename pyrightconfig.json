@@ -1,0 +1,18 @@
+{
+  "executionEnvironments": [
+    {
+      "root": "server",
+      "extraPaths": ["server"]
+    }
+  ],
+  "reportImplicitRelativeImport": false,
+  "reportMissingImports": "warning",
+  "reportUnknownVariableType": false,
+  "reportUnknownMemberType": false,
+  "reportUnknownParameterType": false,
+  "reportUntypedFunctionDecorator": false,
+  "reportUnusedParameter": false,
+  "reportDeprecated": false,
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic"
+}

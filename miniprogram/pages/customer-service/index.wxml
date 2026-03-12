@@ -1,0 +1,57 @@
+<!-- 客服中心 -->
+<view class="page-service">
+  <!-- 搜索 -->
+  <view class="service-search">
+    <view class="service-search__wrap">
+      <text>🔍</text>
+      <input placeholder="搜索您的问题..." value="{{searchKeyword}}" bindinput="onSearchInput" bindconfirm="onSearchConfirm" confirm-type="search" />
+    </view>
+  </view>
+
+  <!-- 分类导航 -->
+  <view class="service-categories card">
+    <view class="service-category" wx:for="{{categories}}" wx:key="id" data-name="{{item.name}}" bind:tap="onCategoryTap">
+      <text class="service-category__icon">{{item.icon}}</text>
+      <text class="service-category__name">{{item.name}}</text>
+    </view>
+  </view>
+
+  <!-- 热门问题 -->
+  <view class="faq-section">
+    <text class="faq-title">🔥 热门问题</text>
+    <view class="faq-list">
+      <view class="faq-item card" wx:for="{{hotQuestions}}" wx:key="id" data-id="{{item.id}}" bind:tap="onFaqTap">
+        <text class="faq-item__q">{{item.question}}</text>
+        <text class="faq-item__arrow">›</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 人工客服 -->
+  <view class="human-service card">
+    <text class="human-service__title">📞 联系人工客服</text>
+    <text class="human-service__hours">客服时间：{{serviceHours}}</text>
+    <view class="human-service__actions">
+      <view class="human-service__btn" bind:tap="onCallPhone">
+        <text class="human-service__btn-icon">📞</text>
+        <text>拨打电话</text>
+        <text class="human-service__btn-info">{{servicePhone}}</text>
+      </view>
+      <view class="human-service__btn" bind:tap="onCopyWechat">
+        <text class="human-service__btn-icon">💬</text>
+        <text>微信客服</text>
+        <text class="human-service__btn-info">复制微信号</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- FAQ答案弹窗 -->
+  <view class="faq-mask" wx:if="{{selectedFaq}}" bind:tap="onCloseFaq">
+    <view class="faq-popup card" catch:tap="">
+      <text class="faq-popup__q">{{selectedFaq.question}}</text>
+      <view class="faq-popup__divider"></view>
+      <text class="faq-popup__a">{{selectedFaq.answer}}</text>
+      <view class="faq-popup__close" bind:tap="onCloseFaq"><text>知道了</text></view>
+    </view>
+  </view>
+</view>

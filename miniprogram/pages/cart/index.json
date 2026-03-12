@@ -1,0 +1,7 @@
+{
+  "navigationBarTitleText": "购物车",
+  "usingComponents": {
+    "price-tag": "../../components/price-tag/index",
+    "empty-state": "../../components/empty-state/index"
+  }
+}

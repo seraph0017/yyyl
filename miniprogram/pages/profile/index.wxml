@@ -1,0 +1,16 @@
+<view class="page-profile">
+  <view class="profile-item card" bind:tap="onChooseAvatar">
+    <text class="profile-item__label">头像</text>
+    <view class="profile-item__avatar">
+      <text>🏕️</text>
+    </view>
+  </view>
+  <view class="profile-item card">
+    <text class="profile-item__label">昵称</text>
+    <text class="profile-item__value">{{userInfo.nickname || '露营爱好者'}}</text>
+  </view>
+  <view class="profile-item card">
+    <text class="profile-item__label">手机号</text>
+    <text class="profile-item__value">{{userInfo.phone || '未绑定'}}</text>
+  </view>
+</view>

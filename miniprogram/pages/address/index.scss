@@ -1,0 +1,11 @@
+.page-address { min-height: 100vh; background-color: var(--color-bg); padding: 16rpx 24rpx; }
+.address-card {
+  padding: 24rpx; margin-bottom: 16rpx;
+  &__header { display: flex; align-items: center; gap: 12rpx; margin-bottom: 8rpx; }
+  &__name { font-size: var(--font-size-md); font-weight: 600; }
+  &__phone { font-size: var(--font-size-base); color: var(--color-text-secondary); }
+  &__detail { font-size: var(--font-size-base); color: var(--color-text-secondary); line-height: 1.5; display: block; }
+  &__actions { display: flex; gap: 24rpx; margin-top: 16rpx; padding-top: 16rpx; border-top: 1rpx solid #F0F0F0; }
+  &__btn { font-size: var(--font-size-sm); color: var(--color-primary); padding: 8rpx; &--del { color: var(--color-red); } }
+}
+.add-btn { text-align: center; padding: 28rpx; text { font-size: var(--font-size-base); color: var(--color-primary); font-weight: 500; } &:active { opacity: 0.7; } }

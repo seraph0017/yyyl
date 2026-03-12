@@ -1,0 +1,93 @@
+// 一月一露 — Web管理后台全局样式
+
+// 变量
+:root {
+  --color-primary: #2E7D32;
+  --color-primary-light: #4CAF50;
+  --color-primary-lighter: #81C784;
+  --color-primary-lightest: #C8E6C9;
+  --color-bg: #f5f7fa;
+  --color-bg-warm: #FFF8F0;
+  --color-bg-card: #ffffff;
+  --color-text: #303133;
+  --color-text-secondary: #606266;
+  --color-text-placeholder: #909399;
+  --color-border: #DCDFE6;
+  --color-border-light: #E4E7ED;
+  --shadow-base: 0 2px 12px rgba(0, 0, 0, 0.06);
+  --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.04);
+  --radius-base: 8px;
+  --radius-small: 4px;
+  --radius-large: 12px;
+}
+
+// Reset
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #app {
+  width: 100%;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+// 滚动条
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: #c0c4cc;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+// NProgress
+#nprogress .bar {
+  background: var(--color-primary) !important;
+  height: 3px !important;
+}
+
+// 工具类
+.page-container {
+  padding: 20px;
+}
+
+.card-box {
+  background: var(--color-bg-card);
+  border-radius: var(--radius-base);
+  box-shadow: var(--shadow-light);
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.text-primary { color: var(--color-primary); }
+.text-success { color: #4CAF50; }
+.text-warning { color: #FF9800; }
+.text-danger { color: #F44336; }
+.text-info { color: #607D8B; }
+
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.mt-20 { margin-top: 20px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-16 { margin-bottom: 16px; }
+.mb-20 { margin-bottom: 20px; }

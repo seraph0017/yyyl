@@ -1,0 +1,27 @@
+<!-- 倒计时组件 -->
+<view class="countdown countdown--{{mode}}" wx:if="{{!isFinished}}">
+  <text class="countdown__prefix" wx:if="{{prefix}}">{{prefix}}</text>
+
+  <!-- 天数 -->
+  <block wx:if="{{showDays && days !== '00'}}">
+    <text class="countdown__num">{{days}}</text>
+    <text class="countdown__sep">天</text>
+  </block>
+
+  <!-- 时 -->
+  <text class="countdown__num">{{hours}}</text>
+  <text class="countdown__sep">:</text>
+
+  <!-- 分 -->
+  <text class="countdown__num">{{minutes}}</text>
+  <text class="countdown__sep">:</text>
+
+  <!-- 秒 -->
+  <text class="countdown__num">{{seconds}}</text>
+</view>
+
+<view class="countdown countdown--finished" wx:if="{{isFinished}}">
+  <slot name="finished">
+    <text class="countdown__finished-text">已开始</text>
+  </slot>
+</view>

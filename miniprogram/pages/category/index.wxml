@@ -1,0 +1,81 @@
+<!-- 分类页 -->
+<view class="page-category">
+  <!-- 搜索栏 -->
+  <view class="search-bar" wx:if="{{searchMode}}">
+    <view class="search-bar__input-wrap">
+      <text class="search-bar__icon">🔍</text>
+      <input
+        class="search-bar__input"
+        placeholder="搜索营位、活动、装备..."
+        value="{{searchKeyword}}"
+        bindinput="onSearchInput"
+        bindconfirm="onSearchConfirm"
+        focus="{{searchMode}}"
+        confirm-type="search"
+      />
+    </view>
+    <text class="search-bar__cancel" bind:tap="onSearchCancel">取消</text>
+  </view>
+
+  <!-- Tab横向滑动 -->
+  <scroll-view class="tab-scroll" scroll-x enhanced show-scrollbar="{{false}}">
+    <view class="tab-list">
+      <view
+        class="tab-item {{activeTab === index ? 'tab-item--active' : ''}}"
+        wx:for="{{tabs}}"
+        wx:key="key"
+        data-index="{{index}}"
+        bind:tap="onTabChange"
+      >
+        <text class="tab-item__icon">{{item.icon}}</text>
+        <text class="tab-item__name">{{item.name}}</text>
+        <view class="tab-item__line" wx:if="{{activeTab === index}}"></view>
+      </view>
+    </view>
+  </scroll-view>
+
+  <!-- 筛选标签（仅露营类显示） -->
+  <view class="filter-bar" wx:if="{{tabs[activeTab].key === 'daily_camping' || tabs[activeTab].key === 'event_camping'}}">
+    <scroll-view scroll-x enhanced show-scrollbar="{{false}}">
+      <view class="filter-list">
+        <view
+          class="filter-tag {{activeFilters.indexOf(item.key) >= 0 ? 'filter-tag--active' : ''}}"
+          wx:for="{{filters}}"
+          wx:key="key"
+          data-key="{{item.key}}"
+          bind:tap="onFilterToggle"
+        >
+          <text class="filter-tag__icon">{{item.icon}}</text>
+          <text>{{item.label}}</text>
+        </view>
+      </view>
+    </scroll-view>
+  </view>
+
+  <!-- 商品列表 -->
+  <view class="product-list" wx:if="{{products.length > 0}}">
+    <view class="product-list__item" wx:for="{{products}}" wx:key="id">
+      <product-card product="{{item}}" mode="list" />
+    </view>
+  </view>
+
+  <!-- 空状态 -->
+  <empty-state
+    wx:if="{{!loading && products.length === 0}}"
+    icon="🏕️"
+    title="暂无商品"
+    description="当前分类暂无可用商品，请稍后再看"
+  />
+
+  <!-- 加载状态 -->
+  <view class="loading-more" wx:if="{{loading}}">
+    <text class="loading-more__text">加载中...</text>
+  </view>
+
+  <!-- 到底提示 -->
+  <view class="loading-more" wx:if="{{!hasMore && products.length > 0}}">
+    <view class="loading-more__line"></view>
+    <text class="loading-more__text">已经到底啦</text>
+    <view class="loading-more__line"></view>
+  </view>
+</view>

@@ -1,0 +1,74 @@
+# ===========================================
+# 通用
+# ===========================================
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*.swo
+*~
+
+# ===========================================
+# Python / 后端 (server/)
+# ===========================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# 虚拟环境
+venv/
+.venv/
+env/
+
+# 环境变量
+.env
+.env.local
+.env.production
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 测试 & 覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# ===========================================
+# Node.js / 管理后台 (admin/)
+# ===========================================
+node_modules/
+admin/dist/
+admin/src/auto-imports.d.ts
+admin/src/components.d.ts
+
+# ===========================================
+# 微信小程序 (miniprogram/)
+# ===========================================
+miniprogram/miniprogram_npm/
+miniprogram/node_modules/
+
+# ===========================================
+# 证书 & 密钥（绝对不能提交）
+# ===========================================
+*.pem
+*.key
+*.cert
+*.p12
+*.pfx
+
+# ===========================================
+# CodeBuddy 工作目录（保留 agents 和 memory）
+# ===========================================
+.codebuddy/teams/

@@ -1,0 +1,57 @@
+<!-- 商品卡片组件 -->
+<view class="product-card product-card--{{mode}}" bind:tap="onTap">
+  <!-- 图片区域 -->
+  <view class="product-card__image-wrap">
+    <image
+      class="product-card__image"
+      src="{{product.cover_image || ''}}"
+      mode="aspectFill"
+      lazy-load
+      bind:load="onImageLoad"
+      bind:error="onImageError"
+    />
+    <!-- 图片加载占位 -->
+    <view class="product-card__image-placeholder" wx:if="{{!imageLoaded}}">
+      <text class="product-card__image-emoji">🏕️</text>
+    </view>
+    <!-- 标签 -->
+    <view class="product-card__tags" wx:if="{{showTag && product.tags && product.tags.length > 0}}">
+      <text
+        class="product-card__tag product-card__tag--{{item === '秒杀' ? 'seckill' : item === '热卖' ? 'hot' : 'default'}}"
+        wx:for="{{product.tags}}"
+        wx:key="index"
+      >{{item}}</text>
+    </view>
+    <!-- 售罄遮罩 -->
+    <view class="product-card__soldout" wx:if="{{product.stock <= 0}}">
+      <text>已售罄</text>
+    </view>
+  </view>
+
+  <!-- 信息区域 -->
+  <view class="product-card__info">
+    <view class="product-card__name text-ellipsis-2">{{product.name}}</view>
+    <view class="product-card__desc text-ellipsis" wx:if="{{mode === 'list' && product.description}}">
+      {{product.description}}
+    </view>
+    <!-- 属性标签 -->
+    <view class="product-card__attrs" wx:if="{{mode === 'list' && product.attributes && product.attributes.length > 0}}">
+      <text
+        class="product-card__attr"
+        wx:for="{{product.attributes}}"
+        wx:key="key"
+      >{{item.icon}} {{item.value}}</text>
+    </view>
+    <!-- 价格 -->
+    <view class="product-card__bottom">
+      <price-tag
+        price="{{product.current_price}}"
+        originalPrice="{{product.original_price}}"
+        size="{{mode === 'grid' ? 'small' : 'medium'}}"
+      />
+      <view class="product-card__sales" wx:if="{{product.sales_count > 0}}">
+        已售{{product.sales_count > 999 ? '999+' : product.sales_count}}
+      </view>
+    </view>
+  </view>
+</view>
