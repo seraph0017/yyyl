@@ -7,6 +7,7 @@ API routers package
 from routers import (
     admin,
     auth,
+    campsites,
     cart,
     content,
     finance,
@@ -14,6 +15,7 @@ from routers import (
     notifications,
     orders,
     products,
+    reports,
     tickets,
     users,
 )
@@ -21,6 +23,7 @@ from routers import (
 __all__ = [
     "admin",
     "auth",
+    "campsites",
     "cart",
     "content",
     "finance",
@@ -28,6 +31,7 @@ __all__ = [
     "notifications",
     "orders",
     "products",
+    "reports",
     "tickets",
     "users",
 ]

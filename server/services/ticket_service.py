@@ -18,7 +18,8 @@ from fastapi import HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.order import Ticket
+from models.order import Order, OrderItem, Ticket
+from models.product import Product
 from redis_client import get_redis
 from utils.helpers import generate_qr_token, generate_verification_code
 
@@ -150,8 +151,15 @@ async def scan_ticket(
     import uuid
     session_id = uuid.uuid4().hex
 
-    # TODO: 判断是否是年卡票，需要验证码流程
+    # 判断是否是年卡票，需要验证码流程
     needs_verification_code = False
+    order_result = await db.execute(
+        select(Order).where(Order.id == ticket.order_id)
+    )
+    order = order_result.scalar_one_or_none()
+    if order and order.payment_method == "annual_card_free":
+        needs_verification_code = True
+
     verification_code = None
 
     if needs_verification_code:
@@ -181,12 +189,27 @@ async def scan_ticket(
             ex=60,
         )
 
+    # 关联查询产品名称
+    product_name = None
+    if ticket.order_item_id:
+        oi_result = await db.execute(
+            select(OrderItem).where(OrderItem.id == ticket.order_item_id)
+        )
+        order_item = oi_result.scalar_one_or_none()
+        if order_item:
+            prod_result = await db.execute(
+                select(Product).where(Product.id == order_item.product_id)
+            )
+            prod = prod_result.scalar_one_or_none()
+            if prod:
+                product_name = prod.name
+
     return {
         "session_id": session_id,
         "ticket_id": ticket.id,
         "ticket_no": ticket.ticket_no,
         "ticket_type": ticket.ticket_type,
-        "product_name": None,  # TODO: 关联查询
+        "product_name": product_name,
         "verify_date": ticket.verify_date,
         "needs_verification_code": needs_verification_code,
         "verification_code": verification_code,
@@ -229,9 +252,24 @@ async def verify_code(
     ticket_id, expected_code, staff_id = int(parts[0]), parts[1], int(parts[2])
 
     if code != expected_code:
+        # 错误次数计数
+        attempts_key = f"verify_attempts:{session_id}"
+        attempts = await redis.incr(attempts_key)
+        await redis.expire(attempts_key, 300)  # 与 session 同生命周期
+
+        if attempts >= 3:
+            # 达到上限，删除 session 和相关数据
+            await redis.delete(f"verify_session:{session_id}")
+            await redis.delete(f"verify_status:{session_id}")
+            await redis.delete(attempts_key)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40917, "message": "验证码错误次数过多，请重新扫码"},
+            )
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": 40917, "message": "验证码错误"},
+            detail={"code": 40917, "message": f"验证码错误，剩余{3 - attempts}次机会"},
         )
 
     # 验证通过，更新票状态

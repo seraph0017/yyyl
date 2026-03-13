@@ -155,6 +155,10 @@ export function put<T = any>(url: string, data?: any, config?: AxiosRequestConfi
   return service.put(url, data, config) as Promise<T>
 }
 
+export function patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  return service.patch(url, data, config) as Promise<T>
+}
+
 export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
   return service.delete(url, config) as Promise<T>
 }

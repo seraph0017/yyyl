@@ -38,6 +38,15 @@ class WxLoginResponse(BaseModel):
     user_info: UserInfo = Field(description="用户基本信息")
 
 
+class PhoneLoginRequest(BaseModel):
+    """微信手机号授权登录请求"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    code: str = Field(min_length=1, description="微信登录临时凭证 code")
+    phone_code: str = Field(min_length=1, description="getPhoneNumber 获取的 code")
+
+
 # ---- 管理后台登录 ----
 
 class AdminLoginRequest(BaseModel):

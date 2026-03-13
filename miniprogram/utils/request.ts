@@ -9,6 +9,21 @@
 
 const BASE_URL = 'http://localhost:8000/api/v1';
 
+/** 服务器根地址（不含 /api/v1），用于拼接图片等静态资源路径 */
+const SERVER_BASE = 'http://localhost:8000';
+
+/**
+ * 将后端返回的图片路径转换为完整 URL
+ * - 已是完整URL则直接返回
+ * - 相对路径（如 /images/xxx.jpg）拼接服务器域名
+ * - 空字符串返回空
+ */
+export function resolveImageUrl(path: string): string {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${SERVER_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+}
+
 interface RequestOptions {
   url: string;
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE';

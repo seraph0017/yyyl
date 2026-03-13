@@ -78,6 +78,27 @@ async def get_finance_overview(
     )
     today_refund = today_refund_result.scalar() or Decimal("0")
 
+    # 本月统计
+    month_start = today.replace(day=1)
+
+    month_income_result = await db.execute(
+        select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(
+            FinanceTransaction.site_id == site_id,
+            FinanceTransaction.type == "income",
+            func.date(FinanceTransaction.created_at) >= month_start,
+        )
+    )
+    month_income = month_income_result.scalar() or Decimal("0")
+
+    month_refund_result = await db.execute(
+        select(func.coalesce(func.sum(FinanceTransaction.amount), 0)).where(
+            FinanceTransaction.site_id == site_id,
+            FinanceTransaction.type == "refund",
+            func.date(FinanceTransaction.created_at) >= month_start,
+        )
+    )
+    month_refund = month_refund_result.scalar() or Decimal("0")
+
     return {
         "id": account.id,
         "pending_amount": account.pending_amount,
@@ -87,8 +108,8 @@ async def get_finance_overview(
         "total_income": account.total_income,
         "today_income": today_income,
         "today_refund": today_refund,
-        "month_income": Decimal("0"),  # TODO: 本月统计
-        "month_refund": Decimal("0"),
+        "month_income": month_income,
+        "month_refund": month_refund,
     }
 
 
@@ -274,7 +295,47 @@ async def return_deposit(
     deposit.processed_by = operator_id
     deposit.processed_at = datetime.now(timezone.utc)
 
-    # TODO: 更新 FinanceAccount 的 deposit_amount
+    # 更新 FinanceAccount 的 deposit_amount 和创建交易流水
+    account_result = await db.execute(
+        select(FinanceAccount).where(FinanceAccount.site_id == 1)
+    )
+    account = account_result.scalar_one_or_none()
+    if account:
+        account.deposit_amount -= return_amount
+        if deduct_amount > 0:
+            account.maintenance_income += deduct_amount
+
+        # 创建退押金流水
+        tx = FinanceTransaction(
+            transaction_no=generate_transaction_no("DP"),
+            type="deposit_out",
+            amount=return_amount,
+            account_type="deposit",
+            from_account="deposit",
+            to_account="user",
+            status="completed",
+            order_id=deposit.order_id,
+            remark=remark or "押金退还",
+            operator_id=operator_id,
+            site_id=1,
+        )
+        db.add(tx)
+
+        if deduct_amount > 0:
+            deduct_tx = FinanceTransaction(
+                transaction_no=generate_transaction_no("DD"),
+                type="deposit_deduct",
+                amount=deduct_amount,
+                account_type="maintenance",
+                from_account="deposit",
+                to_account="maintenance",
+                status="completed",
+                order_id=deposit.order_id,
+                remark=f"设备损坏扣除 deposit_id={deposit_id}",
+                operator_id=operator_id,
+                site_id=1,
+            )
+            db.add(deduct_tx)
 
     await db.flush()
     logger.info(f"[财务] 押金退还: deposit_id={deposit_id}, return={return_amount}")

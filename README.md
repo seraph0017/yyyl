@@ -50,11 +50,12 @@ yyyl/
 ├── server/               # 后端服务（FastAPI）
 │   ├── models/           # SQLAlchemy 数据模型（45张表）
 │   ├── schemas/          # Pydantic 请求/响应模型
-│   ├── routers/          # API 路由（11个模块，71条API）
+│   ├── routers/          # API 路由（13个模块，106+ 条API）
 │   ├── services/         # 业务逻辑层（7个服务）
 │   ├── tasks/            # Celery 异步任务（23个定时任务）
 │   ├── middleware/       # 中间件
 │   ├── utils/            # 工具函数（加密、认证、微信SDK等）
+│   ├── images/           # 商品占位图片（静态文件服务）
 │   ├── alembic/          # 数据库迁移
 │   ├── main.py           # 应用入口
 │   ├── config.py         # 配置管理
@@ -63,12 +64,13 @@ yyyl/
 │   ├── celery_app.py     # Celery 实例初始化
 │   ├── celery_config.py  # Celery Beat 定时任务调度
 │   ├── seed_admin.py     # 管理员种子数据脚本
+│   ├── seed_products.py  # 商品种子数据脚本（18件商品+SKU+库存+定价）
 │   └── requirements.txt  # Python 依赖
 │
 ├── admin/                # Web管理后台前端（B端）
 │   ├── src/
-│   │   ├── api/          # 7个API模块
-│   │   ├── views/        # 15个页面视图
+│   │   ├── api/          # 8个API模块
+│   │   ├── views/        # 17个页面视图
 │   │   ├── stores/       # Pinia 状态管理
 │   │   ├── router/       # 路由配置 + 权限守卫
 │   │   ├── layout/       # 主布局
@@ -98,7 +100,8 @@ yyyl/
 │
 ├── docs/                 # 项目文档
 │   ├── architecture.md   # 技术架构设计文档 v1.1
-│   └── test_report.md    # 测试与合规报告
+│   ├── test_report.md    # 测试与合规报告
+│   └── test_cases.md     # 完整测试用例（203条）
 │
 ├── prd/                  # 产品文档
 │   └── yyyl_prd.md       # 产品需求文档 v1.4
@@ -184,6 +187,9 @@ alembic upgrade head
 
 # 初始化管理员账号（首次运行时执行）
 python seed_admin.py
+
+# 初始化商品种子数据（可选，提供示例商品）
+python seed_products.py
 
 # 启动开发服务器
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
@@ -389,21 +395,23 @@ npm run preview
 
 ## 🔌 API 模块概览
 
-后端共 **11个路由模块**，**71+ 条 API**：
+后端共 **13个路由模块**，**106+ 条 API**：
 
 | 模块 | 前缀 | 说明 |
 |------|------|------|
-| `auth` | `/api/v1/auth` | 认证（微信登录、管理员登录、Token刷新） |
+| `auth` | `/api/v1/auth` | 认证（微信登录、手机号登录、管理员登录、Token刷新） |
 | `products` | `/api/v1/products` | 商品管理（CRUD、上下架、价格日历） |
+| `campsites` | `/api/v1/admin/campsites` | 营位管理（CRUD、库存批量开放、定价规则、统计） |
 | `orders` | `/api/v1/orders` | 订单管理（下单、支付、退票、验票） |
-| `cart` | `/api/v1/cart` | 购物车 |
+| `cart` | `/api/v1/cart` | 购物车（添加、更新、删除、结算拆单） |
 | `members` | `/api/v1/members` | 会员管理（年卡、次数卡、积分） |
 | `users` | `/api/v1/users` | 用户信息管理 |
 | `tickets` | `/api/v1/tickets` | 电子票（生成、扫码验票） |
 | `finance` | `/api/v1/finance` | 财务管理（账户、交易、提现） |
-| `admin` | `/api/v1/admin` | 管理后台专用（Dashboard、员工、日志、设置） |
-| `content` | `/api/v1/content` | 内容管理（FAQ、页面配置） |
+| `admin` | `/api/v1/admin` | 管理后台专用（Dashboard、员工、日志、设置、日历等） |
+| `content` | `/api/v1/content` | 内容管理（FAQ、页面配置、免责声明） |
 | `notifications` | `/api/v1/notifications` | 消息通知管理 |
+| `reports` | `/api/v1/admin/reports` | 数据报表（销售/用户/商品报表、导出） |
 
 ---
 
@@ -437,14 +445,15 @@ npm run preview
 |------|------|
 | 登录 | 账号密码登录 + 微信扫码预留 |
 | Dashboard | 实时数据卡片 + 趋势图 + 销售排行 + 品类分布 + 会员数据 + 财务概览 |
-| 营地日历 | 按月查看所有商品库存/价格/状态矩阵 |
+| 营地日历 | 按月查看所有营位库存/价格/状态矩阵（月份导航 + 今天标记 + 周末区分） |
+| 营位管理 | 营位列表（统计概览 + 属性筛选 + 7天库存概况）+ 新增/编辑 |
 | 商品管理 | 商品列表 + 新增/编辑（CRUD/上下架/定价） |
 | 订单管理 | 订单列表 + 详情 + 退款审批 |
 | 会员管理 | 会员列表/详情/积分调整 |
 | 年卡管理 | 年卡配置 + 积分兑换活动 |
 | 次数卡管理 | 次数卡配置 + 激活码批量生成 |
 | 财务管理 | 概览卡片 + 交易流水 |
-| 数据统计 | 销售报表（ECharts 图表）+ 导出 |
+| 数据统计 | 销售报表（ECharts 图表）+ 用户分析 + 商品排行 + 导出 |
 | FAQ管理 | 分类 + 条目 CRUD |
 | 页面编辑 | JSON 配置编辑器 |
 | 消息管理 | 模板开关 + 发送记录 + 统计 |
@@ -520,6 +529,7 @@ docker run -d --name yyyl-redis -p 6379:6379 redis:7-alpine
 cd server && source venv/bin/activate
 alembic upgrade head          # 数据库迁移
 python seed_admin.py          # 初始化管理员账号（首次）
+python seed_products.py       # 初始化商品数据（首次，可选）
 uvicorn main:app --reload --port 8000
 
 # 3. Celery Worker（新终端）
@@ -614,6 +624,7 @@ kubectl get hpa -n yyyl
 | 产品需求文档 | `prd/yyyl_prd.md` | PRD v1.4（评审通过 9.6/10） |
 | 技术架构文档 | `docs/architecture.md` | 架构设计 v1.1（评审通过 9.3/10） |
 | 测试合规报告 | `docs/test_report.md` | 综合评分 8.5/10 |
+| 测试用例文档 | `docs/test_cases.md` | 203 条测试用例（P0:105 / P1:84 / P2:14） |
 
 ---
 

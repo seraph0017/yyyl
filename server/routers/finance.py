@@ -1,7 +1,7 @@
 """
 财务路由
 
-- GET /accounts — 财务账户概览
+- GET /overview — 财务概览
 - POST /withdraw — 发起提现
 - GET /transactions — 交易流水
 - POST /deposits/{id}/refund — 退还押金
@@ -28,8 +28,8 @@ from services import finance_service
 router = APIRouter(prefix="/api/v1/admin/finance", tags=["财务"])
 
 
-@router.get("/accounts", summary="财务账户概览")
-async def get_finance_accounts(
+@router.get("/overview", summary="财务概览")
+async def get_finance_overview(
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):

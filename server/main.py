@@ -8,8 +8,11 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from config import settings
 from database import engine
@@ -67,10 +70,16 @@ async def health_check():
     }
 
 
+# ---- 静态文件（商品图片等） ----
+_images_dir = Path(__file__).resolve().parent / "images"
+if _images_dir.is_dir():
+    app.mount("/images", StaticFiles(directory=str(_images_dir)), name="images")
+
 # ---- 路由注册 ----
 from routers import (
     admin,
     auth,
+    campsites,
     cart,
     content,
     finance,
@@ -78,6 +87,7 @@ from routers import (
     notifications,
     orders,
     products,
+    reports,
     tickets,
     users,
 )
@@ -91,5 +101,7 @@ app.include_router(users.router)
 app.include_router(tickets.router)
 app.include_router(finance.router)
 app.include_router(admin.router)
+app.include_router(campsites.router)
 app.include_router(content.router)
 app.include_router(notifications.router)
+app.include_router(reports.router)

@@ -1,4 +1,5 @@
 // pages/category/index.ts
+import { get, resolveImageUrl } from '../../utils/request';
 
 interface CategoryPageData {
   tabs: ICategoryTab[];
@@ -24,6 +25,50 @@ interface IFilter {
   label: string;
   icon: string;
 }
+
+/** 后端商品类型到前端 category 映射 */
+const TYPE_MAP: Record<string, string> = {
+  'rental': 'equipment_rental',
+  'shop': 'camp_shop',
+};
+
+/** 将后端列表项映射为 IProduct */
+function mapProductItem(item: Record<string, any>): IProduct {
+  const images = item.images || [];
+  const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '') : '';
+  const tags: string[] = [];
+  if (item.is_seckill) tags.push('秒杀');
+  let category: ProductCategory = (item.category || item.type || 'daily_camping') as ProductCategory;
+  if (TYPE_MAP[category as string]) category = TYPE_MAP[category as string] as ProductCategory;
+
+  return {
+    id: item.id,
+    name: item.name,
+    category,
+    description: item.description || '',
+    cover_image: coverImage,
+    images: images.map((img: any) => resolveImageUrl(img.url || '')),
+    base_price: parseFloat(item.base_price) || 0,
+    current_price: parseFloat(item.base_price) || 0,
+    original_price: parseFloat(item.base_price) || 0,
+    status: item.status || 'on_sale',
+    tags,
+    attributes: [],
+    stock: 0,
+    sales_count: 0,
+    ticket_start_time: item.sale_start_at || null,
+    is_seckill: item.is_seckill || false,
+    has_disclaimer: true,
+    identity_mode: 'optional',
+    deposit_amount: 0,
+  };
+}
+
+/** 前端 category 到后端 type 的反向映射 */
+const CATEGORY_TO_TYPE: Record<string, string> = {
+  'equipment_rental': 'rental',
+  'camp_shop': 'shop',
+};
 
 Page<CategoryPageData, WechatMiniprogram.IAnyObject>({
   data: {
@@ -125,40 +170,44 @@ Page<CategoryPageData, WechatMiniprogram.IAnyObject>({
   async loadProducts() {
     this.setData({ loading: true });
 
-    // Mock数据
     const currentTab = this.data.tabs[this.data.activeTab];
-    const mockProducts: IProduct[] = Array.from({ length: 6 }, (_, i) => ({
-      id: i + 1 + this.data.activeTab * 10,
-      name: `${currentTab.icon} ${currentTab.name}商品${i + 1}`,
-      category: currentTab.key,
-      description: `这是${currentTab.name}分类下的精选商品，品质保证`,
-      cover_image: '',
-      images: [],
-      base_price: 100 + i * 30,
-      current_price: 80 + i * 25,
-      original_price: 100 + i * 30,
-      status: 'on_sale' as const,
-      tags: i === 0 ? ['热卖'] : i === 2 ? ['秒杀'] : [],
-      attributes: currentTab.key === 'daily_camping' ? [
-        { key: 'power', label: '电源', value: i % 2 === 0 ? '有电' : '无电', icon: i % 2 === 0 ? '⚡' : '🔋' },
-        { key: 'platform', label: '平台', value: i % 3 === 0 ? '木平台' : '无平台', icon: '🪵' },
-      ] : [],
-      stock: 10 - i,
-      sales_count: 100 + i * 50,
-      ticket_start_time: null,
-      is_seckill: i === 2,
-      has_disclaimer: true,
-      identity_mode: 'required' as const,
-      deposit_amount: 0,
-    }));
+    const pageSize = 10;
 
-    setTimeout(() => {
+    // 构建查询参数
+    const params: Record<string, string | number | boolean | undefined> = {
+      page: this.data.page,
+      page_size: pageSize,
+      status: 'on_sale',
+    };
+
+    // 类型筛选：前端 category → 后端 type
+    const backendType = CATEGORY_TO_TYPE[currentTab.key] || currentTab.key;
+    params.type = backendType;
+
+    // 搜索关键词
+    if (this.data.searchKeyword) {
+      params.keyword = this.data.searchKeyword;
+    }
+
+    try {
+      const data = await get<{ list: any[]; total: number }>(
+        '/products', params, { needAuth: false },
+      );
+
+      const newProducts = (data.list || []).map(mapProductItem);
+      const allProducts = this.data.page === 1
+        ? newProducts
+        : [...this.data.products, ...newProducts];
+
       this.setData({
-        products: this.data.page === 1 ? mockProducts : [...this.data.products, ...mockProducts],
+        products: allProducts,
         loading: false,
-        hasMore: this.data.page < 3,
+        hasMore: allProducts.length < (data.total || 0),
       });
-    }, 300);
+    } catch (err) {
+      console.error('加载商品列表失败:', err);
+      this.setData({ loading: false });
+    }
   },
 
   /** 加载更多 */

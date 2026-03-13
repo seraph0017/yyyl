@@ -1,5 +1,6 @@
 // pages/product-detail/index.ts
 import { brandConfig } from '../../config/brand';
+import { get, resolveImageUrl } from '../../utils/request';
 
 interface DetailPageData {
   product: IProduct | null;
@@ -70,44 +71,67 @@ Page<DetailPageData, WechatMiniprogram.IAnyObject>({
   async loadProduct(id: number) {
     this.setData({ loading: true });
 
-    // Mock数据
-    const mockProduct: IProduct = {
-      id,
-      name: 'A区阳光营位 · 有电有木平台',
-      category: 'daily_camping',
-      description: '位于营地A区的独立营位，配备220V电源插座和实木平台。视野开阔，阳光充足，适合家庭露营。\n\n📍 营位面积：约80㎡\n⚡ 电源：220V交流电，限流10A\n🪵 平台：3m×4m实木平台\n🚗 停车：营位旁可停1辆车\n🚿 距离卫生间：约100m',
-      cover_image: '',
-      images: ['', '', ''],
-      base_price: 168,
-      current_price: 128,
-      original_price: 168,
-      status: 'on_sale',
-      tags: ['热卖'],
-      attributes: [
-        { key: 'power', label: '电源', value: '有电 ⚡', icon: '⚡' },
-        { key: 'platform', label: '平台', value: '木平台 🪵', icon: '🪵' },
-        { key: 'shade', label: '光照', value: '阳光 ☀️', icon: '☀️' },
-        { key: 'size', label: '面积', value: '约80㎡', icon: '📐' },
-      ],
-      stock: 5,
-      sales_count: 326,
-      ticket_start_time: null,
-      is_seckill: false,
-      has_disclaimer: true,
-      identity_mode: 'required',
-      deposit_amount: 0,
-    };
+    try {
+      const detail = await get<Record<string, any>>(`/products/${id}`, undefined, { needAuth: false });
 
-    const disclaimerText = '免责声明\n\n1. 参与者确认已充分了解户外露营活动的风险性，自愿参加本次露营活动。\n2. 参与者应遵守营地管理规定，爱护公共设施，保持环境整洁。\n3. 参与者对自身及随行人员的安全负有责任。\n4. 如遇极端天气或不可抗力因素，营地有权调整或取消活动。\n5. 参与者应妥善管理个人财物，营地对个人财物遗失不承担赔偿责任。\n6. 未成年人须在监护人陪同下参加露营活动。\n7. 禁止在非指定区域使用明火，违规产生的一切后果由参与者自行承担。';
+      // 映射后端数据到前端 IProduct
+      const images = detail.images || [];
+      const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '') : '';
+      const tags: string[] = [];
+      if (detail.is_seckill) tags.push('秒杀');
 
-    this.setData({
-      product: mockProduct,
-      disclaimerText,
-      notStarted: !!mockProduct.ticket_start_time && new Date(mockProduct.ticket_start_time).getTime() > Date.now(),
-      loading: false,
-    });
+      const attributes: IProductAttribute[] = [];
+      if (detail.ext_camping) {
+        if (detail.ext_camping.has_electricity) attributes.push({ key: 'power', label: '电源', value: '有电 ⚡', icon: '⚡' });
+        if (detail.ext_camping.has_platform) attributes.push({ key: 'platform', label: '平台', value: '木平台 🪵', icon: '🪵' });
+        if (detail.ext_camping.sun_exposure === 'sunny') attributes.push({ key: 'shade', label: '光照', value: '阳光 ☀️', icon: '☀️' });
+        if (detail.ext_camping.sun_exposure === 'shaded') attributes.push({ key: 'shade', label: '光照', value: '阴凉 🌳', icon: '🌳' });
+        if (detail.ext_camping.sun_exposure === 'mixed') attributes.push({ key: 'shade', label: '光照', value: '半阴半阳', icon: '⛅' });
+        if (detail.ext_camping.max_persons) attributes.push({ key: 'size', label: '人数', value: `最多${detail.ext_camping.max_persons}人`, icon: '👥' });
+        if (detail.ext_camping.area) attributes.push({ key: 'area', label: '区域', value: detail.ext_camping.area, icon: '📍' });
+      }
 
-    this.generateCalendar();
+      let category: ProductCategory = (detail.category || detail.type || 'daily_camping') as ProductCategory;
+      if (category === 'rental' as any) category = 'equipment_rental';
+      if (category === 'shop' as any) category = 'camp_shop';
+
+      const product: IProduct = {
+        id: detail.id,
+        name: detail.name,
+        category,
+        description: detail.description || '',
+        cover_image: coverImage,
+        images: images.map((img: any) => resolveImageUrl(img.url || '')),
+        base_price: parseFloat(detail.base_price) || 0,
+        current_price: parseFloat(detail.base_price) || 0,
+        original_price: parseFloat(detail.base_price) || 0,
+        status: detail.status || 'on_sale',
+        tags,
+        attributes,
+        stock: 0,
+        sales_count: 0,
+        ticket_start_time: detail.sale_start_at || null,
+        is_seckill: detail.is_seckill || false,
+        has_disclaimer: detail.require_disclaimer !== false,
+        identity_mode: 'optional',
+        deposit_amount: detail.ext_rental?.deposit_amount || 0,
+      };
+
+      const disclaimerText = '免责声明\n\n1. 参与者确认已充分了解户外露营活动的风险性，自愿参加本次露营活动。\n2. 参与者应遵守营地管理规定，爱护公共设施，保持环境整洁。\n3. 参与者对自身及随行人员的安全负有责任。\n4. 如遇极端天气或不可抗力因素，营地有权调整或取消活动。\n5. 参与者应妥善管理个人财物，营地对个人财物遗失不承担赔偿责任。\n6. 未成年人须在监护人陪同下参加露营活动。\n7. 禁止在非指定区域使用明火，违规产生的一切后果由参与者自行承担。';
+
+      this.setData({
+        product,
+        disclaimerText,
+        notStarted: !!product.ticket_start_time && new Date(product.ticket_start_time).getTime() > Date.now(),
+        loading: false,
+      });
+
+      this.generateCalendar();
+    } catch (err) {
+      console.error('加载商品详情失败:', err);
+      this.setData({ loading: false });
+      wx.showToast({ title: '加载失败', icon: 'none' });
+    }
   },
 
   /** 生成日历 */

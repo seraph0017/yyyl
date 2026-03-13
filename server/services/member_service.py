@@ -303,12 +303,29 @@ async def get_points_balance(db: AsyncSession, user_id: int) -> Dict[str, Any]:
     )
     total_consumed = consume_result.scalar() or 0
 
+    # 计算即将过期积分（积分12个月过期，查未来30天内将过期的）
+    expiring_cutoff = datetime.now(timezone.utc) - timedelta(days=335)  # 约11个月前获取的
+    expiring_result = await db.execute(
+        select(func.coalesce(func.sum(PointsRecord.change_amount), 0)).where(
+            PointsRecord.user_id == user_id,
+            PointsRecord.change_type == "earn",
+            PointsRecord.created_at <= expiring_cutoff,
+            PointsRecord.created_at >= expiring_cutoff - timedelta(days=30),
+        )
+    )
+    expiring_soon = expiring_result.scalar() or 0
+    expiring_date = (
+        (datetime.now(timezone.utc) + timedelta(days=30)).date()
+        if expiring_soon > 0
+        else None
+    )
+
     return {
         "balance": user.points_balance,
         "total_earned": total_earned,
         "total_consumed": total_consumed,
-        "expiring_soon": None,  # TODO: 计算即将过期积分
-        "expiring_date": None,
+        "expiring_soon": expiring_soon if expiring_soon > 0 else None,
+        "expiring_date": expiring_date,
     }
 
 

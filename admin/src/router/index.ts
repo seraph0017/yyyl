@@ -36,6 +36,25 @@ const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/calendar/index.vue'),
         meta: { title: '营地日历', icon: 'Calendar' },
       },
+      // 营位管理（独立品类）
+      {
+        path: 'campsites',
+        name: 'Campsites',
+        component: () => import('@/views/campsites/index.vue'),
+        meta: { title: '营位管理', icon: 'Place' },
+      },
+      {
+        path: 'campsites/create',
+        name: 'CampsiteCreate',
+        component: () => import('@/views/campsites/edit.vue'),
+        meta: { title: '新增营位', hidden: true, activeMenu: '/campsites' },
+      },
+      {
+        path: 'campsites/:id/edit',
+        name: 'CampsiteEdit',
+        component: () => import('@/views/campsites/edit.vue'),
+        meta: { title: '编辑营位', hidden: true, activeMenu: '/campsites' },
+      },
       // 商品管理
       {
         path: 'products',

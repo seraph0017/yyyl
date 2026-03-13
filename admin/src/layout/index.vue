@@ -105,7 +105,7 @@ import {
   Fold, Expand, ArrowDown, SwitchButton,
   DataAnalysis, Calendar, Goods, List, User,
   Money, TrendCharts, ChatLineSquare, Document,
-  Bell, UserFilled, Setting, Notebook,
+  Bell, UserFilled, Setting, Notebook, Place,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -113,7 +113,7 @@ const appStore = useAppStore()
 const userStore = useUserStore()
 
 // 缓存的视图
-const cachedViews = ['Dashboard', 'Products', 'Orders', 'Members']
+const cachedViews = ['Dashboard', 'Products', 'Campsites', 'Orders', 'Members']
 
 // 当前激活菜单
 const activeMenu = computed(() => {
@@ -136,6 +136,7 @@ const menuItems = computed(() => {
   const items = [
     { path: '/dashboard', title: 'Dashboard', icon: DataAnalysis },
     { path: '/calendar', title: '营地日历', icon: Calendar },
+    { path: '/campsites', title: '营位管理', icon: Place },
     { path: '/products', title: '商品管理', icon: Goods },
     { path: '/orders', title: '订单管理', icon: List },
     {

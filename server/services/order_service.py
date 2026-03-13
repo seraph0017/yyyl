@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.order import Order, OrderItem, Ticket
-from models.product import Inventory, Product
+from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product
 from models.user import User
 from redis_client import get_redis
 from services import inventory_service
@@ -128,8 +128,9 @@ async def create_order(
                 )
                 locked_inventories.append((product_id, d, quantity, sku_id, time_slot))
 
-                # 计算价格 TODO: 应用定价规则和折扣
-                actual_price = unit_price * quantity
+                # 计算价格：4级优先级链定价
+                day_price = await _resolve_price(db, product, d)
+                actual_price = day_price * quantity
 
                 # 创建订单项
                 order_items.append({
@@ -138,7 +139,7 @@ async def create_order(
                     "date": d,
                     "time_slot": time_slot,
                     "quantity": quantity,
-                    "unit_price": unit_price,
+                    "unit_price": day_price,
                     "actual_price": actual_price,
                     "identity_ids": identity_ids,
                     "parent_item_id": item_data.get("parent_order_item_id"),
@@ -158,7 +159,12 @@ async def create_order(
                 logger.error(f"[订单] 回滚库存失败: product={pid}, date={d}")
         raise
 
-    # 5. 创建订单
+    # 5. 应用折扣规则（连续天数折扣 vs 多人折扣，互斥取最优）
+    discount_amount, discount_type_result, discount_detail_result = (
+        await _calculate_discount(db, items_data, order_items, total_amount)
+    )
+
+    # 6. 创建订单
     actual_amount = total_amount - discount_amount + deposit_amount
     payment_timeout = 1800  # 默认30分钟
 
@@ -171,6 +177,8 @@ async def create_order(
         discount_amount=discount_amount,
         actual_amount=actual_amount,
         deposit_amount=deposit_amount,
+        discount_type=discount_type_result,
+        discount_detail=discount_detail_result,
         payment_method=payment_method,
         payment_status="unpaid",
         times_card_id=times_card_id,
@@ -181,7 +189,7 @@ async def create_order(
     db.add(order)
     await db.flush()
 
-    # 6. 创建订单项
+    # 7. 创建订单项
     for oi_data in order_items:
         identity_ids = oi_data.pop("identity_ids", [])
         parent_item_id = oi_data.pop("parent_item_id", None)
@@ -281,8 +289,79 @@ async def apply_refund(
             detail={"code": 40902, "message": "订单状态不允许退票"},
         )
 
-    # TODO: 校验退票截止时间
-    # TODO: 退票金额计算
+    # 校验退票截止时间
+    if order.status == "verified":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40903, "message": "已验票，如需退款请联系客服"},
+        )
+
+    first_item = order.items[0] if order.items else None
+    if first_item and first_item.product_id:
+        product_result = await db.execute(
+            select(Product).where(Product.id == first_item.product_id)
+        )
+        product = product_result.scalar_one_or_none()
+        if product:
+            now = datetime.now(timezone.utc)
+            item_date = first_item.date
+            if item_date:
+                # 将 date 转为 datetime（当天 00:00 UTC）
+                item_datetime = datetime(
+                    item_date.year, item_date.month, item_date.day,
+                    tzinfo=timezone.utc,
+                )
+                if product.refund_deadline_type == "days":
+                    deadline = item_datetime - timedelta(days=product.refund_deadline_value)
+                else:  # hours
+                    deadline = item_datetime - timedelta(hours=product.refund_deadline_value)
+
+                if now >= deadline:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail={"code": 40903, "message": "已超过退票时间，无法退票"},
+                    )
+
+    # 退票金额计算
+    refund_amount = Decimal("0")
+    if order_item_ids:
+        # 部分退票：仅退指定的 OrderItem
+        refund_items = [item for item in order.items if item.id in order_item_ids]
+        if not refund_items:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40001, "message": "指定的订单项不存在"},
+            )
+
+        for item in refund_items:
+            refund_amount += item.actual_price
+            item.refund_status = "refunded"
+            # 释放对应日期库存
+            if item.date:
+                await _refund_inventory(
+                    db, item.product_id, item.date, item.quantity,
+                    order.id, item.sku_id, item.time_slot,
+                )
+
+        # 判断是否全部退完
+        all_refunded = all(item.refund_status == "refunded" for item in order.items)
+        if all_refunded:
+            order.status = "refunded"
+            order.payment_status = "refunded"
+        else:
+            order.status = "partial_refunded"
+            order.payment_status = "partial_refunded"
+
+        logger.info(
+            f"[订单] 部分退票: order_id={order_id}, items={order_item_ids}, "
+            f"refund_amount={refund_amount}"
+        )
+        order.remark = reason or order.remark
+        await db.flush()
+        return order
+    else:
+        # 全额退票
+        refund_amount = order.actual_amount
 
     order.status = "refund_pending"
     order.remark = reason or order.remark
@@ -794,3 +873,194 @@ async def _refund_inventory(
             remark=f"退款恢复 order_id={order_id}",
         )
         db.add(log)
+
+
+async def _resolve_price(
+    db: AsyncSession,
+    product: Product,
+    target_date: date,
+) -> Decimal:
+    """4级优先级链动态定价
+
+    1. 特定日期特殊价（最高优先级）
+    2. 自定义日期类型价（DateTypeConfig 配置的日期类型）
+    3. 系统日期类型价（自动判断 weekday/weekend）
+    4. 商品基础价（兜底）
+
+    Args:
+        db: 数据库会话
+        product: 商品实例
+        target_date: 目标日期
+
+    Returns:
+        当天适用价格
+    """
+    # 1. 特定日期特殊价
+    rule_result = await db.execute(
+        select(PricingRule).where(
+            PricingRule.product_id == product.id,
+            PricingRule.rule_type == "custom_date",
+            PricingRule.custom_date == target_date,
+        )
+    )
+    custom_rule = rule_result.scalar_one_or_none()
+    if custom_rule:
+        logger.info(
+            f"[定价] 命中特定日期价: product={product.id}, date={target_date}, "
+            f"price={custom_rule.price}"
+        )
+        return custom_rule.price
+
+    # 2. 自定义日期类型价（查 DateTypeConfig）
+    dtc_result = await db.execute(
+        select(DateTypeConfig).where(
+            DateTypeConfig.date == target_date,
+            DateTypeConfig.site_id == product.site_id,
+        )
+    )
+    date_type_config = dtc_result.scalar_one_or_none()
+
+    if date_type_config:
+        dtype_rule_result = await db.execute(
+            select(PricingRule).where(
+                PricingRule.product_id == product.id,
+                PricingRule.rule_type == "date_type",
+                PricingRule.date_type == date_type_config.date_type,
+            )
+        )
+        dtype_rule = dtype_rule_result.scalar_one_or_none()
+        if dtype_rule:
+            logger.info(
+                f"[定价] 命中自定义日期类型价: product={product.id}, "
+                f"date={target_date}, type={date_type_config.date_type}, "
+                f"price={dtype_rule.price}"
+            )
+            return dtype_rule.price
+
+    # 3. 系统日期类型价（周一~周五=weekday, 周六日=weekend）
+    system_date_type = "weekend" if target_date.weekday() >= 5 else "weekday"
+    sys_rule_result = await db.execute(
+        select(PricingRule).where(
+            PricingRule.product_id == product.id,
+            PricingRule.rule_type == "date_type",
+            PricingRule.date_type == system_date_type,
+        )
+    )
+    sys_rule = sys_rule_result.scalar_one_or_none()
+    if sys_rule:
+        logger.info(
+            f"[定价] 命中系统日期类型价: product={product.id}, "
+            f"date={target_date}, type={system_date_type}, price={sys_rule.price}"
+        )
+        return sys_rule.price
+
+    # 4. 商品基础价（兜底）
+    logger.info(
+        f"[定价] 使用基础价: product={product.id}, date={target_date}, "
+        f"price={product.base_price}"
+    )
+    return product.base_price
+
+
+async def _calculate_discount(
+    db: AsyncSession,
+    items_data: List[Dict[str, Any]],
+    order_items: List[Dict[str, Any]],
+    total_amount: Decimal,
+) -> Tuple[Decimal, Optional[str], Optional[Dict]]:
+    """计算折扣（连续天数 vs 多人，互斥取最优）
+
+    Args:
+        db: 数据库会话
+        items_data: 原始下单数据
+        order_items: 已计算价格的订单项
+        total_amount: 原总价
+
+    Returns:
+        (discount_amount, discount_type, discount_detail)
+    """
+    if not order_items:
+        return Decimal("0"), None, None
+
+    # 收集商品 ID 列表
+    product_ids = list({oi["product_id"] for oi in order_items})
+
+    # 查询适用的折扣规则（商品级 + 全局）
+    discount_rules_result = await db.execute(
+        select(DiscountRule).where(
+            DiscountRule.status == "active",
+            or_(
+                DiscountRule.product_id.in_(product_ids),
+                DiscountRule.product_id.is_(None),
+            ),
+        )
+    )
+    discount_rules = list(discount_rules_result.scalars().all())
+
+    if not discount_rules:
+        return Decimal("0"), None, None
+
+    # 计算连续天数
+    all_dates = sorted({oi["date"] for oi in order_items if oi.get("date")})
+    consecutive_days = _count_consecutive_days(all_dates)
+
+    # 计算总人数（quantity 之和）
+    total_quantity = sum(oi["quantity"] for oi in order_items)
+
+    best_discount_amount = Decimal("0")
+    best_discount_type: Optional[str] = None
+    best_discount_detail: Optional[Dict] = None
+
+    for rule in discount_rules:
+        if rule.rule_type == "consecutive_days" and consecutive_days >= rule.threshold:
+            discounted_total = total_amount * rule.discount_rate
+            discount_amt = total_amount - discounted_total
+            if discount_amt > best_discount_amount:
+                best_discount_amount = discount_amt
+                best_discount_type = "consecutive_days"
+                best_discount_detail = {
+                    "rule_id": rule.id,
+                    "rule_type": "consecutive_days",
+                    "consecutive_days": consecutive_days,
+                    "threshold": rule.threshold,
+                    "discount_rate": str(rule.discount_rate),
+                    "discount_amount": str(discount_amt),
+                }
+
+        elif rule.rule_type == "multi_person" and total_quantity >= rule.threshold:
+            discounted_total = total_amount * rule.discount_rate
+            discount_amt = total_amount - discounted_total
+            if discount_amt > best_discount_amount:
+                best_discount_amount = discount_amt
+                best_discount_type = "multi_person"
+                best_discount_detail = {
+                    "rule_id": rule.id,
+                    "rule_type": "multi_person",
+                    "total_quantity": total_quantity,
+                    "threshold": rule.threshold,
+                    "discount_rate": str(rule.discount_rate),
+                    "discount_amount": str(discount_amt),
+                }
+
+    if best_discount_amount > Decimal("0"):
+        logger.info(
+            f"[折扣] 应用: type={best_discount_type}, "
+            f"discount_amount={best_discount_amount}"
+        )
+
+    return best_discount_amount, best_discount_type, best_discount_detail
+
+
+def _count_consecutive_days(dates: List[date]) -> int:
+    """计算连续天数"""
+    if not dates:
+        return 0
+    max_consecutive = 1
+    current = 1
+    for i in range(1, len(dates)):
+        if (dates[i] - dates[i - 1]).days == 1:
+            current += 1
+            max_consecutive = max(max_consecutive, current)
+        else:
+            current = 1
+    return max_consecutive

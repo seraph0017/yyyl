@@ -93,7 +93,7 @@ const productId = computed(() => Number(route.params.id))
 
 const form = reactive<ProductCreateRequest>({
   name: '',
-  category: 'campsite',
+  category: 'activity',
   base_price: 0,
   market_price: undefined,
   unit: '',

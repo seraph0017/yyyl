@@ -28,9 +28,8 @@ export function formatRelativeTime(date: string | Date): string {
   return d.format('YYYY-MM-DD')
 }
 
-// 商品品类映射
+// 商品品类映射（营位已独立为单独品类，不在此处列出）
 export const categoryMap: Record<string, string> = {
-  campsite: '营位',
   activity: '活动',
   meal: '餐饮',
   equipment_rental: '装备租赁',
