@@ -1,37 +1,60 @@
-# 🏕️ 某露营地 — 综合运营平台
+# 🏕️ 一月一露 — 多营地综合运营平台
 
-> 微信小程序 + Web管理后台 + 后端API 全栈项目
+> uni-app 跨平台小程序 + Web管理后台 + 后端API 全栈项目
 
-某露营地是一个户外露营品牌的数字化运营平台，为露营爱好者提供营位预定、装备租赁、户外活动报名、商品购买等一站式服务，同时为运营方提供完整的后台管理能力。
+一月一露是一个户外露营品牌的数字化运营平台，支持**多营地独立运营**（西郊林场 / 大聋谷），同一套代码通过构建时配置生成不同营地的小程序。为露营爱好者提供营位预定、装备租赁、户外活动报名、商品购买等一站式服务，同时为运营方提供完整的后台管理能力。
 
 ---
 
 ## 📐 系统架构
 
 ```
-┌────────────────────┐   ┌────────────────────┐
-│   微信小程序 (C端)   │   │  Web管理后台 (B端)   │
-│  TypeScript + SCSS  │   │ Vue3 + Element Plus │
-└────────┬───────────┘   └────────┬───────────┘
-         │                        │
-         └──────────┬─────────────┘
-                    │  HTTP / WebSocket
-              ┌─────▼─────┐
-              │   Nginx    │
-              │ 反向代理    │
-              └─────┬─────┘
-                    │
-              ┌─────▼─────┐
-              │  FastAPI   │    ┌──────────┐
-              │  Python    │◄───┤  Celery  │
-              │  Uvicorn   │    │  Worker   │
-              └──┬─────┬──┘    └──────────┘
-                 │     │
-          ┌──────▼┐   ┌▼──────┐
-          │ Postgres│   │ Redis │
-          │  数据库  │   │ 缓存   │
-          └────────┘   └───────┘
+┌─────────────────────────────────────────────┐
+│        uni-app 跨平台小程序 (C端)              │
+│      Vue3 + TypeScript + Pinia + SCSS        │
+│                                              │
+│  ┌──────────────┐    ┌──────────────┐        │
+│  │ 🌲 西郊林场   │    │  ⛺ 大聋谷    │  ...   │
+│  │  site_id=1   │    │  site_id=2   │        │
+│  │  绿色主题     │    │  蓝色主题     │        │
+│  └──────────────┘    └──────────────┘        │
+│     微信小程序 / H5 / 抖音小程序                │
+└────────────┬────────────────────────────────┘
+             │
+             │  ┌────────────────────┐
+             │  │  Web管理后台 (B端)   │
+             │  │ Vue3 + Element Plus │
+             │  └────────┬───────────┘
+             │           │
+             └─────┬─────┘
+                   │  HTTP / WebSocket
+                   │  X-Site-Id 请求头（营地隔离）
+             ┌─────▼─────┐
+             │   Nginx    │
+             │ 反向代理    │
+             └─────┬─────┘
+                   │
+             ┌─────▼─────┐
+             │  FastAPI   │    ┌──────────┐
+             │  Python    │◄───┤  Celery  │
+             │  Uvicorn   │    │  Worker   │
+             └──┬─────┬──┘    └──────────┘
+                │     │
+         ┌──────▼┐   ┌▼──────┐
+         │ Postgres│   │ Redis │
+         │  数据库  │   │ 缓存   │
+         └────────┘   └───────┘
 ```
+
+### 多营地架构
+
+| 营地 | site_id | 小程序代号 | 主题色 |
+|------|---------|-----------|--------|
+| 一月一露·西郊林场 | 1 | `xijiao` | 🌲 森林绿 `#2E7D32` |
+| 一月一露·大聋谷 | 2 | `dalonggu` | ⛺ 深蓝 `#1565C0` |
+
+- **前端**：同一套代码，通过 `VITE_SITE_CODE` 环境变量在构建时切换品牌名、主题色、Slogan 等
+- **后端**：所有 API 通过 `X-Site-Id` 请求头实现数据隔离，每个营地看到各自的商品、订单、用户、报表数据
 
 ---
 
@@ -39,13 +62,19 @@
 
 ```
 yyyl/
-├── miniprogram/          # 微信小程序前端（C端 + 员工验票端）
-│   ├── pages/            # 17个页面
-│   ├── components/       # 4个通用组件
-│   ├── config/           # 品牌配置
-│   ├── utils/            # 工具函数（请求、认证、存储）
-│   ├── app.ts            # 小程序入口
-│   └── app.json          # 小程序配置
+├── uni-app/                # 跨平台小程序前端（C端 + 员工验票端）
+│   ├── src/
+│   │   ├── pages/          # 17个页面（Vue3 SFC）
+│   │   ├── components/     # 通用组件
+│   │   ├── config/         # 营地配置（多营地品牌/主题/Slogan）
+│   │   ├── stores/         # Pinia 状态管理
+│   │   ├── types/          # TypeScript 类型定义
+│   │   ├── utils/          # 工具函数（请求、认证、存储）
+│   │   ├── App.vue         # 应用入口
+│   │   └── pages.json      # 页面路由配置
+│   ├── dist/               # 构建产物
+│   ├── vite.config.ts      # Vite 配置 + uni-app 插件
+│   └── package.json        # Node.js 依赖
 │
 ├── server/               # 后端服务（FastAPI）
 │   ├── models/           # SQLAlchemy 数据模型（45张表）
@@ -115,13 +144,13 @@ yyyl/
 
 | 工具 | 版本要求 | 用途 |
 |------|---------|------|
-| **Node.js** | >= 18.x | Web管理后台构建 |
+| **Node.js** | >= 18.x | uni-app 构建 + Web管理后台构建 |
 | **npm** | >= 9.x | Node.js 包管理 |
 | **Python** | >= 3.11 | 后端运行时 |
 | **pip** | >= 23.x | Python 包管理 |
 | **PostgreSQL** | >= 15.x | 主数据库 |
 | **Redis** | >= 7.x | 缓存 / 消息队列 / 会话 |
-| **微信开发者工具** | 最新稳定版 | 小程序开发调试 |
+| **微信开发者工具** | 最新稳定版 | 小程序导入构建产物、预览调试 |
 
 ---
 
@@ -270,37 +299,72 @@ npm run preview
 
 ---
 
-### 5. 微信小程序
+### 5. uni-app 小程序（跨平台）
 
 ```bash
-# 1. 下载并安装「微信开发者工具」
-#    https://developers.weixin.qq.com/miniprogram/dev/devtools/download.html
+cd uni-app
 
-# 2. 打开微信开发者工具，选择「导入项目」
+# 安装依赖
+npm install
 
-# 3. 项目目录选择：yyyl/miniprogram/
+# ---- 开发模式（HMR 热更新）----
+# 微信小程序 - 西郊林场
+npm run dev:wx:xijiao
 
-# 4. AppID 填写你的小程序 AppID（或使用测试号）
+# 微信小程序 - 大聋谷
+npm run dev:wx:dalonggu
 
-# 5. 点击「确定」即可预览
+# H5 网页版
+npm run dev:h5:xijiao
+
+# ---- 生产构建 ----
+# 微信小程序 - 西郊林场
+npm run build:wx:xijiao
+
+# 微信小程序 - 大聋谷
+npm run build:wx:dalonggu
+
+# TypeScript 类型检查
+npm run type-check
 ```
+
+**构建产物**：
+- 微信小程序：`dist/build/mp-weixin/` → 导入微信开发者工具即可预览
+- H5 网页版：`dist/build/h5/`
 
 #### 小程序技术栈
 
 | 技术 | 说明 |
 |------|------|
-| TypeScript | 主开发语言 |
-| SCSS | 样式预处理 |
-| 微信基础库 | >= 3.3.4 |
-| 编译插件 | typescript + sass |
+| **uni-app** | 跨平台框架（Vue3 模式） |
+| **Vue 3** | 组合式 API (Composition API) |
+| **TypeScript** | 主开发语言 + 严格模式 |
+| **Pinia** | 状态管理 |
+| **SCSS** | 样式预处理 |
+| **Vite** | 构建工具 |
 
-#### 小程序配置
+#### 支持平台
 
-在 `miniprogram/utils/request.ts` 中修改后端 API 地址：
+| 平台 | 构建命令 | 状态 |
+|------|---------|------|
+| 微信小程序 | `npm run build:wx:{营地}` | ✅ 已验证 |
+| H5 网页版 | `npm run build:h5:{营地}` | ✅ 已配置 |
+| 抖音小程序 | `npm run build:tt:{营地}` | 📌 已预留 |
+
+#### 营地配置
+
+在 `uni-app/src/config/sites.ts` 中定义各营地的品牌信息：
 
 ```typescript
-const BASE_URL = 'http://localhost:8000/api/v1'  // 开发环境
-// const BASE_URL = 'https://your-domain.com/api/v1'  // 生产环境
+// 构建时通过 VITE_SITE_CODE 环境变量选择营地
+// .env.xijiao → VITE_SITE_CODE=xijiao
+// .env.dalonggu → VITE_SITE_CODE=dalonggu
+```
+
+API 地址在 `uni-app/src/utils/request.ts` 中通过环境变量配置：
+
+```typescript
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
 ```
 
 > ⚠️ 微信开发者工具中需关闭「不校验合法域名」选项才能请求 localhost。
@@ -329,9 +393,8 @@ REDIS_URL=redis://localhost:6379/0
 JWT_SECRET_KEY=your-jwt-secret-key    # ⚠️ 生产环境必须修改！
 JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440  # Token有效期（分钟）
 
-# ---- 微信小程序配置 ----
-WECHAT_APP_ID=your_wechat_app_id
-WECHAT_APP_SECRET=your_wechat_app_secret
+# ---- 微信小程序配置（多营地 JSON 格式）----
+WECHAT_APPS=[{"site_id":1,"app_id":"your_xijiao_appid","app_secret":"your_xijiao_secret"},{"site_id":2,"app_id":"your_dalonggu_appid","app_secret":"your_dalonggu_secret"}]
 
 # ---- 微信支付配置（预留） ----
 WECHAT_MCH_ID=your_mch_id
@@ -391,6 +454,25 @@ npm run build
 npm run preview
 ```
 
+### uni-app 小程序
+
+```bash
+cd uni-app
+
+# 开发模式（微信小程序 - 西郊林场）
+npm run dev:wx:xijiao
+
+# 开发模式（微信小程序 - 大聋谷）
+npm run dev:wx:dalonggu
+
+# 生产构建
+npm run build:wx:xijiao
+npm run build:wx:dalonggu
+
+# TypeScript 类型检查
+npm run type-check
+```
+
 ---
 
 ## 🔌 API 模块概览
@@ -415,27 +497,27 @@ npm run preview
 
 ---
 
-## 📱 小程序页面一览
+## 📱 小程序页面一览（uni-app）
 
-| 页面 | 路径 | 说明 |
-|------|------|------|
-| 首页 | `pages/index` | Banner + 推荐商品 + 分类入口 |
-| 分类 | `pages/category` | 商品分类浏览 |
-| 购物车 | `pages/cart` | 商品管理 + 结算 |
-| 订单列表 | `pages/order` | 全部/待付款/待使用/已完成 |
-| 我的 | `pages/mine` | 个人中心 + 功能入口 |
-| 商品详情 | `pages/product-detail` | 图文介绍 + SKU选择 + 日历 |
-| 订单确认 | `pages/order-confirm` | 出行人填写 + 支付 |
-| 支付 | `pages/payment` | 支付页面（模拟支付） |
-| 支付结果 | `pages/payment-result` | 支付成功/失败 |
-| 订单详情 | `pages/order-detail` | 订单信息 + 操作（退票/验票） |
-| 电子票 | `pages/ticket` | 二维码展示 + 使用记录 |
-| 会员中心 | `pages/member` | 年卡/次数卡/积分 |
-| 个人信息 | `pages/profile` | 头像/昵称/手机号 |
-| 身份管理 | `pages/identity` | 出行人身份信息（AES加密） |
-| 地址管理 | `pages/address` | 收货地址 CRUD |
-| 员工验票 | `pages/staff` | 扫码验票（员工端） |
-| 客服 | `pages/customer-service` | 在线客服 |
+| 页面 | 路径 | 说明 | API 状态 |
+|------|------|------|---------|
+| 首页 | `pages/index` | Banner + 推荐商品 + 分类入口 | ✅ 已接入 |
+| 分类 | `pages/category` | 商品分类浏览 + 搜索 | ✅ 已接入 |
+| 购物车 | `pages/cart` | 商品管理 + 结算 | ✅ 已接入 |
+| 订单列表 | `pages/order` | 全部/待付款/待使用/已完成 | ✅ 已接入 |
+| 我的 | `pages/mine` | 个人中心 + 功能入口 | ✅ 已接入 |
+| 商品详情 | `pages/product-detail` | 图文介绍 + SKU选择 + 日历 | ✅ 已接入 |
+| 订单确认 | `pages/order-confirm` | 出行人填写 + 支付 | ✅ 已接入 |
+| 支付 | `pages/payment` | 模拟支付（成功/失败） | ✅ 已接入 |
+| 支付结果 | `pages/payment-result` | 支付成功/失败展示 | 纯展示 |
+| 订单详情 | `pages/order-detail` | 订单信息 + 退票操作 | ✅ 已接入 |
+| 电子票 | `pages/ticket` | 二维码展示 + QR刷新 | ✅ 已接入 |
+| 会员中心 | `pages/member` | 年卡/次数卡/积分 | ✅ 已接入 |
+| 个人信息 | `pages/profile` | 头像/昵称修改 | ✅ 已接入 |
+| 身份管理 | `pages/identity` | 出行人身份信息（AES加密） | ✅ 已接入 |
+| 地址管理 | `pages/address` | 收货地址 CRUD | ✅ 已接入 |
+| 员工验票 | `pages/staff` | 扫码验票（员工端） | ✅ 已接入 |
+| 客服 | `pages/customer-service` | FAQ + 在线客服 | ✅ 已接入 |
 
 ---
 
@@ -476,17 +558,24 @@ npm run preview
 
 ---
 
-## 🎨 品牌配置
+## 🎨 品牌 & 营地配置
 
-项目品牌名、Slogan 等信息已抽取为可配置项，修改品牌只需编辑以下文件：
+项目支持多营地独立品牌，同一套代码构建不同营地的应用：
 
 | 文件 | 说明 |
 |------|------|
-| `miniprogram/config/brand.ts` | 小程序品牌名、Slogan、分享标题 |
+| `uni-app/src/config/sites.ts` | 营地品牌定义（名称、Slogan、主题色、联系方式、坐标等） |
+| `uni-app/.env.xijiao` | 西郊林场构建环境变量 |
+| `uni-app/.env.dalonggu` | 大聋谷构建环境变量 |
 | `admin/src/config/brand.ts` | 管理后台品牌名、描述 |
 | `server/.env` → `APP_NAME` | 后端应用名称 |
-| `miniprogram/app.json` | 小程序导航栏标题（JSON 不支持动态化） |
 | `admin/index.html` | 管理后台 HTML 标题 |
+
+新增营地只需：
+1. 在 `sites.ts` 中添加营地配置
+2. 新增 `.env.{code}` 环境变量文件
+3. 在 `package.json` 中添加对应的构建脚本
+4. 后端 `middleware/site.py` 中允许新的 site_id
 
 ---
 
@@ -494,7 +583,7 @@ npm run preview
 
 | 层级 | 技术 |
 |------|------|
-| **小程序前端** | 微信原生 + TypeScript + SCSS |
+| **小程序前端** | uni-app + Vue 3 + TypeScript + Pinia + Vite + SCSS |
 | **管理后台前端** | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts |
 | **后端 API** | Python 3.11 + FastAPI + Uvicorn (ASGI) |
 | **ORM** | SQLAlchemy 2.0 (Async) |
@@ -503,6 +592,7 @@ npm run preview
 | **异步任务** | Celery + Redis Broker（23个定时任务） |
 | **数据库迁移** | Alembic |
 | **API 文档** | Swagger UI / ReDoc（自动生成） |
+| **多营地隔离** | X-Site-Id 请求头 + 全链路 site_id 过滤 |
 
 ---
 
@@ -542,6 +632,11 @@ celery -A celery_app beat --loglevel=info
 
 # 5. 管理后台（新终端）
 cd admin && npm run dev
+
+# 6. uni-app 小程序（新终端）
+cd uni-app && npm install
+npm run dev:wx:xijiao     # 或 dev:wx:dalonggu
+# 构建产物在 dist/dev/mp-weixin/，用微信开发者工具导入
 ```
 
 ### Docker Compose 部署

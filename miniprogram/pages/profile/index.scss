@@ -1,7 +1,0 @@
-.page-profile { min-height: 100vh; background-color: var(--color-bg); padding: 16rpx 24rpx; }
-.profile-item {
-  display: flex; justify-content: space-between; align-items: center; padding: 28rpx 24rpx; margin-bottom: 2rpx;
-  &__label { font-size: var(--font-size-base); color: var(--color-text); }
-  &__value { font-size: var(--font-size-base); color: var(--color-text-secondary); }
-  &__avatar { width: 80rpx; height: 80rpx; border-radius: 50%; background-color: var(--color-bg-light); display: flex; justify-content: center; align-items: center; text { font-size: 40rpx; } }
-}

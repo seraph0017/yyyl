@@ -1,7 +1,0 @@
-{
-  "navigationBarTitleText": "商品详情",
-  "usingComponents": {
-    "price-tag": "../../components/price-tag/index",
-    "countdown": "../../components/countdown/index"
-  }
-}

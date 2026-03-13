@@ -1,0 +1,75 @@
+/**
+ * uni-app 全局样式变量
+ * 从 miniprogram/app.scss CSS 变量系统迁移
+ * 营地主题色通过 CSS 变量动态适配
+ */
+
+/* --- 主题变量 --- */
+page {
+  /* 主色 - 默认西郊林场绿色，大聋谷构建时通过 CSS 变量覆盖 */
+  --color-primary: #2e7d32;
+  --color-primary-light: #4caf50;
+  --color-primary-lighter: #81c784;
+  --color-primary-bg: rgba(46, 125, 50, 0.08);
+
+  /* 背景色 */
+  --color-bg: #fff8f0;
+  --color-bg-white: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-bg-light: #f5f0eb;
+  --color-bg-grey: #f7f7f7;
+
+  /* 文字色 */
+  --color-text: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-placeholder: #999999;
+  --color-text-white: #ffffff;
+
+  /* 功能色 */
+  --color-orange: #ff6b35;
+  --color-red: #e53935;
+  --color-yellow: #ffc107;
+  --color-blue: #2196f3;
+  --color-green: #4caf50;
+
+  /* 字体 */
+  --font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', Helvetica, Arial,
+    sans-serif;
+  --font-size-xs: 20rpx;
+  --font-size-sm: 24rpx;
+  --font-size-base: 28rpx;
+  --font-size-md: 30rpx;
+  --font-size-lg: 32rpx;
+  --font-size-xl: 36rpx;
+  --font-size-xxl: 40rpx;
+  --font-size-title: 44rpx;
+
+  /* 间距 */
+  --spacing-xs: 8rpx;
+  --spacing-sm: 12rpx;
+  --spacing-md: 16rpx;
+  --spacing-lg: 24rpx;
+  --spacing-xl: 32rpx;
+  --spacing-xxl: 48rpx;
+
+  /* 圆角 */
+  --radius-sm: 8rpx;
+  --radius-md: 12rpx;
+  --radius-lg: 16rpx;
+  --radius-xl: 24rpx;
+  --radius-round: 999rpx;
+
+  /* 阴影 */
+  --shadow-sm: 0 2rpx 8rpx rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4rpx 16rpx rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8rpx 32rpx rgba(0, 0, 0, 0.12);
+}
+
+/* SCSS 变量（编译时使用） */
+$color-primary: #2e7d32;
+$font-size-sm: 24rpx;
+$font-size-base: 28rpx;
+$font-size-lg: 32rpx;
+$spacing-sm: 12rpx;
+$spacing-base: 16rpx;
+$spacing-lg: 24rpx;

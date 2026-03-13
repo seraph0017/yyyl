@@ -10,13 +10,14 @@
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, case, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from database import get_db
 from middleware.auth import get_current_admin
+from middleware.site import get_site_id
 from models.admin import AdminUser
 from models.order import Order, OrderItem
 from models.product import Product
@@ -28,6 +29,7 @@ router = APIRouter(prefix="/api/v1/admin/reports", tags=["报表"])
 
 @router.get("/sales", summary="销售报表")
 async def get_sales_report(
+    request: Request,
     granularity: str = Query("day", regex="^(day|week|month)$"),
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
@@ -35,6 +37,7 @@ async def get_sales_report(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """销售报表：按日/周/月粒度统计订单数、收入、退款等"""
+    site_id = get_site_id(request)
     try:
         dt_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         dt_end = datetime.strptime(end_date, "%Y-%m-%d").replace(
@@ -62,6 +65,7 @@ async def get_sales_report(
             Order.created_at >= dt_start,
             Order.created_at <= dt_end,
             Order.status.in_(["paid", "completed", "refunded", "checked_in"]),
+            Order.site_id == site_id,
         )
     )
     row = summary_result.one()
@@ -82,6 +86,7 @@ async def get_sales_report(
             Order.created_at >= prev_start,
             Order.created_at <= prev_end,
             Order.status.in_(["paid", "completed", "refunded", "checked_in"]),
+            Order.site_id == site_id,
         )
     )
     prev_income = float(prev_result.scalar() or 0)
@@ -115,6 +120,7 @@ async def get_sales_report(
             Order.created_at >= dt_start,
             Order.created_at <= dt_end,
             Order.status.in_(["paid", "completed", "refunded", "checked_in"]),
+            Order.site_id == site_id,
         )
         .group_by("period")
         .order_by("period")
@@ -149,12 +155,14 @@ async def get_sales_report(
 
 @router.get("/users", summary="用户分析")
 async def get_user_report(
+    request: Request,
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """用户分析报表：新增用户、活跃用户趋势等"""
+    site_id = get_site_id(request)
     try:
         dt_start = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         dt_end = datetime.strptime(end_date, "%Y-%m-%d").replace(
@@ -172,6 +180,7 @@ async def get_user_report(
         .where(
             User.created_at >= dt_start,
             User.created_at <= dt_end,
+            User.site_id == site_id,
         )
         .group_by(func.date(User.created_at))
         .order_by(func.date(User.created_at))
@@ -187,6 +196,7 @@ async def get_user_report(
         .where(
             Order.created_at >= dt_start,
             Order.created_at <= dt_end,
+            Order.site_id == site_id,
         )
         .group_by(func.date(Order.created_at))
         .order_by(func.date(Order.created_at))
@@ -194,7 +204,9 @@ async def get_user_report(
     active_users = [{"date": str(r.date), "count": r.count} for r in active_users_result.all()]
 
     # 总用户数
-    total_result = await db.execute(select(func.count(User.id)))
+    total_result = await db.execute(
+        select(func.count(User.id)).where(User.site_id == site_id)
+    )
     total_users = total_result.scalar() or 0
 
     return ResponseModel.success(data={
@@ -206,6 +218,7 @@ async def get_user_report(
 
 @router.get("/products", summary="商品排行")
 async def get_product_report(
+    request: Request,
     start_date: str = Query(..., description="开始日期 YYYY-MM-DD"),
     end_date: str = Query(..., description="结束日期 YYYY-MM-DD"),
     sort_by: str = Query("sales", regex="^(sales|revenue)$"),
@@ -241,6 +254,7 @@ async def get_product_report(
             Order.created_at >= dt_start,
             Order.created_at <= dt_end,
             Order.status.in_(["paid", "completed", "checked_in"]),
+            Order.site_id == get_site_id(request),
         )
         .group_by(Product.id)
         .order_by(order_col.desc())
@@ -262,6 +276,7 @@ async def get_product_report(
 @router.post("/export", summary="报表导出")
 async def export_report(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):

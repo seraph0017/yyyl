@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth import get_current_user, get_optional_user
+from middleware.site import get_site_id
 from models.content import (
     DisclaimerSignature,
     DisclaimerTemplate,
@@ -33,13 +34,15 @@ router = APIRouter(prefix="/api/v1", tags=["内容"])
 
 @router.get("/faq/categories", summary="FAQ 分类列表")
 async def list_faq_categories(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
     """获取 FAQ 分类列表（含分类下的条目）"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(FaqCategory)
-        .where(FaqCategory.is_deleted.is_(False))
+        .where(FaqCategory.is_deleted.is_(False), FaqCategory.site_id == site_id)
         .order_by(FaqCategory.sort_order.asc())
     )
     categories = result.scalars().all()
@@ -75,15 +78,18 @@ async def list_faq_categories(
 
 @router.get("/faq/items", summary="FAQ 搜索")
 async def search_faq_items(
+    request: Request,
     category_id: Optional[int] = Query(None, description="分类ID"),
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
     """搜索 FAQ 问答列表"""
+    site_id = get_site_id(request)
     conditions = [
         FaqItem.status == "active",
         FaqItem.is_deleted.is_(False),
+        FaqItem.site_id == site_id,
     ]
 
     if category_id is not None:
@@ -126,14 +132,17 @@ async def search_faq_items(
 @router.get("/disclaimers/{disclaimer_id}", summary="免责声明内容")
 async def get_disclaimer(
     disclaimer_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
     """获取免责声明模板内容"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(DisclaimerTemplate).where(
             DisclaimerTemplate.id == disclaimer_id,
             DisclaimerTemplate.is_deleted.is_(False),
+            DisclaimerTemplate.site_id == site_id,
         )
     )
     template = result.scalar_one_or_none()
@@ -196,15 +205,18 @@ async def sign_disclaimer(
 @router.get("/pages/{page_code}", summary="页面配置")
 async def get_page_config(
     page_code: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
     """获取页面配置（轮播图、活动banner等）"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(PageConfig).where(
             PageConfig.page_key == page_code,
             PageConfig.status == "active",
             PageConfig.is_deleted.is_(False),
+            PageConfig.site_id == site_id,
         )
     )
     page_config = result.scalar_one_or_none()

@@ -7,11 +7,12 @@
 - GET /me — 当前用户信息
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth import get_current_user
+from middleware.site import get_site_id
 from models.user import User
 from schemas.auth import (
     AdminLoginRequest,
@@ -32,37 +33,45 @@ router = APIRouter(prefix="/api/v1/auth", tags=["认证"])
 @router.post("/wx-login", summary="微信小程序登录")
 async def wx_login(
     body: WxLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
     微信小程序登录：前端传入 wx.login() 获取的 code，
     后端调用微信 code2Session 接口换取 openid，查找或创建用户并返回 Token。
+    通过 X-Site-Id 请求头区分不同营地小程序。
     """
-    result = await auth_service.wx_login(body.code, db)
+    site_id = get_site_id(request)
+    result = await auth_service.wx_login(body.code, db, site_id=site_id)
     return ResponseModel.success(data=result)
 
 
 @router.post("/login", summary="微信小程序登录（别名）")
 async def wx_login_alias(
     body: WxLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """与 /wx-login 相同，兼容小程序端 POST /auth/login 调用"""
-    result = await auth_service.wx_login(body.code, db)
+    site_id = get_site_id(request)
+    result = await auth_service.wx_login(body.code, db, site_id=site_id)
     return ResponseModel.success(data=result)
 
 
 @router.post("/phone-login", summary="微信手机号授权登录")
 async def phone_login(
     body: PhoneLoginRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """
     微信小程序手机号授权登录：先用 code 换 openid，
     再用 phone_code 调用微信 getPhoneNumber 接口获取手机号并绑定。
+    通过 X-Site-Id 请求头区分不同营地小程序。
     """
+    site_id = get_site_id(request)
     # 先走 wx_login 获取/创建用户
-    result = await auth_service.wx_login(body.code, db)
+    result = await auth_service.wx_login(body.code, db, site_id=site_id)
     # TODO: 用 phone_code 调用微信 getPhoneNumber 接口获取手机号并绑定到用户
     # 目前先直接返回登录结果
     return ResponseModel.success(data=result)

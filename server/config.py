@@ -41,9 +41,13 @@ class Settings(BaseSettings):
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7天
 
-    # ---- 微信小程序配置 ----
+    # ---- 微信小程序配置（默认/西郊林场） ----
     WECHAT_APP_ID: str = ""
     WECHAT_APP_SECRET: str = ""
+
+    # ---- 多营地微信 appid 映射 ----
+    # JSON格式: {"1": {"app_id": "wxXXX", "app_secret": "xxx"}, "2": {...}}
+    WECHAT_APPS: str = '{}'
 
     # ---- 微信支付配置 ----
     WECHAT_MCH_ID: str = ""
@@ -51,6 +55,12 @@ class Settings(BaseSettings):
     WECHAT_CERT_PATH: str = ""
     WECHAT_KEY_PATH: str = ""
     WECHAT_NOTIFY_URL: str = ""
+
+    # ---- 抖音小程序配置（预留） ----
+    DOUYIN_APPS: str = '{}'
+
+    # ---- 小红书小程序配置（预留） ----
+    XHS_APPS: str = '{}'
 
     # ---- AES加密配置 ----
     AES_ENCRYPTION_KEY: str = "change-me-32-byte-key-in-prod!!"

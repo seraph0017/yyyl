@@ -7,11 +7,12 @@
 - POST /deposits/{id}/refund — 退还押金
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth import get_current_admin
+from middleware.site import get_site_id
 from models.admin import AdminUser
 from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
 from schemas.finance import (
@@ -30,11 +31,13 @@ router = APIRouter(prefix="/api/v1/admin/finance", tags=["财务"])
 
 @router.get("/overview", summary="财务概览")
 async def get_finance_overview(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取财务账户信息：各类余额、今日收入/退款等"""
-    result = await finance_service.get_finance_overview(db)
+    site_id = get_site_id(request)
+    result = await finance_service.get_finance_overview(db, site_id=site_id)
     account_info = FinanceAccountInfo.model_validate(result)
     return ResponseModel.success(data=account_info)
 
@@ -42,10 +45,12 @@ async def get_finance_overview(
 @router.post("/withdraw", summary="发起提现")
 async def withdraw(
     body: WithdrawRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """发起提现操作"""
+    site_id = get_site_id(request)
     result = await finance_service.withdraw(
         db,
         amount=body.amount,
@@ -59,14 +64,17 @@ async def withdraw(
 
 @router.get("/transactions", summary="交易流水")
 async def list_transactions(
+    request: Request,
     params: TransactionListParams = Depends(),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """查询交易流水列表，支持类型/账户/日期/订单筛选"""
+    site_id = get_site_id(request)
     transactions, total = await finance_service.list_transactions(
         db,
+        site_id=site_id,
         tx_type=params.type,
         account_type=params.account_type,
         date_start=params.date_start,
@@ -88,6 +96,7 @@ async def list_transactions(
 async def refund_deposit(
     deposit_id: int,
     body: DepositRefundRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):

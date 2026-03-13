@@ -19,13 +19,14 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
 from middleware.auth import get_current_admin
+from middleware.site import get_site_id
 from models.admin import AdminUser
 from models.product import (
     Inventory,
@@ -46,10 +47,12 @@ CAMPSITE_TYPES = ("daily_camping", "event_camping")
 
 @router.get("/stats/overview", summary="营位统计概览")
 async def get_campsite_stats(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """营位统计概览：各类型数量、在售/下架数量、今日库存概况"""
+    site_id = get_site_id(request)
     today = date.today()
 
     # 各类型数量
@@ -62,6 +65,7 @@ async def get_campsite_stats(
         .where(
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
         .group_by(Product.type, Product.status)
     )
@@ -91,6 +95,7 @@ async def get_campsite_stats(
         .join(Product, Inventory.product_id == Product.id)
         .where(
             Product.type.in_(CAMPSITE_TYPES),
+            Product.site_id == site_id,
             Inventory.date == today,
             Inventory.is_deleted.is_(False),
         )
@@ -114,6 +119,7 @@ async def get_campsite_stats(
 
 @router.get("/", summary="营位列表")
 async def list_campsites(
+    request: Request,
     keyword: Optional[str] = Query(None, description="搜索关键词（名称/区域/编号）"),
     campsite_type: Optional[str] = Query(None, description="营位类型: daily_camping/event_camping"),
     area: Optional[str] = Query(None, description="区域筛选"),
@@ -125,13 +131,15 @@ async def list_campsites(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """营位列表（含扩展属性、库存概况）"""
-    # 基础条件：仅查营位类型商品
+    site_id = get_site_id(request)
+    # 基础条件：仅查营位类型商品 + site_id 过滤
     query = (
         select(Product)
         .outerjoin(ProductExtCamping, Product.id == ProductExtCamping.product_id)
         .where(
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
 
@@ -252,10 +260,12 @@ async def list_campsites(
 @router.get("/{campsite_id}", summary="营位详情")
 async def get_campsite_detail(
     campsite_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取营位详情（含扩展信息、定价规则）"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(Product)
         .options(
@@ -267,6 +277,7 @@ async def get_campsite_detail(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     campsite = result.scalar_one_or_none()
@@ -336,11 +347,13 @@ async def get_campsite_detail(
 
 @router.post("/", summary="创建营位")
 async def create_campsite(
+    request: Request,
     body: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建营位（自动设置 type 为 daily_camping/event_camping）"""
+    site_id = get_site_id(request)
     campsite_type = body.get("type", "daily_camping")
     if campsite_type not in CAMPSITE_TYPES:
         raise HTTPException(
@@ -350,6 +363,7 @@ async def create_campsite(
 
     # 确保 type 正确
     body["type"] = campsite_type
+    body["site_id"] = site_id
 
     product = await product_service.create_product(db, body, operator_id=admin.id)
     await db.commit()
@@ -363,17 +377,20 @@ async def create_campsite(
 @router.put("/{campsite_id}", summary="更新营位")
 async def update_campsite(
     campsite_id: int,
+    request: Request,
     body: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新营位信息"""
+    site_id = get_site_id(request)
     # 校验是营位类型
     existing = await db.execute(
         select(Product).where(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     if not existing.scalar_one_or_none():
@@ -398,16 +415,19 @@ async def update_campsite(
 @router.patch("/{campsite_id}/status", summary="营位上架/下架")
 async def update_campsite_status(
     campsite_id: int,
+    request: Request,
     status: str = Body(..., embed=True),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """营位上架/下架"""
+    site_id = get_site_id(request)
     existing = await db.execute(
         select(Product).where(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     if not existing.scalar_one_or_none():
@@ -433,15 +453,18 @@ async def update_campsite_status(
 @router.delete("/{campsite_id}", summary="删除营位")
 async def delete_campsite(
     campsite_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """软删除营位"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(Product).where(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     campsite = result.scalar_one_or_none()
@@ -459,18 +482,21 @@ async def delete_campsite(
 @router.get("/{campsite_id}/inventory", summary="营位库存日历")
 async def get_campsite_inventory(
     campsite_id: int,
+    request: Request,
     date_start: date = Query(..., description="起始日期"),
     date_end: date = Query(..., description="结束日期"),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """查看营位指定日期范围的库存"""
+    site_id = get_site_id(request)
     # 校验是营位
     existing = await db.execute(
         select(Product).where(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     if not existing.scalar_one_or_none():
@@ -505,16 +531,19 @@ async def get_campsite_inventory(
 @router.post("/{campsite_id}/inventory/batch", summary="批量开放库存")
 async def batch_open_inventory(
     campsite_id: int,
+    request: Request,
     body: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """批量为营位开放指定日期范围的库存"""
+    site_id = get_site_id(request)
     existing = await db.execute(
         select(Product).where(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     if not existing.scalar_one_or_none():
@@ -598,17 +627,20 @@ async def list_pricing_rules(
 @router.post("/{campsite_id}/pricing-rules", summary="创建定价规则")
 async def create_pricing_rule(
     campsite_id: int,
+    request: Request,
     body: Dict[str, Any] = Body(...),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """为营位创建定价规则"""
+    site_id = get_site_id(request)
     # 校验是营位
     existing = await db.execute(
         select(Product).where(
             Product.id == campsite_id,
             Product.type.in_(CAMPSITE_TYPES),
             Product.is_deleted.is_(False),
+            Product.site_id == site_id,
         )
     )
     if not existing.scalar_one_or_none():

@@ -1,6 +1,0 @@
-{
-  "navigationBarTitleText": "支付",
-  "usingComponents": {
-    "countdown": "../../components/countdown/index"
-  }
-}

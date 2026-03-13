@@ -18,12 +18,13 @@ B端 /api/v1/admin/orders：
 - PUT /{id}/shipping — 更新物流
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth import get_current_admin, get_current_user
+from middleware.site import get_site_id
 from models.admin import AdminUser
 from models.order import Ticket
 from models.user import User
@@ -221,12 +222,14 @@ async def seckill_order(
 
 @router.get("/api/v1/admin/orders", summary="管理端订单列表")
 async def admin_list_orders(
+    request: Request,
     params: OrderListParams = Depends(),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端订单列表，可查看所有用户的订单"""
+    site_id = get_site_id(request)
     orders, total = await order_service.list_orders(
         db,
         user_id=params.user_id,
@@ -239,6 +242,8 @@ async def admin_list_orders(
         page=pagination.page,
         page_size=pagination.page_size,
     )
+    # 按 site_id 过滤本营地订单
+    orders = [o for o in orders if o.site_id == site_id]
     items = [OrderResponse.model_validate(o) for o in orders]
     return PaginatedResponse.create(
         items=items,

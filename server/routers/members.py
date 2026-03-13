@@ -13,11 +13,12 @@
 from datetime import date
 from typing import List
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth import get_current_user
+from middleware.site import get_site_id
 from models.user import User
 from schemas.common import ResponseModel
 from schemas.member import (
@@ -39,17 +40,19 @@ router = APIRouter(prefix="/api/v1/members", tags=["会员"])
 
 @router.get("/annual-card", summary="年卡信息")
 async def get_annual_card(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """获取当前用户的有效年卡信息，包含年卡配置列表"""
+    site_id = get_site_id(request)
     # 用户有效年卡
     card = await member_service.get_user_annual_card(db, user.id)
     card_info = AnnualCardInfo.model_validate(card) if card else None
 
-    # 年卡配置列表（供购买参考）
+    # 年卡配置列表（供购买参考）—— 按 site_id 过滤
     configs = await member_service.get_annual_card_configs(db)
-    config_list = [AnnualCardConfigSchema.model_validate(c) for c in configs]
+    config_list = [AnnualCardConfigSchema.model_validate(c) for c in configs if c.site_id == site_id]
 
     return ResponseModel.success(data={
         "current_card": card_info,

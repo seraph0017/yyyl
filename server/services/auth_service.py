@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
@@ -33,7 +34,7 @@ from utils.security import (
 logger = logging.getLogger(__name__)
 
 
-async def wx_login(code: str, db: AsyncSession) -> Dict[str, Any]:
+async def wx_login(code: str, db: AsyncSession, site_id: int = 1) -> Dict[str, Any]:
     """微信小程序登录
 
     流程：code → 调用微信 code2Session → 获取 openid/session_key → 查找或创建用户 → 生成 token
@@ -41,12 +42,13 @@ async def wx_login(code: str, db: AsyncSession) -> Dict[str, Any]:
     Args:
         code: 微信登录临时凭证
         db: 数据库会话
+        site_id: 营地ID，用于获取对应的微信 appid/secret
 
     Returns:
         包含 access_token, refresh_token, user_info 的字典
     """
     # 1. 调用微信 code2Session 接口
-    openid, session_key = await _code2session(code)
+    openid, session_key = await _code2session(code, site_id)
 
     # 2. 查找或创建用户
     result = await db.execute(
@@ -97,11 +99,12 @@ async def wx_login(code: str, db: AsyncSession) -> Dict[str, Any]:
     }
 
 
-async def _code2session(code: str) -> tuple[str, str]:
+async def _code2session(code: str, site_id: int = 1) -> tuple[str, str]:
     """调用微信 code2Session 接口
 
     Args:
         code: 微信登录临时凭证
+        site_id: 营地ID，用于获取对应的 appid/secret
 
     Returns:
         (openid, session_key)
@@ -109,17 +112,30 @@ async def _code2session(code: str) -> tuple[str, str]:
     Raises:
         HTTPException: 微信API调用失败
     """
+    # 根据 site_id 获取对应的微信配置
+    app_id = settings.WECHAT_APP_ID
+    app_secret = settings.WECHAT_APP_SECRET
+
+    try:
+        wechat_apps = json.loads(settings.WECHAT_APPS)
+        if str(site_id) in wechat_apps:
+            app_config = wechat_apps[str(site_id)]
+            app_id = app_config.get("app_id", app_id)
+            app_secret = app_config.get("app_secret", app_secret)
+    except (json.JSONDecodeError, TypeError):
+        pass  # 使用默认配置
+
     # 开发/测试环境：模拟登录
     if settings.APP_ENV in ("development", "testing") and (
-        not settings.WECHAT_APP_ID or settings.WECHAT_APP_ID == ""
+        not app_id or app_id == ""
     ):
-        logger.warning("[认证] 开发模式：使用模拟微信登录")
-        return f"mock_openid_{code}", "mock_session_key"
+        logger.warning(f"[认证] 开发模式：使用模拟微信登录 (site_id={site_id})")
+        return f"mock_openid_{code}_site{site_id}", "mock_session_key"
 
     url = "https://api.weixin.qq.com/sns/jscode2session"
     params = {
-        "appid": settings.WECHAT_APP_ID,
-        "secret": settings.WECHAT_APP_SECRET,
+        "appid": app_id,
+        "secret": app_secret,
         "js_code": code,
         "grant_type": "authorization_code",
     }

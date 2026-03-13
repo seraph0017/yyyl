@@ -1,0 +1,37 @@
+{
+  "name": "一月一露",
+  "appid": "__UNI__YYYL",
+  "description": "一月一露露营地小程序",
+  "versionName": "1.0.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wx04ddb70329942e2d",
+    "setting": {
+      "urlCheck": false,
+      "es6": true,
+      "postcss": true,
+      "minified": true
+    },
+    "usingComponents": true,
+    "permission": {
+      "scope.userLocation": {
+        "desc": "用于获取您的位置信息，提供营地导航服务"
+      }
+    },
+    "requiredPrivateInfos": ["getLocation", "chooseLocation"]
+  },
+  "mp-toutiao": {
+    "appid": "",
+    "setting": {
+      "urlCheck": false,
+      "es6": true
+    }
+  },
+  "h5": {
+    "router": {
+      "mode": "history"
+    },
+    "title": "一月一露"
+  }
+}

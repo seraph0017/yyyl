@@ -18,12 +18,13 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, or_, select, and_, case, cast, Date as SADate
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.auth import get_current_admin
+from middleware.site import get_site_id
 from models.admin import AdminPermission, AdminRole, AdminUser, OperationLog
 from models.content import (
     DisclaimerTemplate, FaqCategory, FaqItem, PageConfig,
@@ -55,10 +56,12 @@ router = APIRouter(prefix="/api/v1/admin", tags=["管理后台"])
 
 @router.get("/dashboard/realtime", summary="实时数据")
 async def get_dashboard_realtime(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取实时数据卡片：今日订单/收入/在营人数/库存告警"""
+    site_id = get_site_id(request)
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     yesterday_start = today_start - timedelta(days=1)
@@ -72,6 +75,7 @@ async def get_dashboard_realtime(
             and_(
                 Order.created_at >= today_start,
                 Order.status.notin_(["cancelled", "pending_payment"]),
+                Order.site_id == site_id,
             )
         )
     )
@@ -87,6 +91,7 @@ async def get_dashboard_realtime(
                 Order.created_at >= yesterday_start,
                 Order.created_at < today_start,
                 Order.status.notin_(["cancelled", "pending_payment"]),
+                Order.site_id == site_id,
             )
         )
     )
@@ -94,12 +99,15 @@ async def get_dashboard_realtime(
 
     # 库存告警：未来3天可用库存 <= 2 的营位天数
     alert_result = await db.execute(
-        select(func.count(Inventory.id)).where(
+        select(func.count(Inventory.id))
+        .join(Product, Product.id == Inventory.product_id)
+        .where(
             and_(
                 Inventory.date >= now.date(),
                 Inventory.date <= now.date() + timedelta(days=3),
                 Inventory.available <= 2,
                 Inventory.status == "open",
+                Product.site_id == site_id,
             )
         )
     )
@@ -123,11 +131,13 @@ async def get_dashboard_realtime(
 
 @router.get("/dashboard/trends", summary="趋势图")
 async def get_dashboard_trends(
+    request: Request,
     days: int = Query(7, ge=1, le=90, description="天数"),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取订单和收入趋势图数据"""
+    site_id = get_site_id(request)
     now = datetime.now(timezone.utc)
     start = (now - timedelta(days=days)).replace(hour=0, minute=0, second=0, microsecond=0)
 
@@ -141,6 +151,7 @@ async def get_dashboard_trends(
             and_(
                 Order.created_at >= start,
                 Order.status.notin_(["cancelled", "pending_payment"]),
+                Order.site_id == site_id,
             )
         ).group_by(order_date).order_by(order_date)
     )
@@ -169,12 +180,14 @@ async def get_dashboard_trends(
 
 @router.get("/dashboard/sales-ranking", summary="销售排行")
 async def get_sales_ranking(
+    request: Request,
     sort_by: str = Query("sales_count", description="排序: sales_count/sales_amount"),
     top: int = Query(10, ge=1, le=50, description="排名数量"),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取商品销售排行榜"""
+    site_id = get_site_id(request)
     # 按已支付订单统计
     order_col = func.count(OrderItem.id).label("sales_count")
     amount_col = func.coalesce(func.sum(OrderItem.actual_price * OrderItem.quantity), 0).label("sales_amount")
@@ -191,7 +204,7 @@ async def get_sales_ranking(
         )
         .join(Order, Order.id == OrderItem.order_id)
         .join(Product, Product.id == OrderItem.product_id)
-        .where(Order.status.notin_(["cancelled", "pending_payment"]))
+        .where(Order.status.notin_(["cancelled", "pending_payment"]), Order.site_id == site_id)
         .group_by(OrderItem.product_id, Product.name, Product.type)
         .order_by(sort_col.desc())
         .limit(top)
@@ -214,10 +227,12 @@ async def get_sales_ranking(
 
 @router.get("/dashboard/member-stats", summary="会员统计")
 async def get_member_stats(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取会员数据统计"""
+    site_id = get_site_id(request)
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=now.weekday())
@@ -228,19 +243,19 @@ async def get_member_stats(
         select(
             func.count(User.id),
             func.count(case((User.is_member == True, User.id))),
-        )
+        ).where(User.site_id == site_id)
     )
     total_users, total_members = user_stats.one()
 
     # 年卡会员（有效期内）
     annual_result = await db.execute(
-        select(func.count(AnnualCard.id)).where(AnnualCard.status == "active")
+        select(func.count(AnnualCard.id)).where(AnnualCard.status == "active", AnnualCard.site_id == site_id)
     )
     annual_active = annual_result.scalar() or 0
 
     # 次数卡用户
     times_result = await db.execute(
-        select(func.count(TimesCard.id)).where(TimesCard.status == "active")
+        select(func.count(TimesCard.id)).where(TimesCard.status == "active", TimesCard.site_id == site_id)
     )
     times_active = times_result.scalar() or 0
 
@@ -252,6 +267,7 @@ async def get_member_stats(
             and_(
                 User.is_member == True,
                 User.last_login_at >= thirty_days_ago,
+                User.site_id == site_id,
             )
         )
     )
@@ -259,13 +275,13 @@ async def get_member_stats(
 
     # 新增用户
     new_today = await db.execute(
-        select(func.count(User.id)).where(User.created_at >= today_start)
+        select(func.count(User.id)).where(User.created_at >= today_start, User.site_id == site_id)
     )
     new_week = await db.execute(
-        select(func.count(User.id)).where(User.created_at >= week_start)
+        select(func.count(User.id)).where(User.created_at >= week_start, User.site_id == site_id)
     )
     new_month = await db.execute(
-        select(func.count(User.id)).where(User.created_at >= month_start)
+        select(func.count(User.id)).where(User.created_at >= month_start, User.site_id == site_id)
     )
 
     return ResponseModel.success(data={
@@ -281,10 +297,12 @@ async def get_member_stats(
 
 @router.get("/dashboard/finance-summary", summary="财务概览")
 async def get_finance_summary(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取财务概览数据"""
+    site_id = get_site_id(request)
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = today_start.replace(day=1)
@@ -293,7 +311,8 @@ async def get_finance_summary(
     # 待确认金额（待支付订单）
     pending = await db.execute(
         select(func.coalesce(func.sum(Order.actual_amount), 0)).where(
-            Order.status == "pending_payment"
+            Order.status == "pending_payment",
+            Order.site_id == site_id,
         )
     )
     pending_amount = pending.scalar() or 0
@@ -301,7 +320,8 @@ async def get_finance_summary(
     # 可提现 = 已完成订单总额
     withdrawable = await db.execute(
         select(func.coalesce(func.sum(Order.actual_amount), 0)).where(
-            Order.status.in_(["completed", "verified"])
+            Order.status.in_(["completed", "verified"]),
+            Order.site_id == site_id,
         )
     )
     withdrawable_amount = withdrawable.scalar() or 0
@@ -311,6 +331,7 @@ async def get_finance_summary(
         select(func.coalesce(func.sum(Order.deposit_amount), 0)).where(
             Order.status.in_(["paid", "verified", "completed"]),
             Order.deposit_amount > 0,
+            Order.site_id == site_id,
         )
     )
     deposit_amount = deposit.scalar() or 0
@@ -321,6 +342,7 @@ async def get_finance_summary(
             and_(
                 Order.created_at >= month_start,
                 Order.status.notin_(["cancelled", "pending_payment"]),
+                Order.site_id == site_id,
             )
         )
     )
@@ -333,6 +355,7 @@ async def get_finance_summary(
                 Order.created_at >= last_month_start,
                 Order.created_at < month_start,
                 Order.status.notin_(["cancelled", "pending_payment"]),
+                Order.site_id == site_id,
             )
         )
     )
@@ -356,17 +379,19 @@ async def get_finance_summary(
 
 @router.get("/dashboard/category-revenue", summary="品类收入占比")
 async def get_category_revenue(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取品类收入占比"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(
             Order.order_type,
             func.coalesce(func.sum(Order.actual_amount), 0).label("revenue"),
             func.count(Order.id).label("order_count"),
         )
-        .where(Order.status.notin_(["cancelled", "pending_payment"]))
+        .where(Order.status.notin_(["cancelled", "pending_payment"]), Order.site_id == site_id)
         .group_by(Order.order_type)
         .order_by(func.sum(Order.actual_amount).desc())
     )
@@ -401,12 +426,14 @@ async def get_category_revenue(
 
 @router.get("/dashboard/heatmap", summary="营位预定热力图")
 async def get_heatmap(
+    request: Request,
     start_date: Optional[date] = Query(None, description="开始日期"),
     end_date: Optional[date] = Query(None, description="结束日期"),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取营位预定热力图数据（日期×营位矩阵）"""
+    site_id = get_site_id(request)
     if not start_date:
         start_date = date.today()
     if not end_date:
@@ -426,6 +453,7 @@ async def get_heatmap(
                 Inventory.date >= start_date,
                 Inventory.date <= end_date,
                 Product.type.in_(["daily_camping", "event_camping"]),
+                Product.site_id == site_id,
             )
         )
         .order_by(Inventory.product_id, Inventory.date)
@@ -451,6 +479,7 @@ async def get_heatmap(
 
 @router.get("/users", summary="用户列表")
 async def list_users(
+    request: Request,
     keyword: Optional[str] = Query(None, description="搜索关键词"),
     status: Optional[str] = Query(None, description="用户状态"),
     pagination: PaginationParams = Depends(),
@@ -458,8 +487,9 @@ async def list_users(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端用户列表"""
-    # 基础查询条件：排除软删除
-    conditions = [User.is_deleted == False]
+    site_id = get_site_id(request)
+    # 基础查询条件：排除软删除 + site_id 过滤
+    conditions = [User.is_deleted == False, User.site_id == site_id]
 
     # keyword 搜索：匹配 nickname 或 phone
     if keyword:
@@ -520,14 +550,16 @@ async def list_users(
 
 @router.get("/members", summary="会员管理")
 async def list_members(
+    request: Request,
     member_level: Optional[str] = Query(None, description="会员等级"),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端会员列表"""
-    # 基础条件：会员 + 未软删除
-    conditions = [User.is_member == True, User.is_deleted == False]
+    site_id = get_site_id(request)
+    # 基础条件：会员 + 未软删除 + site_id 过滤
+    conditions = [User.is_member == True, User.is_deleted == False, User.site_id == site_id]
 
     # 按会员类型筛选：通过子查询判断是否持有相应卡
     if member_level == "annual_card":
@@ -631,13 +663,15 @@ async def list_members(
 
 @router.get("/logs", summary="操作日志")
 async def list_operation_logs(
+    request: Request,
     params: OperationLogListParams = Depends(),
     pagination: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """查询管理后台操作日志"""
-    conditions = [OperationLog.is_deleted == False]
+    site_id = get_site_id(request)
+    conditions = [OperationLog.is_deleted == False, OperationLog.site_id == site_id]
 
     if params.operator_id is not None:
         conditions.append(OperationLog.operator_id == params.operator_id)
@@ -698,6 +732,7 @@ async def list_operation_logs(
 
 @router.get("/calendar", summary="营地日历")
 async def get_camp_calendar(
+    request: Request,
     date_start: date = Query(..., description="开始日期"),
     date_end: date = Query(..., description="结束日期"),
     product_ids: Optional[str] = Query(None, description="商品ID列表，逗号分隔"),
@@ -705,6 +740,7 @@ async def get_camp_calendar(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取营地日历数据：库存+价格+预定矩阵"""
+    site_id = get_site_id(request)
     # 解析 product_ids（逗号分隔字符串 -> int 列表）
     pid_list: Optional[List[int]] = None
     if product_ids:
@@ -718,6 +754,7 @@ async def get_camp_calendar(
         Inventory.is_deleted == False,
         Inventory.date >= date_start,
         Inventory.date <= date_end,
+        Product.site_id == site_id,
     ]
     if pid_list:
         inv_conditions.append(Inventory.product_id.in_(pid_list))
@@ -861,13 +898,15 @@ async def get_camp_calendar(
 
 @router.get("/annual-card-configs", summary="年卡配置列表")
 async def get_annual_card_configs(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取所有年卡配置"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(AnnualCardConfig)
-        .where(AnnualCardConfig.is_deleted.is_(False))
+        .where(AnnualCardConfig.is_deleted.is_(False), AnnualCardConfig.site_id == site_id)
         .order_by(AnnualCardConfig.id.desc())
     )
     configs = result.scalars().all()
@@ -894,10 +933,12 @@ async def get_annual_card_configs(
 @router.post("/annual-card-configs", summary="创建年卡配置")
 async def create_annual_card_config(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建年卡配置"""
+    site_id = get_site_id(request)
     config = AnnualCardConfig(
         card_name=body.get("name", ""),
         price=Decimal(str(body.get("price", 0))),
@@ -908,6 +949,7 @@ async def create_annual_card_config(
         gap_days=body.get("gap_days", 1),
         refund_days=body.get("refund_days", 7),
         status=body.get("status", "active"),
+        site_id=site_id,
     )
     db.add(config)
     await db.commit()
@@ -961,13 +1003,15 @@ async def update_annual_card_config(
 
 @router.get("/points-exchange-configs", summary="积分兑换配置列表")
 async def get_points_exchange_configs(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取所有积分兑换配置"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(PointsExchangeConfig)
-        .where(PointsExchangeConfig.is_deleted.is_(False))
+        .where(PointsExchangeConfig.is_deleted.is_(False), PointsExchangeConfig.site_id == site_id)
         .order_by(PointsExchangeConfig.id.desc())
     )
     configs = result.scalars().all()
@@ -995,10 +1039,12 @@ async def get_points_exchange_configs(
 @router.post("/points-exchange-configs", summary="创建积分兑换配置")
 async def create_points_exchange_config(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建积分兑换配置"""
+    site_id = get_site_id(request)
     config = PointsExchangeConfig(
         name=body.get("name", ""),
         exchange_type=body.get("exchange_type", "product"),
@@ -1009,6 +1055,7 @@ async def create_points_exchange_config(
         start_at=datetime.fromisoformat(body["start_date"]) if body.get("start_date") else datetime.now(timezone.utc),
         end_at=datetime.fromisoformat(body["end_date"]) if body.get("end_date") else datetime.now(timezone.utc) + timedelta(days=365),
         status=body.get("status", "active"),
+        site_id=site_id,
     )
     db.add(config)
     await db.commit()
@@ -1060,13 +1107,15 @@ async def update_points_exchange_config(
 
 @router.get("/times-card-configs", summary="次数卡配置列表")
 async def get_times_card_configs(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取所有次数卡配置"""
+    site_id = get_site_id(request)
     result = await db.execute(
         select(TimesCardConfig)
-        .where(TimesCardConfig.is_deleted.is_(False))
+        .where(TimesCardConfig.is_deleted.is_(False), TimesCardConfig.site_id == site_id)
         .order_by(TimesCardConfig.id.desc())
     )
     configs = result.scalars().all()
@@ -1091,10 +1140,12 @@ async def get_times_card_configs(
 @router.post("/times-card-configs", summary="创建次数卡配置")
 async def create_times_card_config(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建次数卡配置"""
+    site_id = get_site_id(request)
     config = TimesCardConfig(
         card_name=body.get("name", ""),
         total_times=body.get("total_times", 10),
@@ -1102,6 +1153,7 @@ async def create_times_card_config(
         applicable_products=body.get("applicable_products", []),
         daily_limit=body.get("daily_limit"),
         status=body.get("status", "active"),
+        site_id=site_id,
     )
     db.add(config)
     await db.commit()
@@ -1149,6 +1201,7 @@ async def update_times_card_config(
 
 @router.get("/activation-codes", summary="激活码列表")
 async def get_activation_codes(
+    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     batch_no: Optional[str] = Query(None),
@@ -1157,7 +1210,8 @@ async def get_activation_codes(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取激活码列表（分页）"""
-    conditions = [ActivationCode.is_deleted.is_(False)]
+    site_id = get_site_id(request)
+    conditions = [ActivationCode.is_deleted.is_(False), ActivationCode.site_id == site_id]
     if batch_no:
         conditions.append(ActivationCode.batch_no == batch_no)
     if status:
@@ -1211,12 +1265,15 @@ async def get_activation_codes(
 @router.post("/activation-codes/generate", summary="批量生成激活码")
 async def generate_activation_codes(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """批量生成激活码"""
     import secrets
     import string
+
+    site_id = get_site_id(request)
 
     config_id = body.get("config_id")
     count = body.get("count", 10)
@@ -1248,6 +1305,7 @@ async def generate_activation_codes(
             config_id=config_id,
             batch_no=batch_no,
             status="unused",
+            site_id=site_id,
         )
         db.add(code)
         codes_created.append(code_str)
@@ -1440,6 +1498,7 @@ async def update_role_permissions(
 
 @router.get("/operation-logs", summary="操作日志列表")
 async def list_operation_logs_compat(
+    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     operator_id: Optional[int] = Query(None),
@@ -1451,7 +1510,8 @@ async def list_operation_logs_compat(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """操作日志列表（兼容 operation-logs 路径）"""
-    conditions = [OperationLog.is_deleted.is_(False)]
+    site_id = get_site_id(request)
+    conditions = [OperationLog.is_deleted.is_(False), OperationLog.site_id == site_id]
     if operator_id:
         conditions.append(OperationLog.operator_id == operator_id)
     if action:
@@ -1523,12 +1583,14 @@ async def get_operation_log_detail(
 
 @router.get("/faq/categories", summary="FAQ分类列表(管理端)")
 async def admin_list_faq_categories(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端获取FAQ分类列表"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(FaqCategory).where(FaqCategory.is_deleted.is_(False)).order_by(FaqCategory.sort_order)
+        select(FaqCategory).where(FaqCategory.is_deleted.is_(False), FaqCategory.site_id == site_id).order_by(FaqCategory.sort_order)
     )
     categories = result.scalars().all()
     items = []
@@ -1546,14 +1608,17 @@ async def admin_list_faq_categories(
 @router.post("/faq/categories", summary="创建FAQ分类")
 async def create_faq_category(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建FAQ分类"""
+    site_id = get_site_id(request)
     cat = FaqCategory(
         name=body.get("name", ""),
         code=body.get("code", ""),
         sort_order=body.get("sort_order", 0),
+        site_id=site_id,
     )
     db.add(cat)
     await db.commit()
@@ -1605,6 +1670,7 @@ async def delete_faq_category(
 
 @router.get("/faq/items", summary="FAQ条目列表(管理端)")
 async def admin_list_faq_items(
+    request: Request,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     category_id: Optional[int] = Query(None),
@@ -1612,7 +1678,8 @@ async def admin_list_faq_items(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端获取FAQ条目列表（分页）"""
-    conditions = [FaqItem.is_deleted.is_(False)]
+    site_id = get_site_id(request)
+    conditions = [FaqItem.is_deleted.is_(False), FaqItem.site_id == site_id]
     if category_id:
         conditions.append(FaqItem.category_id == category_id)
 
@@ -1646,10 +1713,12 @@ async def admin_list_faq_items(
 @router.post("/faq/items", summary="创建FAQ条目")
 async def create_faq_item(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建FAQ条目"""
+    site_id = get_site_id(request)
     item = FaqItem(
         category_id=body.get("category_id"),
         question=body.get("question", ""),
@@ -1657,6 +1726,7 @@ async def create_faq_item(
         keywords=body.get("keywords", []),
         sort_order=body.get("sort_order", 0),
         status=body.get("status", "active"),
+        site_id=site_id,
     )
     db.add(item)
     await db.commit()
@@ -1717,18 +1787,20 @@ async def delete_faq_item(
 @router.put("/customer-service/config", summary="更新客服配置")
 async def update_customer_service_config(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新客服配置（存储在 page_config 表中）"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(PageConfig).where(PageConfig.page_key == "customer_service")
+        select(PageConfig).where(PageConfig.page_key == "customer_service", PageConfig.site_id == site_id)
     )
     config = result.scalar_one_or_none()
     if config:
         config.config_data = body
     else:
-        config = PageConfig(page_key="customer_service", config_data=body, status="active")
+        config = PageConfig(page_key="customer_service", config_data=body, status="active", site_id=site_id)
         db.add(config)
     await db.commit()
     return ResponseModel.success(message="客服配置更新成功")
@@ -1738,12 +1810,14 @@ async def update_customer_service_config(
 
 @router.get("/page-configs", summary="页面配置列表")
 async def list_page_configs(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取所有页面配置"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(PageConfig).where(PageConfig.is_deleted.is_(False)).order_by(PageConfig.id)
+        select(PageConfig).where(PageConfig.is_deleted.is_(False), PageConfig.site_id == site_id).order_by(PageConfig.id)
     )
     configs = result.scalars().all()
     items = [
@@ -1756,12 +1830,14 @@ async def list_page_configs(
 @router.get("/page-configs/{page_key}", summary="页面配置详情")
 async def get_page_config_admin(
     page_key: str,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取指定页面配置"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(PageConfig).where(PageConfig.page_key == page_key, PageConfig.is_deleted.is_(False))
+        select(PageConfig).where(PageConfig.page_key == page_key, PageConfig.is_deleted.is_(False), PageConfig.site_id == site_id)
     )
     config = result.scalar_one_or_none()
     if not config:
@@ -1773,18 +1849,20 @@ async def get_page_config_admin(
 async def update_page_config_admin(
     page_key: str,
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新页面配置"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(PageConfig).where(PageConfig.page_key == page_key, PageConfig.is_deleted.is_(False))
+        select(PageConfig).where(PageConfig.page_key == page_key, PageConfig.is_deleted.is_(False), PageConfig.site_id == site_id)
     )
     config = result.scalar_one_or_none()
     if config:
         config.config_data = body.get("config_data", body)
     else:
-        config = PageConfig(page_key=page_key, config_data=body.get("config_data", body), status="active")
+        config = PageConfig(page_key=page_key, config_data=body.get("config_data", body), status="active", site_id=site_id)
         db.add(config)
     await db.commit()
     return ResponseModel.success(message="页面配置更新成功")
@@ -1794,12 +1872,14 @@ async def update_page_config_admin(
 
 @router.get("/settings", summary="系统设置")
 async def get_settings(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取系统设置（存储在 page_config 表中，page_key='system_settings'）"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(PageConfig).where(PageConfig.page_key == "system_settings")
+        select(PageConfig).where(PageConfig.page_key == "system_settings", PageConfig.site_id == site_id)
     )
     config = result.scalar_one_or_none()
     return ResponseModel.success(data=config.config_data if config else {})
@@ -1808,18 +1888,20 @@ async def get_settings(
 @router.put("/settings", summary="更新系统设置")
 async def update_settings(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新系统设置"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(PageConfig).where(PageConfig.page_key == "system_settings")
+        select(PageConfig).where(PageConfig.page_key == "system_settings", PageConfig.site_id == site_id)
     )
     config = result.scalar_one_or_none()
     if config:
         config.config_data = body
     else:
-        config = PageConfig(page_key="system_settings", config_data=body, status="active")
+        config = PageConfig(page_key="system_settings", config_data=body, status="active", site_id=site_id)
         db.add(config)
     await db.commit()
     return ResponseModel.success(message="系统设置更新成功")
@@ -1829,12 +1911,14 @@ async def update_settings(
 
 @router.get("/disclaimer-templates", summary="免责声明模板列表")
 async def list_disclaimer_templates(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取免责声明模板列表"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(DisclaimerTemplate).where(DisclaimerTemplate.is_deleted.is_(False)).order_by(DisclaimerTemplate.id)
+        select(DisclaimerTemplate).where(DisclaimerTemplate.is_deleted.is_(False), DisclaimerTemplate.site_id == site_id).order_by(DisclaimerTemplate.id)
     )
     templates = result.scalars().all()
     items = [
@@ -2184,11 +2268,13 @@ async def update_consumption_rules(
 @router.post("/activation-codes/export", summary="导出激活码")
 async def export_activation_codes(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """导出激活码（返回数据，前端处理下载）"""
-    conditions = [ActivationCode.is_deleted.is_(False)]
+    site_id = get_site_id(request)
+    conditions = [ActivationCode.is_deleted.is_(False), ActivationCode.site_id == site_id]
     if body.get("batch_no"):
         conditions.append(ActivationCode.batch_no == body["batch_no"])
     if body.get("status"):
@@ -2601,12 +2687,14 @@ async def list_deposit_records(
 async def approve_order_refund(
     order_id: int,
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """退款审批（兼容前端 /refund/approve 路径）"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False))
+        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False), Order.site_id == site_id)
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -2629,12 +2717,14 @@ async def approve_order_refund(
 async def partial_refund(
     order_id: int,
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """部分退款"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False))
+        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False), Order.site_id == site_id)
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -2651,12 +2741,14 @@ async def partial_refund(
 async def update_product_status_put(
     product_id: int,
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新商品上下架状态（PUT方法兼容）"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(Product).where(Product.id == product_id, Product.is_deleted.is_(False))
+        select(Product).where(Product.id == product_id, Product.is_deleted.is_(False), Product.site_id == site_id)
     )
     product = result.scalar_one_or_none()
     if not product:
@@ -2671,12 +2763,14 @@ async def update_product_status_put(
 @router.delete("/products/{product_id}", summary="删除商品")
 async def delete_product(
     product_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """删除商品（软删除）"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(Product).where(Product.id == product_id, Product.is_deleted.is_(False))
+        select(Product).where(Product.id == product_id, Product.is_deleted.is_(False), Product.site_id == site_id)
     )
     product = result.scalar_one_or_none()
     if not product:
@@ -2691,12 +2785,14 @@ async def delete_product(
 @router.get("/orders/{order_id}", summary="管理端订单详情")
 async def admin_get_order_detail(
     order_id: int,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端获取订单详情"""
+    site_id = get_site_id(request)
     result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False))
+        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False), Order.site_id == site_id)
     )
     order = result.scalar_one_or_none()
     if not order:
