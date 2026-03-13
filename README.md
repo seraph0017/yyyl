@@ -304,8 +304,8 @@ npm run preview
 ```bash
 cd uni-app
 
-# 安装依赖
-npm install
+# 安装依赖（npm >= 11 需要加 --force，@dcloudio 依赖树存在兼容性问题）
+npm install --force
 
 # ---- 开发模式（HMR 热更新）----
 # 微信小程序 - 西郊林场
@@ -634,7 +634,7 @@ celery -A celery_app beat --loglevel=info
 cd admin && npm run dev
 
 # 6. uni-app 小程序（新终端）
-cd uni-app && npm install
+cd uni-app && npm install --force
 npm run dev:wx:xijiao     # 或 dev:wx:dalonggu
 # 构建产物在 dist/dev/mp-weixin/，用微信开发者工具导入
 ```
