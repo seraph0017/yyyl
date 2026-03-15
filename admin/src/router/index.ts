@@ -164,6 +164,49 @@ const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/system/logs.vue'),
         meta: { title: '操作日志', icon: 'Notebook' },
       },
+      // ===== v1.5 新增路由 =====
+      {
+        path: 'bundles',
+        name: 'Bundles',
+        component: () => import('@/views/bundle/index.vue'),
+        meta: { title: '搭配组合', icon: 'Connection' },
+      },
+      {
+        path: 'camp-maps',
+        name: 'CampMaps',
+        component: () => import('@/views/camp-map/index.vue'),
+        meta: { title: '营地地图', icon: 'MapLocation' },
+      },
+      {
+        path: 'games',
+        name: 'Games',
+        component: () => import('@/views/game/index.vue'),
+        meta: { title: '游戏管理', icon: 'Aim' },
+      },
+      {
+        path: 'seckill-monitor',
+        name: 'SeckillMonitor',
+        component: () => import('@/views/seckill/monitor.vue'),
+        meta: { title: '秒杀监控', icon: 'Timer' },
+      },
+      {
+        path: 'expenses',
+        name: 'Expenses',
+        component: () => import('@/views/expense/index.vue'),
+        meta: { title: '报销管理', icon: 'Wallet', roles: ['admin', 'super_admin'] },
+      },
+      {
+        path: 'expense-stats',
+        name: 'ExpenseStats',
+        component: () => import('@/views/expense/stats.vue'),
+        meta: { title: '报销统计', icon: 'DataLine', roles: ['admin', 'super_admin'], hidden: true },
+      },
+      {
+        path: 'performance',
+        name: 'Performance',
+        component: () => import('@/views/performance/index.vue'),
+        meta: { title: '绩效管理', icon: 'Trophy', roles: ['admin', 'super_admin'] },
+      },
     ],
   },
 ]

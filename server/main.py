@@ -79,17 +79,23 @@ if _images_dir.is_dir():
 from routers import (
     admin,
     auth,
+    bundles,
+    camp_maps,
     campsites,
     cart,
     content,
+    expenses,
     finance,
     members,
     notifications,
     orders,
+    performance,
     products,
     reports,
+    seckill,
     tickets,
     users,
+    weather,
 )
 
 app.include_router(auth.router)
@@ -105,3 +111,9 @@ app.include_router(campsites.router)
 app.include_router(content.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
+app.include_router(bundles.router)
+app.include_router(weather.router)
+app.include_router(seckill.router)
+app.include_router(camp_maps.router)
+app.include_router(expenses.router)
+app.include_router(performance.router)

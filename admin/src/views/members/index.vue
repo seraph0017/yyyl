@@ -85,7 +85,7 @@ const params = reactive<MemberSearchParams>({ page: 1, page_size: 20, keyword: '
 
 async function fetchData() {
   loading.value = true
-  try { const res = await getMembers(params); tableData.value = res.data.items; total.value = res.data.total }
+  try { const res = await getMembers(params); tableData.value = res.data.list; total.value = res.data.pagination.total }
   catch { tableData.value = [] }
   finally { loading.value = false }
 }

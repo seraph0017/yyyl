@@ -88,7 +88,7 @@ async function fetchTemplates() {
 
 async function fetchRecords() {
   loadingRecords.value = true
-  try { const res = await getNotificationRecords(recordParams); records.value = res.data.items; recordTotal.value = res.data.total } catch {} finally { loadingRecords.value = false }
+  try { const res = await getNotificationRecords(recordParams); records.value = res.data.list; recordTotal.value = res.data.pagination.total } catch {} finally { loadingRecords.value = false }
 }
 
 async function fetchStats() {

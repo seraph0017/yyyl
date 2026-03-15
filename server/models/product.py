@@ -39,6 +39,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from models.base import Base
 
 if TYPE_CHECKING:
+    from models.bundle import BundleConfig, ProductExtInsurance
     from models.order import CartItem, OrderItem
 
 
@@ -52,6 +53,7 @@ class ProductType(str, enum.Enum):
     SPECIAL_ACTIVITY = "special_activity"
     SHOP = "shop"
     MERCHANDISE = "merchandise"
+    INSURANCE = "insurance"
 
 
 class BookingMode(str, enum.Enum):
@@ -205,6 +207,10 @@ class Product(Base):
         Integer, nullable=False, default=300, server_default="300",
         comment="秒杀支付超时(秒)"
     )
+    seckill_warmup_hours: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=24, server_default="24",
+        comment="秒杀预热提前小时数"
+    )
     normal_payment_timeout: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1800, server_default="1800",
         comment="普通支付超时(秒)"
@@ -242,6 +248,14 @@ class Product(Base):
     )
     inventories: Mapped[List["Inventory"]] = relationship(
         back_populates="product", lazy="noload"
+    )
+    ext_insurance: Mapped[Optional["ProductExtInsurance"]] = relationship(
+        foreign_keys="ProductExtInsurance.product_id",
+        uselist=False, lazy="selectin", viewonly=True,
+    )
+    bundle_configs: Mapped[List["BundleConfig"]] = relationship(
+        foreign_keys="BundleConfig.main_product_id",
+        lazy="noload", viewonly=True,
     )
 
 

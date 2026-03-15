@@ -73,6 +73,7 @@ class OrderType(str, enum.Enum):
     SHOP = "shop"
     MERCHANDISE = "merchandise"
     ANNUAL_CARD = "annual_card"
+    BUNDLE_ADDON = "bundle_addon"
 
 
 class RefundStatus(str, enum.Enum):
@@ -200,6 +201,14 @@ class Order(Base):
         BigInteger, nullable=False, default=1, server_default="1",
         comment="营地ID"
     )
+    refunded_amount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=0, server_default="0",
+        comment="累计已退款金额"
+    )
+    assigned_staff_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True,
+        comment="绩效归属员工ID(手动指派)"
+    )
 
     # 关系
     user: Mapped["User"] = relationship(back_populates="orders")
@@ -269,6 +278,18 @@ class OrderItem(Base):
         default=RefundStatus.NONE.value,
         server_default=RefundStatus.NONE.value,
         comment="退款状态: none/refunded"
+    )
+    bundle_group_id: Mapped[Optional[str]] = mapped_column(
+        String(32), nullable=True,
+        comment="搭配组合实例ID(同一次搭配操作共享, 格式BG{timestamp}{random})"
+    )
+    bundle_config_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True,
+        comment="搭配配置来源ID(FK→bundle_config)"
+    )
+    is_bundle_item: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+        comment="是否为搭配项"
     )
 
     # 关系

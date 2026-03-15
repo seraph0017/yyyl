@@ -243,3 +243,97 @@ export interface IBanner {
   link: string
   color: string
 }
+
+/** ===== v1.5 新增类型 ===== */
+
+/** 天气信息 */
+export interface IWeatherCurrent {
+  temperature: number
+  weather: string
+  wind: string
+  humidity: number
+  sunrise: string
+  sunset: string
+  icon: string
+  description: string
+}
+
+export interface IWeatherForecast {
+  date: string
+  temperature_min: number
+  temperature_max: number
+  weather: string
+  icon: string
+}
+
+/** 搭配售卖 */
+export interface IBundleItem {
+  product_id: number
+  product_name: string
+  product_image: string
+  original_price: number
+  bundle_price: number
+  max_quantity: number
+  is_default_checked: boolean
+}
+
+export interface IBundleConfig {
+  id: number
+  main_product_id: number
+  name: string
+  items: IBundleItem[]
+}
+
+/** 秒杀预填 */
+export interface ISeckillPrefill {
+  product_id: number
+  identity_ids: number[]
+  phone: string
+  disclaimer_signed: boolean
+  bundle_items: { product_id: number; quantity: number }[]
+  saved_at: string
+}
+
+export interface ISeckillStatus {
+  product_id: number
+  remaining_stock: number
+  online_count: number
+  status: 'warmup' | 'active' | 'ended' | 'sold_out'
+}
+
+/** 营地地图 */
+export interface ICampMap {
+  id: number
+  name: string
+  map_image: string
+  map_type: string
+  zones: ICampMapZone[]
+}
+
+export interface ICampMapZone {
+  id: number
+  zone_name: string
+  zone_code: string
+  coordinates: { x: number; y: number; width: number; height: number }
+  product_ids: number[]
+  description: string
+  available_count?: number
+  total_count?: number
+}
+
+/** H5小游戏 */
+export interface IMiniGame {
+  id: number
+  name: string
+  cover_image: string
+  game_url: string
+  description: string
+  points_reward: number
+}
+
+/** 订单项扩展（搭配字段） */
+export interface IOrderItemBundle {
+  bundle_group_id: string | null
+  bundle_config_id: number | null
+  is_bundle_item: boolean
+}

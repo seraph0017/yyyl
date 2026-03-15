@@ -104,7 +104,7 @@ async function fetchOverview() {
 
 async function fetchTransactions() {
   loading.value = true
-  try { const res = await getTransactions(params); transactions.value = res.data.items; total.value = res.data.total }
+  try { const res = await getTransactions(params); transactions.value = res.data.list; total.value = res.data.pagination.total }
   catch { transactions.value = [] }
   finally { loading.value = false }
 }

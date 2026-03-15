@@ -115,7 +115,7 @@ async function fetchCategories() {
 
 async function fetchItems() {
   loadingItems.value = true
-  try { const res = await getFaqItems(itemParams); items.value = res.data.items; itemTotal.value = res.data.total } catch {} finally { loadingItems.value = false }
+  try { const res = await getFaqItems(itemParams); items.value = res.data.list; itemTotal.value = res.data.pagination.total } catch {} finally { loadingItems.value = false }
 }
 
 function editCategory(row: FaqCategory) { editingCategory.value = row; Object.assign(categoryForm, row); showCategoryDialog.value = true }

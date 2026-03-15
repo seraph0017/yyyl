@@ -1,6 +1,19 @@
 <template>
   <!-- 商品详情页 -->
   <view class="page-detail" v-if="product">
+    <!-- 自定义导航栏 -->
+    <view class="custom-nav" :style="{ paddingTop: statusBarHeight + 'px' }">
+      <view class="custom-nav__content" :style="{ height: navBarHeight + 'px' }">
+        <view class="custom-nav__back" @tap="onGoBack">
+          <text class="custom-nav__back-icon">‹</text>
+        </view>
+        <text class="custom-nav__title">商品详情</text>
+        <view class="custom-nav__right" />
+      </view>
+    </view>
+    <!-- 导航栏占位 -->
+    <view :style="{ height: (statusBarHeight + navBarHeight) + 'px' }" />
+
     <!-- 图片轮播 -->
     <view class="detail-swiper">
       <swiper
@@ -217,6 +230,11 @@ import { get, resolveImageUrl } from '@/utils/request'
 import { brandConfig } from '@/config/sites'
 import PriceTag from '@/components/price-tag/index.vue'
 import Countdown from '@/components/countdown/index.vue'
+
+/** 状态栏 + 导航栏高度 */
+const systemInfo = uni.getSystemInfoSync()
+const statusBarHeight = ref(systemInfo.statusBarHeight || 44)
+const navBarHeight = ref(44)
 import type { IProduct, IProductAttribute, ProductCategory } from '@/types'
 
 interface ICalendarDay {
@@ -536,6 +554,16 @@ function onToggleFavorite() {
     icon: 'success',
   })
 }
+
+/** 返回上一页 */
+function onGoBack() {
+  const pages = getCurrentPages()
+  if (pages.length > 1) {
+    uni.navigateBack()
+  } else {
+    uni.switchTab({ url: '/pages/index/index' })
+  }
+}
 </script>
 
 <style lang="scss" scoped>
@@ -543,6 +571,56 @@ function onToggleFavorite() {
   min-height: 100vh;
   background-color: var(--color-bg);
   padding-bottom: 160rpx;
+}
+
+/* 自定义导航栏 */
+.custom-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background-color: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(20px);
+  box-shadow: 0 1rpx 6rpx rgba(0, 0, 0, 0.06);
+
+  &__content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16rpx;
+  }
+
+  &__back {
+    width: 72rpx;
+    height: 72rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+
+    &:active {
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+  }
+
+  &__back-icon {
+    font-size: 52rpx;
+    font-weight: 300;
+    color: var(--color-text);
+    line-height: 1;
+    margin-top: -4rpx;
+  }
+
+  &__title {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  &__right {
+    width: 72rpx;
+  }
 }
 
 /* 图片轮播 */

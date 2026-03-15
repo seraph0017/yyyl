@@ -124,6 +124,20 @@ class PaginationParams(BaseModel):
         return (self.page - 1) * self.page_size
 
 
+class AdminPaginationParams(BaseModel):
+    """管理端分页参数（允许更大的 page_size，用于下拉选择等场景）"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    page: int = Field(default=1, ge=1, description="页码，从1开始")
+    page_size: int = Field(default=20, ge=1, le=500, description="每页数量，最大500")
+
+    @property
+    def offset(self) -> int:
+        """计算数据库查询偏移量"""
+        return (self.page - 1) * self.page_size
+
+
 # ---- 错误响应 ----
 
 class ErrorDetail(BaseModel):

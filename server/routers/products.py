@@ -8,6 +8,7 @@ C端 /api/v1/products：
 - GET /{id}/price-calendar — 价格日历
 
 B端 /api/v1/admin/products：
+- GET / — 管理端商品列表
 - POST / — 创建商品
 - PUT /{id} — 更新商品
 - PATCH /{id}/status — 上架/下架
@@ -25,7 +26,7 @@ from middleware.auth import get_current_admin, get_optional_user
 from middleware.site import get_site_id
 from models.admin import AdminUser
 from models.user import User
-from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
+from schemas.common import AdminPaginationParams, PaginatedResponse, PaginationParams, ResponseModel
 from schemas.product import (
     BatchStatusUpdate,
     InventoryQuery,
@@ -146,6 +147,39 @@ async def get_price_calendar(
 
 
 # ========== B端管理接口 ==========
+
+@router.get("/api/v1/admin/products", summary="管理端商品列表")
+async def admin_list_products(
+    request: Request,
+    params: ProductSearchParams = Depends(),
+    pagination: AdminPaginationParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """管理端商品列表，可查看所有状态的商品"""
+    site_id = get_site_id(request)
+    products, total = await product_service.list_products(
+        db,
+        keyword=params.keyword,
+        product_type=params.type,
+        category=params.category,
+        product_status=params.status,  # 管理端不默认过滤状态
+        min_price=params.min_price,
+        max_price=params.max_price,
+        is_seckill=params.is_seckill,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+    # 按 site_id 过滤本营地商品
+    products = [p for p in products if p.site_id == site_id]
+    items = [ProductListItem.model_validate(p) for p in products]
+    return PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+
 
 @router.post("/api/v1/admin/products", summary="创建商品")
 async def create_product(

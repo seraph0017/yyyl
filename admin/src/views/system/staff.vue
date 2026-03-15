@@ -73,7 +73,7 @@ const staffForm = reactive({ real_name: '', phone: '', role_id: 0, password: '' 
 
 async function fetchData() {
   loading.value = true
-  try { const res = await getStaffList(); staffList.value = res.data.items } catch {} finally { loading.value = false }
+  try { const res = await getStaffList(); staffList.value = res.data.list } catch {} finally { loading.value = false }
 }
 
 async function fetchRoles() {

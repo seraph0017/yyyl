@@ -113,8 +113,8 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getProducts(searchParams)
-    tableData.value = res.data.items
-    total.value = res.data.total
+    tableData.value = res.data.list
+    total.value = res.data.pagination.total
   } catch {
     // 模拟数据
     tableData.value = []

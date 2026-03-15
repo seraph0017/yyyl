@@ -106,6 +106,25 @@
       }
     }
   ],
+  "subPackages": [
+    {
+      "root": "pages-sub/product",
+      "pages": [
+        {
+          "path": "camp-map/index",
+          "style": { "navigationBarTitleText": "营地地图" }
+        },
+        {
+          "path": "games/index",
+          "style": { "navigationBarTitleText": "趣味游戏" }
+        },
+        {
+          "path": "game-webview/index",
+          "style": { "navigationBarTitleText": "游戏" }
+        }
+      ]
+    }
+  ],
   "globalStyle": {
     "navigationBarBackgroundColor": "#2E7D32",
     "navigationBarTitleText": "一月一露",

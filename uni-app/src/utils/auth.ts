@@ -14,16 +14,29 @@ import type { ILoginResult, IUserInfo } from '@/types'
  * 微信静默登录
  */
 export async function wxLogin(): Promise<ILoginResult> {
-  const loginRes = await uni.login({}) as unknown as [unknown, UniApp.LoginRes | undefined]
-  const err = loginRes[0]
-  const res = loginRes[1]
-  if (err || !res) {
+  let code: string
+  try {
+    // uni-app Vue 3 中 uni.login 返回 Promise<LoginRes>
+    const res = await uni.login({})
+    // 兼容两种返回格式：直接对象 { code } 或旧版数组 [err, res]
+    if (Array.isArray(res)) {
+      const [err, loginRes] = res as unknown as [unknown, { code: string } | undefined]
+      if (err || !loginRes?.code) throw new Error('微信登录失败')
+      code = loginRes.code
+    } else {
+      code = (res as { code: string }).code
+    }
+  } catch {
     throw new Error('微信登录失败')
+  }
+
+  if (!code) {
+    throw new Error('微信登录失败：未获取到 code')
   }
 
   const result = await post<ILoginResult>(
     '/auth/login',
-    { code: res.code, site_id: currentSite.id },
+    { code, site_id: currentSite.id },
     { needAuth: false },
   )
 
@@ -39,16 +52,23 @@ export async function phoneLogin(e: { detail: { code?: string; errMsg: string } 
     return null
   }
 
-  const loginRes2 = await uni.login({}) as unknown as [unknown, UniApp.LoginRes | undefined]
-  const err2 = loginRes2[0]
-  const res2 = loginRes2[1]
-  if (err2 || !res2) {
+  let wxCode: string
+  try {
+    const res = await uni.login({})
+    if (Array.isArray(res)) {
+      const [err, loginRes] = res as unknown as [unknown, { code: string } | undefined]
+      if (err || !loginRes?.code) throw new Error('微信登录失败')
+      wxCode = loginRes.code
+    } else {
+      wxCode = (res as { code: string }).code
+    }
+  } catch {
     throw new Error('微信登录失败')
   }
 
   const result = await post<ILoginResult>(
     '/auth/phone-login',
-    { code: res2.code, phone_code: e.detail.code, site_id: currentSite.id },
+    { code: wxCode, phone_code: e.detail.code, site_id: currentSite.id },
     { needAuth: false },
   )
 

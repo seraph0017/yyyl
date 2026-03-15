@@ -14,6 +14,7 @@ from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     DateTime,
     Index,
     Numeric,
@@ -144,6 +145,23 @@ class FinanceTransaction(Base):
     site_id: Mapped[int] = mapped_column(
         BigInteger, nullable=False, default=1, server_default="1",
         comment="营地ID"
+    )
+    # v1.5 退款增强字段
+    inventory_released: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true",
+        comment="退款时是否释放了库存"
+    )
+    custom_amount: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+        comment="是否为管理员自定义金额"
+    )
+    system_amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True,
+        comment="系统计算的默认退款金额(供审计对比)"
+    )
+    amount_deviation_rate: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(5, 2), nullable=True,
+        comment="自定义金额与系统金额的偏差率(%)"
     )
 
     # 关系

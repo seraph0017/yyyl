@@ -100,6 +100,10 @@ class DisclaimerSignature(Base):
     signer_ip: Mapped[Optional[str]] = mapped_column(
         String(45), nullable=True, comment="签署人IP"
     )
+    is_prefill: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+        comment="是否为秒杀预填签署"
+    )
 
     # 关系
     template: Mapped["DisclaimerTemplate"] = relationship(

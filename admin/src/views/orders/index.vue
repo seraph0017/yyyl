@@ -111,8 +111,8 @@ async function fetchData() {
   loading.value = true
   try {
     const res = await getOrders(searchParams)
-    tableData.value = res.data.items
-    total.value = res.data.total
+    tableData.value = res.data.list
+    total.value = res.data.pagination.total
   } catch {
     tableData.value = []
   } finally {

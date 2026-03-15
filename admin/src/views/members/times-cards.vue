@@ -117,7 +117,7 @@ async function fetchData() {
 }
 
 async function fetchCodes() {
-  try { const res = await getActivationCodes(codeParams); codes.value = res.data.items; codeTotal.value = res.data.total } catch {}
+  try { const res = await getActivationCodes(codeParams); codes.value = res.data.list; codeTotal.value = res.data.pagination.total } catch {}
 }
 
 function editConfig(row: TimesCardConfig) {

@@ -76,7 +76,7 @@ const params = reactive<OperationLogSearchParams>({ page: 1, page_size: 20 })
 
 async function fetchData() {
   loading.value = true
-  try { const res = await getOperationLogs(params); logs.value = res.data.items; total.value = res.data.total }
+  try { const res = await getOperationLogs(params); logs.value = res.data.list; total.value = res.data.pagination.total }
   catch {} finally { loading.value = false }
 }
 

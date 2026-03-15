@@ -28,6 +28,13 @@ from models.product import (  # noqa: F401
     SKU,
 )
 
+# 搭配售卖模块 (3张表) - v1.5新增
+from models.bundle import (  # noqa: F401
+    BundleConfig,
+    BundleItem,
+    ProductExtInsurance,
+)
+
 # 订单模块 (5张表)
 from models.order import (  # noqa: F401
     Cart,
@@ -80,4 +87,24 @@ from models.content import (  # noqa: F401
 # 通知模块 (1张表)
 from models.notification import Notification  # noqa: F401
 
-# 所有模型总计: 4 + 11 + 5 + 9 + 3 + 7 + 5 + 1 = 45 张表
+# 前端增强模块 (3张表) - v1.5新增
+from models.camp_map import (  # noqa: F401
+    CampMap,
+    CampMapZone,
+    MiniGame,
+)
+
+# 报销模块 (2张表) - v1.5新增
+from models.expense import (  # noqa: F401
+    ExpenseRequest,
+    ExpenseType,
+)
+
+# 绩效模块 (3张表) - v1.5新增
+from models.performance import (  # noqa: F401
+    PerformanceConfig,
+    PerformanceDetail,
+    PerformanceRecord,
+)
+
+# 所有模型总计: 4 + 11 + 3 + 5 + 9 + 3 + 7 + 5 + 1 + 3 + 2 + 3 = 56 张表

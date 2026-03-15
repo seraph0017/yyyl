@@ -1,8 +1,20 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
-  <circle cx="32" cy="32" r="30" fill="#2E7D32" opacity="0.1"/>
-  <path d="M32 8L8 52h48L32 8z" fill="#4CAF50" stroke="#2E7D32" stroke-width="2" stroke-linejoin="round"/>
-  <path d="M32 8L20 52h24L32 8z" fill="#81C784" opacity="0.5"/>
-  <path d="M28 52v-16a4 4 0 0 1 8 0v16" stroke="#2E7D32" stroke-width="2"/>
-  <circle cx="48" cy="14" r="4" fill="#FF9800"/>
-  <path d="M6 52h52" stroke="#795548" stroke-width="3" stroke-linecap="round"/>
+  <!-- 背景圆 -->
+  <circle cx="32" cy="32" r="30" fill="#2E7D32" opacity="0.08"/>
+  <!-- 远山 -->
+  <path d="M4 54L18 32L28 44L38 28L52 46L60 38L64 54z" fill="#A5D6A7" opacity="0.5"/>
+  <!-- 帐篷主体 -->
+  <path d="M32 14L16 52h32L32 14z" fill="#4CAF50"/>
+  <path d="M32 14L24 52h16L32 14z" fill="#66BB6A" opacity="0.6"/>
+  <!-- 帐篷门 -->
+  <path d="M28 52v-12c0-2.2 1.8-4 4-4s4 1.8 4 4v12" fill="#2E7D32"/>
+  <!-- 月亮 -->
+  <circle cx="50" cy="14" r="5" fill="#FFD54F"/>
+  <circle cx="52" cy="12" r="4" fill="#1a1a2e" opacity="0.15"/>
+  <!-- 地面 -->
+  <path d="M4 54h56" stroke="#5D4037" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- 小星星 -->
+  <circle cx="12" cy="12" r="1" fill="#FFD54F" opacity="0.7"/>
+  <circle cx="44" cy="8" r="0.8" fill="#FFD54F" opacity="0.5"/>
+  <circle cx="20" cy="18" r="0.6" fill="#FFD54F" opacity="0.4"/>
 </svg>

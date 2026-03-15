@@ -77,6 +77,9 @@
       </view>
     </view>
 
+    <!-- 天气预报 -->
+    <weather-card />
+
     <!-- 热门推荐 -->
     <view class="recommend-section">
       <view class="section-title">
@@ -139,13 +142,15 @@ import { get, resolveImageUrl } from '@/utils/request'
 import { currentSite } from '@/config/sites'
 import type { IProduct, IProductAttribute, ProductCategory, IBanner } from '@/types'
 import ProductCard from '@/components/product-card/index.vue'
+import WeatherCard from '@/components/weather-card/index.vue'
 
 const site = currentSite
 
 interface ICategoryNav {
-  key: ProductCategory
+  key: string
   name: string
   icon: string
+  url?: string
 }
 
 const banners = ref<IBanner[]>([])
@@ -156,7 +161,8 @@ const categories = ref<ICategoryNav[]>([
   { key: 'daily_activity', name: '日常活动', icon: '🛶' },
   { key: 'special_activity', name: '特定活动', icon: '🎪' },
   { key: 'camp_shop', name: '小商店', icon: '🛒' },
-  { key: 'merchandise', name: '周边商品', icon: '👕' },
+  { key: 'camp_map', name: '营地地图', icon: '🗺️', url: '/pages-sub/product/camp-map/index' },
+  { key: 'games', name: '趣味游戏', icon: '🎮', url: '/pages-sub/product/games/index' },
 ])
 const recommendProducts = ref<IProduct[]>([])
 const swiperCurrent = ref(0)
@@ -207,14 +213,18 @@ function mapProduct(item: Record<string, unknown>): IProduct {
 
 async function loadData() {
   loading.value = true
+  console.log('[首页] loadData 开始')
 
   try {
     const [bannerData, productData] = await Promise.all([
       get<{ banners: IBanner[] }>('/pages/home_banner', undefined, { needAuth: false, showError: false })
-        .catch(() => ({ banners: [] as IBanner[] })),
-      get<{ list: Record<string, unknown>[]; total: number }>('/products', { page_size: 18, status: 'on_sale' }, { needAuth: false })
-        .catch(() => ({ list: [], total: 0 })),
+        .catch((e) => { console.warn('[首页] banner请求失败:', e); return { banners: [] as IBanner[] } }),
+      get<{ list: Record<string, unknown>[]; total: number }>('/products', { page_size: 18, status: 'on_sale' }, { needAuth: false, showError: false })
+        .catch((e) => { console.warn('[首页] products请求失败:', e); return { list: [] as Record<string, unknown>[], total: 0 } }),
     ])
+
+    console.log('[首页] bannerData:', JSON.stringify(bannerData).slice(0, 200))
+    console.log('[首页] productData list count:', productData?.list?.length ?? 'null')
 
     const loadedBanners = (bannerData?.banners || []).map((b) => ({
       ...b,
@@ -232,9 +242,18 @@ async function loadData() {
 
     recommendProducts.value = products
     loading.value = false
+    console.log('[首页] loadData 完成, banners:', banners.value.length, 'products:', products.length)
   } catch (err) {
-    console.error('首页加载失败:', err)
+    console.error('[首页] loadData 异常:', err)
     loading.value = false
+    // 确保即使出错也显示 fallback 内容
+    if (banners.value.length === 0) {
+      banners.value = [
+        { id: 1, image: '', title: '🌲 春日露营季 · 限时特惠', link: '', color: site.primaryColor },
+        { id: 2, image: '', title: '🎶 仲夏夜星空音乐节', link: '', color: '#FF6B35' },
+        { id: 3, image: '', title: '⛺ 新品装备上线 · 全场9折', link: '', color: '#2196F3' },
+      ]
+    }
     uni.showToast({ title: '加载失败，下拉刷新重试', icon: 'none' })
   }
 }
@@ -248,7 +267,12 @@ function onSearchTap() {
 }
 
 function onCategoryTap(_key: string) {
-  uni.switchTab({ url: '/pages/category/index' })
+  const cat = categories.value.find((c) => c.key === _key)
+  if (cat?.url) {
+    uni.navigateTo({ url: cat.url })
+  } else {
+    uni.switchTab({ url: '/pages/category/index' })
+  }
 }
 
 function onBannerTap(id: number) {

@@ -9,11 +9,13 @@ export interface ApiResponse<T = any> {
 }
 
 export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
+  list: T[]
+  pagination: {
+    page: number
+    page_size: number
+    total: number
+    total_pages: number
+  }
 }
 
 export interface PaginationParams {
@@ -616,4 +618,204 @@ export interface ConfirmAction {
   description: string
   confirm_type: 'code' | 'password'
   code?: string
+}
+
+// ==================== v1.5 新增类型 ====================
+
+/** 搭配组合配置 */
+export interface BundleConfig {
+  id: number
+  main_product_id: number
+  main_product_name?: string
+  name: string
+  status: 'active' | 'inactive'
+  start_at: string
+  end_at: string
+  sort_order: number
+  items: BundleItem[]
+  site_id: number
+  created_at: string
+  updated_at: string
+}
+
+export interface BundleItem {
+  id: number
+  product_id: number
+  product_name?: string
+  product_image?: string
+  sku_id: number | null
+  bundle_price: number
+  max_quantity: number
+  is_default_checked: boolean
+  sort_order: number
+}
+
+export interface BundleConfigCreate {
+  name: string
+  main_product_id: number
+  status: 'active' | 'inactive'
+  start_at: string
+  end_at: string
+  sort_order: number
+  items: BundleItemCreate[]
+}
+
+export interface BundleItemCreate {
+  product_id: number
+  sku_id?: number | null
+  bundle_price?: number
+  max_quantity: number
+  is_default_checked: boolean
+  sort_order: number
+}
+
+export interface BundleStats {
+  total_bundle_orders: number
+  bundle_rate: number
+  bundle_revenue: number
+  top_bundles: { config_id: number; name: string; orders: number; revenue: number }[]
+}
+
+/** 营地地图 */
+export interface CampMap {
+  id: number
+  site_id: number
+  name: string
+  map_image: string
+  map_type: string
+  status: 'active' | 'inactive'
+  zones: CampMapZone[]
+  created_at: string
+}
+
+export interface CampMapZone {
+  id: number
+  camp_map_id: number
+  zone_name: string
+  zone_code: string
+  coordinates: { x: number; y: number; width: number; height: number }
+  product_ids: number[]
+  description: string
+  sort_order: number
+}
+
+export interface CampMapCreate {
+  name: string
+  map_image: string
+  map_type: string
+}
+
+export interface CampMapZoneCreate {
+  zone_name: string
+  zone_code?: string
+  coordinates: { x: number; y: number; width: number; height: number }
+  product_ids: number[]
+  description?: string
+  sort_order: number
+}
+
+/** H5小游戏 */
+export interface MiniGame {
+  id: number
+  name: string
+  cover_image: string
+  game_url: string
+  description: string
+  status: 'active' | 'inactive'
+  sort_order: number
+  points_reward: number
+  site_id: number
+  created_at: string
+}
+
+export interface MiniGameCreate {
+  name: string
+  game_url: string
+  cover_image?: string
+  description?: string
+  sort_order: number
+}
+
+/** 报销 */
+export interface ExpenseType {
+  id: number
+  name: string
+  description: string
+  status: 'active' | 'inactive'
+  sort_order: number
+  site_id: number
+}
+
+export interface ExpenseRequest {
+  id: number
+  user_id: number
+  created_by: number
+  applicant_name?: string
+  expense_type_id: number
+  expense_type_name?: string
+  amount: number
+  expense_date: string
+  description: string
+  receipt_images: string[]
+  status: 'pending' | 'approved' | 'rejected' | 'paid'
+  reviewer_id: number | null
+  reviewed_at: string | null
+  review_remark: string
+  paid_at: string | null
+  paid_by: number | null
+  site_id: number
+  created_at: string
+}
+
+export interface ExpenseStats {
+  total_amount: number
+  month_total: number
+  type_breakdown: { expense_type_id: number; expense_type_name: string; total_amount: number; count: number }[]
+  staff_breakdown: { user_id: number; staff_name: string; total_amount: number; count: number }[]
+}
+
+/** 绩效 */
+export interface PerformanceConfig {
+  id: number
+  income_type: string
+  coefficient: number
+  description: string
+  site_id: number
+}
+
+export interface PerformanceRecord {
+  id: number
+  staff_user_id: number
+  staff_name?: string
+  period_type: 'daily' | 'monthly'
+  period_start: string
+  period_end: string
+  total_income: number
+  total_performance: number
+  details: PerformanceDetail[]
+}
+
+export interface PerformanceDetail {
+  income_type: string
+  income_amount: number
+  performance_amount: number
+}
+
+export interface PerformanceRanking {
+  rank: number
+  staff_user_id: number
+  staff_name: string
+  total_performance: number
+  total_income: number
+}
+
+/** 秒杀监控 */
+export interface SeckillMonitorData {
+  product_id: number
+  product_name?: string
+  online_count: number
+  remaining_stock: number
+  orders_created: number
+  orders_paid: number
+  peak_qps: number
 }

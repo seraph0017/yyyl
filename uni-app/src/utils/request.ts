@@ -14,11 +14,23 @@ const SERVER_BASE = import.meta.env.VITE_SERVER_BASE || 'http://localhost:8000'
 
 /**
  * 将后端返回的图片路径转换为完整 URL
+ * 微信小程序要求图片必须使用 HTTPS 协议
  */
 export function resolveImageUrl(path: string): string {
   if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://')) return path
-  return `${SERVER_BASE}${path.startsWith('/') ? '' : '/'}${path}`
+  if (path.startsWith('https://')) return path
+  if (path.startsWith('http://')) {
+    // 微信小程序不支持 HTTP 图片，自动升级为 HTTPS
+    return path.replace('http://', 'https://')
+  }
+  const fullUrl = `${SERVER_BASE}${path.startsWith('/') ? '' : '/'}${path}`
+  // 开发环境 localhost 用 HTTP，小程序中图片无法加载，返回空让 placeholder 生效
+  // #ifdef MP-WEIXIN
+  if (fullUrl.startsWith('http://localhost') || fullUrl.startsWith('http://127.0.0.1')) {
+    return ''
+  }
+  // #endif
+  return fullUrl
 }
 
 export interface RequestOptions {

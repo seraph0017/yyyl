@@ -7,7 +7,7 @@ import type {
 
 // 商品CRUD
 export function getProducts(params: ProductSearchParams) {
-  return get<{ data: PaginatedResponse<Product> }>('/products', params)
+  return get<{ data: PaginatedResponse<Product> }>('/admin/products', params)
 }
 
 export function getProductDetail(id: number) {

@@ -106,6 +106,7 @@ import {
   DataAnalysis, Calendar, Goods, List, User,
   Money, TrendCharts, ChatLineSquare, Document,
   Bell, UserFilled, Setting, Notebook, Place,
+  Connection, MapLocation, Aim, Timer, Wallet, DataLine, Trophy,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -162,6 +163,27 @@ const menuItems = computed(() => {
       ],
     },
     {
+      path: '/ops-group',
+      title: '运营管理',
+      icon: Connection,
+      children: [
+        { path: '/bundles', title: '搭配组合' },
+        { path: '/seckill-monitor', title: '秒杀监控' },
+        { path: '/camp-maps', title: '营地地图' },
+        { path: '/games', title: '游戏管理' },
+      ],
+    },
+    {
+      path: '/work-group',
+      title: '工作系统',
+      icon: Wallet,
+      children: [
+        { path: '/expenses', title: '报销管理' },
+        { path: '/expense-stats', title: '报销统计' },
+        { path: '/performance', title: '绩效管理' },
+      ],
+    },
+    {
       path: '/system-group',
       title: '系统设置',
       icon: Setting,
@@ -175,7 +197,7 @@ const menuItems = computed(() => {
 
   // 非管理员隐藏部分菜单
   if (!userStore.isAdmin) {
-    return items.filter(item => !['finance', '/system-group'].includes(item.path))
+    return items.filter(item => !['finance', '/system-group', '/work-group'].includes(item.path))
   }
   return items
 })

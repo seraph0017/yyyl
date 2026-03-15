@@ -1,8 +1,10 @@
 # 🏕️ 一月一露 — 多营地综合运营平台
 
-> uni-app 跨平台小程序 + Web管理后台 + 后端API 全栈项目
+> uni-app 跨平台小程序 + Web管理后台 + 后端API 全栈项目 · PRD v1.5
 
 一月一露是一个户外露营品牌的数字化运营平台，支持**多营地独立运营**（西郊林场 / 大聋谷），同一套代码通过构建时配置生成不同营地的小程序。为露营爱好者提供营位预定、装备租赁、户外活动报名、商品购买等一站式服务，同时为运营方提供完整的后台管理能力。
+
+**v1.5 新增功能**：搭配组合套餐、营地地图与互动游戏、天气服务集成、内部报销/绩效管理、秒杀预填加速。
 
 ---
 
@@ -64,27 +66,29 @@
 yyyl/
 ├── uni-app/                # 跨平台小程序前端（C端 + 员工验票端）
 │   ├── src/
-│   │   ├── pages/          # 17个页面（Vue3 SFC）
-│   │   ├── components/     # 通用组件
+│   │   ├── pages/          # 17个主页面（Vue3 SFC）
+│   │   ├── pages-sub/      # 分包页面（营地地图、互动游戏）
+│   │   ├── components/     # 通用组件（天气卡片、搭配选择器、秒杀预填等）
 │   │   ├── config/         # 营地配置（多营地品牌/主题/Slogan）
 │   │   ├── stores/         # Pinia 状态管理
 │   │   ├── types/          # TypeScript 类型定义
 │   │   ├── utils/          # 工具函数（请求、认证、存储）
+│   │   ├── static/         # 静态资源（TabBar图标等）
 │   │   ├── App.vue         # 应用入口
-│   │   └── pages.json      # 页面路由配置
+│   │   └── pages.json      # 页面路由 + 分包配置
 │   ├── dist/               # 构建产物
 │   ├── vite.config.ts      # Vite 配置 + uni-app 插件
 │   └── package.json        # Node.js 依赖
 │
 ├── server/               # 后端服务（FastAPI）
-│   ├── models/           # SQLAlchemy 数据模型（45张表）
+│   ├── models/           # SQLAlchemy 数据模型（56张表）
 │   ├── schemas/          # Pydantic 请求/响应模型
-│   ├── routers/          # API 路由（13个模块，106+ 条API）
-│   ├── services/         # 业务逻辑层（7个服务）
-│   ├── tasks/            # Celery 异步任务（23个定时任务）
+│   ├── routers/          # API 路由（19个模块，150+ 条API）
+│   ├── services/         # 业务逻辑层（14个服务）
+│   ├── tasks/            # Celery 异步任务（25个定时任务）
 │   ├── middleware/       # 中间件
 │   ├── utils/            # 工具函数（加密、认证、微信SDK等）
-│   ├── images/           # 商品占位图片（静态文件服务）
+│   ├── images/           # 商品图片（21张AI生成 + 静态文件服务）
 │   ├── alembic/          # 数据库迁移
 │   ├── main.py           # 应用入口
 │   ├── config.py         # 配置管理
@@ -98,8 +102,8 @@ yyyl/
 │
 ├── admin/                # Web管理后台前端（B端）
 │   ├── src/
-│   │   ├── api/          # 8个API模块
-│   │   ├── views/        # 17个页面视图
+│   │   ├── api/          # 15个API模块
+│   │   ├── views/        # 24个页面视图（含搭配组合、营地地图、秒杀监控等）
 │   │   ├── stores/       # Pinia 状态管理
 │   │   ├── router/       # 路由配置 + 权限守卫
 │   │   ├── layout/       # 主布局
@@ -128,12 +132,13 @@ yyyl/
 ├── docker-compose.yml    # Docker Compose 部署配置
 │
 ├── docs/                 # 项目文档
-│   ├── architecture.md   # 技术架构设计文档 v1.1
+│   ├── architecture.md   # 技术架构设计文档 v1.2
 │   ├── test_report.md    # 测试与合规报告
 │   └── test_cases.md     # 完整测试用例（203条）
 │
 ├── prd/                  # 产品文档
-│   └── yyyl_prd.md       # 产品需求文档 v1.4
+│   ├── yyyl_prd.md           # 产品需求文档 v1.4（基线版）
+│   └── yyyl_prd_v1.5_increment.md  # PRD v1.5 增量需求
 │
 └── needs/                # 原始需求资料
 ```
@@ -250,6 +255,18 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 | bleach | 6.2.0 | HTML 清洗（XSS 防护） |
 | cryptography | 43.0.0 | AES 加密（敏感数据） |
 | python-dotenv | 1.0.1 | 环境变量加载 |
+
+#### 商品图片资源
+
+`server/images/` 目录下共 **21 张** AI 生成的高质量商品图片（1024×1024），涵盖：
+
+- 🏕️ **营位** ×6：阳光营位、草坪、林间、湖景、亲子、山顶观星
+- 🎪 **活动营位** ×2：春日花海、星空音乐节
+- 🎒 **装备租赁** ×3：帐篷、天幕、桌椅套装
+- 🛶 **活动体验** ×3：皮划艇、射箭、亲子手作
+- 🛒 **营地商店** ×3：柴火、饮料、泡面
+- 👕 **周边** ×1：品牌T恤
+- 🖼️ **Banner** ×3：春日露营季、星空音乐节、新品装备
 
 ---
 
@@ -477,7 +494,7 @@ npm run type-check
 
 ## 🔌 API 模块概览
 
-后端共 **13个路由模块**，**106+ 条 API**：
+后端共 **19个路由模块**，**150+ 条 API**：
 
 | 模块 | 前缀 | 说明 |
 |------|------|------|
@@ -494,6 +511,12 @@ npm run type-check
 | `content` | `/api/v1/content` | 内容管理（FAQ、页面配置、免责声明） |
 | `notifications` | `/api/v1/notifications` | 消息通知管理 |
 | `reports` | `/api/v1/admin/reports` | 数据报表（销售/用户/商品报表、导出） |
+| `bundles` | `/api/v1/admin/bundles` | 🆕 搭配组合套餐管理（CRUD、自动推荐） |
+| `camp_maps` | `/api/v1/admin/camp-maps` | 🆕 营地地图管理（地图/区域CRUD、互动热区） |
+| `seckill` | `/api/v1/admin/seckill` | 🆕 秒杀监控（实时数据、预填配置） |
+| `weather` | `/api/v1/weather` | 🆕 天气服务（当前天气、未来预报） |
+| `expenses` | `/api/v1/admin/expenses` | 🆕 报销管理（申请、审批、统计） |
+| `performance` | `/api/v1/admin/performance` | 🆕 绩效管理（配置、评分、记录） |
 
 ---
 
@@ -542,6 +565,12 @@ npm run type-check
 | 员工管理 | CRUD + 角色分配 |
 | 系统设置 | 基本/退票规则/客服/免责声明 |
 | 操作日志 | 查询 + 详情（变更前后值） |
+| 🆕 搭配组合管理 | 搭配套餐CRUD、搭配商品配置、折扣规则 |
+| 🆕 营地地图管理 | 地图上传/编辑、区域划分、互动热区配置 |
+| 🆕 游戏管理 | 互动小游戏CRUD、WebView链接配置 |
+| 🆕 秒杀监控 | 秒杀实时数据大屏、预填信息配置、库存监控 |
+| 🆕 报销管理 | 报销类型配置、申请审批、月度统计图表 |
+| 🆕 绩效管理 | 绩效方案配置、评分录入、员工绩效记录 |
 
 ---
 
@@ -587,12 +616,13 @@ npm run type-check
 | **管理后台前端** | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts |
 | **后端 API** | Python 3.11 + FastAPI + Uvicorn (ASGI) |
 | **ORM** | SQLAlchemy 2.0 (Async) |
-| **数据库** | PostgreSQL 15 |
+| **数据库** | PostgreSQL 15（56张表） |
 | **缓存/队列** | Redis 7 |
-| **异步任务** | Celery + Redis Broker（23个定时任务） |
+| **异步任务** | Celery + Redis Broker（25个定时任务） |
 | **数据库迁移** | Alembic |
 | **API 文档** | Swagger UI / ReDoc（自动生成） |
 | **多营地隔离** | X-Site-Id 请求头 + 全链路 site_id 过滤 |
+| **图片资源** | AI 生成高质量商品/Banner 图片（21张 1024×1024）|
 
 ---
 
@@ -716,8 +746,9 @@ kubectl get hpa -n yyyl
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
-| 产品需求文档 | `prd/yyyl_prd.md` | PRD v1.4（评审通过 9.6/10） |
-| 技术架构文档 | `docs/architecture.md` | 架构设计 v1.1（评审通过 9.3/10） |
+| 产品需求文档 | `prd/yyyl_prd.md` | PRD v1.4 基线版（评审通过 9.6/10） |
+| 增量需求文档 | `prd/yyyl_prd_v1.5_increment.md` | PRD v1.5 增量（5个新模块，评审通过 9.0+/10） |
+| 技术架构文档 | `docs/architecture.md` | 架构设计 v1.2（56张表 + 150+ API，评审通过 9.3/10） |
 | 测试合规报告 | `docs/test_report.md` | 综合评分 8.5/10 |
 | 测试用例文档 | `docs/test_cases.md` | 203 条测试用例（P0:105 / P1:84 / P2:14） |
 

@@ -1,10 +1,10 @@
 # 某露营地 — 露营地微信小程序 技术架构设计文档
 
-> **版本**：v1.1  
-> **日期**：2026-03-12  
+> **版本**：v1.2  
+> **日期**：2026-03-15  
 > **作者**：技术架构师 Agent  
-> **基线PRD**：v1.4（9.6/10 正式基线）  
-> **状态**：修订版（修补自评审12项问题）
+> **基线PRD**：v1.5（v1.4基线 + 5模块增量需求）  
+> **状态**：v1.5 增量需求架构扩展
 
 ---
 
@@ -198,6 +198,17 @@ erDiagram
     FaqCategory ||--o{ FaqItem : contains
     DisclaimerTemplate ||--o{ DisclaimerSignature : template_for
     FinanceAccount ||--o{ FinanceTransaction : logs
+
+    Product ||--o| ProductExtInsurance : extends
+    Product ||--o{ BundleConfig : main_product
+    BundleConfig ||--o{ BundleItem : contains
+    BundleItem }o--|| Product : refers
+    OrderItem }o--o| BundleConfig : bundle_config
+    CampMap ||--o{ CampMapZone : has_zones
+    AdminUser ||--o{ ExpenseRequest : submits
+    AdminUser ||--o{ PerformanceRecord : earns
+    PerformanceRecord ||--o{ PerformanceDetail : details
+    ExpenseType ||--o{ ExpenseRequest : categorizes
 ```
 
 ### 2.2 公共字段约定
@@ -277,7 +288,7 @@ erDiagram
 |--------|------|------|--------|------|
 | `id` | `BIGINT` | `PK` | — | |
 | `name` | `VARCHAR(100)` | `NOT NULL` | — | 商品名称 |
-| `type` | `VARCHAR(30)` | `NOT NULL` | — | daily_camping/event_camping/rental/daily_activity/special_activity/shop/merchandise |
+| `type` | `VARCHAR(30)` | `NOT NULL` | — | daily_camping/event_camping/rental/daily_activity/special_activity/shop/merchandise/insurance |
 | `booking_mode` | `VARCHAR(20)` | `NULL` | — | by_position(孤品)/by_quantity(通品) |
 | `status` | `VARCHAR(20)` | `NOT NULL` | `'draft'` | draft/on_sale/off_sale |
 | `base_price` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 基础价格（兜底） |
@@ -292,6 +303,7 @@ erDiagram
 | `require_camping_ticket` | `BOOLEAN` | `NOT NULL` | `FALSE` | 需先购露营票 |
 | `is_seckill` | `BOOLEAN` | `NOT NULL` | `FALSE` | 秒杀模式 |
 | `seckill_payment_timeout` | `INTEGER` | `NOT NULL` | `300` | 秒杀支付超时(秒) |
+| `seckill_warmup_hours` | `INTEGER` | `NOT NULL` | `24` | 秒杀预热时长(小时)，开票前N小时可预填资料 |
 | `normal_payment_timeout` | `INTEGER` | `NOT NULL` | `1800` | 普通支付超时(秒) |
 | `sort_order` | `INTEGER` | `NOT NULL` | `0` | 排序 |
 | `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
@@ -446,11 +458,12 @@ erDiagram
 | `order_no` | `VARCHAR(32)` | `UNIQUE NOT NULL` | — | 订单号 YL{yyyyMMddHHmmss}{6位随机} |
 | `user_id` | `BIGINT` | `FK NOT NULL` | — | |
 | `parent_order_id` | `BIGINT` | `FK NULL` | — | 父订单ID(购物车拆单) |
-| `order_type` | `VARCHAR(30)` | `NOT NULL` | — | 同Product.type + annual_card |
+| `order_type` | `VARCHAR(30)` | `NOT NULL` | — | 同Product.type + annual_card + bundle_addon |
 | `status` | `VARCHAR(30)` | `NOT NULL` | `'pending_payment'` | 见状态枚举 |
 | `total_amount` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 总金额 |
 | `discount_amount` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 优惠金额 |
 | `actual_amount` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 实付金额 |
+| `refunded_amount` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 已退款金额累计 |
 | `deposit_amount` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 押金(租赁) |
 | `discount_type` | `VARCHAR(30)` | `NULL` | — | consecutive_days/multi_person/member/none |
 | `discount_detail` | `JSONB` | `NULL` | — | 优惠明细 |
@@ -465,6 +478,7 @@ erDiagram
 | `shipping_status` | `VARCHAR(20)` | `NULL` | — | 物流状态 |
 | `remark` | `VARCHAR(200)` | `NULL` | — | |
 | `expire_at` | `TIMESTAMPTZ` | `NULL` | — | 支付截止时间 |
+| `assigned_staff_id` | `BIGINT` | `FK NULL` | — | 指定处理员工ID |
 | `site_id` | `BIGINT` | `NOT NULL` | `1` | |
 
 **订单状态枚举**：`pending_payment`(待支付), `paid`(已支付/待使用), `verified`(已验票/使用中), `completed`(已完成), `cancelled`(已取消), `refund_pending`(退款中), `refunded`(已退款), `partial_refunded`(部分退款)
@@ -488,6 +502,9 @@ erDiagram
 | `actual_price` | `DECIMAL(10,2)` | `NOT NULL` | — | 折后实付 |
 | `identity_id` | `BIGINT` | `FK NULL` | — | 出行人 |
 | `parent_item_id` | `BIGINT` | `FK NULL` | — | 加人票关联原票 |
+| `bundle_group_id` | `VARCHAR(32)` | `NULL` | — | 搭配组标识（同一搭配下单共享） |
+| `bundle_config_id` | `BIGINT` | `FK NULL` | — | 搭配配置ID（FK→BundleConfig） |
+| `is_bundle_item` | `BOOLEAN` | `NOT NULL` | `FALSE` | 是否为搭配附属项 |
 | `refund_status` | `VARCHAR(20)` | `NOT NULL` | `'none'` | none/refunded |
 
 #### 2.3.18 Cart + CartItem（购物车）
@@ -682,6 +699,10 @@ erDiagram
 | `status` | `VARCHAR(20)` | `NOT NULL` | `'completed'` | |
 | `remark` | `VARCHAR(200)` | `NULL` | — | |
 | `operator_id` | `BIGINT` | `NULL` | — | |
+| `inventory_released` | `BOOLEAN` | `NOT NULL` | `TRUE` | 退款是否释放库存 |
+| `custom_amount` | `BOOLEAN` | `NOT NULL` | `FALSE` | 是否自定义退款金额 |
+| `system_amount` | `DECIMAL(10,2)` | `NULL` | — | 系统计算退款金额（当custom_amount=True时留痕） |
+| `amount_deviation_rate` | `DECIMAL(5,2)` | `NULL` | — | 金额偏差率（%）= (amount-system_amount)/system_amount*100 |
 | `site_id` | `BIGINT` | `NOT NULL` | `1` | |
 
 #### 2.3.31 DepositRecord（押金记录表）
@@ -705,7 +726,7 @@ erDiagram
 
 **DisclaimerTemplate**: `id`, `title`, `content`(TEXT), `content_hash`(SHA-256), `version`, `status`, `site_id`
 
-**DisclaimerSignature**: `id`, `user_id`(FK), `template_id`(FK), `order_id`(FK), `content_hash`, `signed_at`, `signer_openid`, `signer_ip`
+**DisclaimerSignature**: `id`, `user_id`(FK), `template_id`(FK), `order_id`(FK), `content_hash`, `signed_at`, `signer_openid`, `signer_ip`, `is_prefill`(Boolean default=False, 是否为秒杀预填签署)
 
 #### 2.3.33 Notification（消息通知表）
 
@@ -836,7 +857,174 @@ erDiagram
 
 **索引**：UNIQUE(`report_year`, `report_month`, `site_id`)
 
-### 2.4 数据表汇总（45张表）
+#### 2.3.46 ProductExtInsurance（保险扩展表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `product_id` | `BIGINT` | `FK UNIQUE NOT NULL` | — | |
+| `insurer_name` | `VARCHAR(100)` | `NOT NULL` | — | 保险公司名称 |
+| `policy_type` | `VARCHAR(30)` | `NOT NULL` | — | accident/weather/equipment |
+| `coverage_amount` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 保额 |
+| `coverage_desc` | `TEXT` | `NULL` | — | 保障说明 |
+| `claim_guide` | `TEXT` | `NULL` | — | 理赔指引 |
+| `effective_hours` | `INTEGER` | `NOT NULL` | `24` | 生效时长(小时) |
+
+#### 2.3.47 BundleConfig（搭配组合配置表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `name` | `VARCHAR(100)` | `NOT NULL` | — | 搭配方案名称 |
+| `main_product_id` | `BIGINT` | `FK NOT NULL` | — | 主商品ID（营位/活动票） |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'active'` | active/inactive |
+| `description` | `VARCHAR(200)` | `NULL` | — | 搭配方案描述 |
+| `sort_order` | `INTEGER` | `NOT NULL` | `0` | 排序 |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+**索引**：`idx_bundle_config_main`(`main_product_id`,`status`), `idx_bundle_config_site`(`site_id`)
+
+#### 2.3.48 BundleItem（搭配商品项表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `bundle_config_id` | `BIGINT` | `FK NOT NULL` | — | 所属搭配配置 |
+| `product_id` | `BIGINT` | `FK NOT NULL` | — | 搭配商品ID |
+| `sku_id` | `BIGINT` | `FK NULL` | — | 指定SKU（可选） |
+| `bundle_price` | `DECIMAL(10,2)` | `NULL` | — | 搭配优惠价(NULL=原价) |
+| `max_quantity` | `INTEGER` | `NOT NULL` | `1` | 最大可选数量 |
+| `is_default_selected` | `BOOLEAN` | `NOT NULL` | `FALSE` | 是否默认勾选 |
+| `sort_order` | `INTEGER` | `NOT NULL` | `0` | 排序 |
+
+**索引**：`idx_bundle_item_config`(`bundle_config_id`,`sort_order`), UNIQUE(`bundle_config_id`,`product_id`,`sku_id`)
+
+#### 2.3.49 CampMap（营地地图表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `name` | `VARCHAR(100)` | `NOT NULL` | — | 地图名称 |
+| `image_url` | `VARCHAR(500)` | `NOT NULL` | — | 地图底图URL |
+| `width` | `INTEGER` | `NOT NULL` | — | 底图宽度(px) |
+| `height` | `INTEGER` | `NOT NULL` | — | 底图高度(px) |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'draft'` | draft/published |
+| `description` | `VARCHAR(200)` | `NULL` | — | 地图说明 |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+**索引**：`idx_camp_map_site`(`site_id`,`status`)
+
+#### 2.3.50 CampMapZone（地图区域表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `map_id` | `BIGINT` | `FK NOT NULL` | — | 所属地图 |
+| `zone_name` | `VARCHAR(50)` | `NOT NULL` | — | 区域名称 |
+| `zone_type` | `VARCHAR(30)` | `NOT NULL` | — | camping/activity/facility/parking/scenery |
+| `coordinates` | `JSONB` | `NOT NULL` | — | 区域坐标 `{x,y,width,height}` 或多边形点集 |
+| `product_id` | `BIGINT` | `FK NULL` | — | 关联商品ID（可点击跳转商品详情） |
+| `label` | `VARCHAR(100)` | `NULL` | — | 标注文字 |
+| `icon` | `VARCHAR(200)` | `NULL` | — | 图标URL |
+| `color` | `VARCHAR(20)` | `NULL` | — | 区域颜色 |
+| `sort_order` | `INTEGER` | `NOT NULL` | `0` | 排序 |
+
+**索引**：`idx_camp_map_zone_map`(`map_id`)
+
+#### 2.3.51 MiniGame（H5小游戏配置表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `name` | `VARCHAR(100)` | `NOT NULL` | — | 游戏名称 |
+| `game_url` | `VARCHAR(500)` | `NOT NULL` | — | H5游戏URL |
+| `cover_image` | `VARCHAR(500)` | `NULL` | — | 封面图URL |
+| `description` | `VARCHAR(200)` | `NULL` | — | 游戏描述 |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'draft'` | draft/published/offline |
+| `require_login` | `BOOLEAN` | `NOT NULL` | `TRUE` | 是否需要登录 |
+| `config` | `JSONB` | `NULL` | `'{}'` | 游戏自定义配置（积分奖励等） |
+| `sort_order` | `INTEGER` | `NOT NULL` | `0` | 排序 |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+**索引**：`idx_mini_game_site`(`site_id`,`status`)
+
+#### 2.3.52 ExpenseType（报销类型表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `name` | `VARCHAR(50)` | `NOT NULL` | — | 类型名称（交通/餐饮/采购/维修/其他） |
+| `max_amount` | `DECIMAL(10,2)` | `NULL` | — | 单次最高限额(NULL=不限) |
+| `require_receipt` | `BOOLEAN` | `NOT NULL` | `TRUE` | 是否必须上传票据 |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'active'` | active/inactive |
+| `sort_order` | `INTEGER` | `NOT NULL` | `0` | 排序 |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+#### 2.3.53 ExpenseRequest（报销申请表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `request_no` | `VARCHAR(32)` | `UNIQUE NOT NULL` | — | 报销单号 BX{yyyyMMddHHmmss}{4位随机} |
+| `applicant_id` | `BIGINT` | `FK NOT NULL` | — | 申请人（FK→AdminUser） |
+| `expense_type_id` | `BIGINT` | `FK NOT NULL` | — | 报销类型 |
+| `amount` | `DECIMAL(10,2)` | `NOT NULL` | — | 报销金额 |
+| `description` | `VARCHAR(500)` | `NOT NULL` | — | 报销说明 |
+| `receipt_images` | `JSONB` | `NOT NULL` | `'[]'` | 票据图片URL列表 |
+| `expense_date` | `DATE` | `NOT NULL` | — | 费用发生日期 |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'pending'` | pending/approved/rejected/paid |
+| `reviewer_id` | `BIGINT` | `FK NULL` | — | 审批人 |
+| `reviewed_at` | `TIMESTAMPTZ` | `NULL` | — | 审批时间 |
+| `review_remark` | `VARCHAR(200)` | `NULL` | — | 审批备注 |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+**索引**：`idx_expense_applicant`(`applicant_id`,`status`), `idx_expense_status`(`status`,`created_at`), `idx_expense_date`(`expense_date`)
+
+#### 2.3.54 PerformanceConfig（绩效系数配置表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `metric_key` | `VARCHAR(50)` | `NOT NULL` | — | 指标标识（order_amount/ticket_count/refund_rate/customer_rating等） |
+| `metric_name` | `VARCHAR(50)` | `NOT NULL` | — | 指标名称 |
+| `weight` | `DECIMAL(5,2)` | `NOT NULL` | `1.00` | 权重系数 |
+| `unit` | `VARCHAR(20)` | `NULL` | — | 单位（元/笔/百分比） |
+| `target_value` | `DECIMAL(10,2)` | `NULL` | — | 目标值(月度) |
+| `calculation_formula` | `VARCHAR(200)` | `NULL` | — | 计算公式说明 |
+| `status` | `VARCHAR(20)` | `NOT NULL` | `'active'` | active/inactive |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+**索引**：UNIQUE(`metric_key`,`site_id`)
+
+#### 2.3.55 PerformanceRecord（绩效汇总记录表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `staff_id` | `BIGINT` | `FK NOT NULL` | — | 员工ID（FK→AdminUser） |
+| `period_type` | `VARCHAR(10)` | `NOT NULL` | — | daily/monthly |
+| `period_date` | `DATE` | `NOT NULL` | — | 统计日期（日维度为当天，月维度为月首日） |
+| `total_score` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 综合绩效得分 |
+| `rank_in_site` | `INTEGER` | `NULL` | — | 营地内排名 |
+| `remark` | `VARCHAR(200)` | `NULL` | — | 备注 |
+| `site_id` | `BIGINT` | `NOT NULL` | `1` | 营地ID |
+
+**索引**：UNIQUE(`staff_id`,`period_type`,`period_date`), `idx_perf_record_period`(`period_type`,`period_date`,`site_id`)
+
+#### 2.3.56 PerformanceDetail（绩效分项明细表）
+
+| 字段名 | 类型 | 约束 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `id` | `BIGINT` | `PK` | — | |
+| `record_id` | `BIGINT` | `FK NOT NULL` | — | 所属绩效汇总 |
+| `config_id` | `BIGINT` | `FK NOT NULL` | — | 绩效指标配置 |
+| `metric_key` | `VARCHAR(50)` | `NOT NULL` | — | 指标标识（冗余，方便查询） |
+| `raw_value` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 原始值 |
+| `weighted_score` | `DECIMAL(10,2)` | `NOT NULL` | `0` | 加权得分 |
+
+**索引**：`idx_perf_detail_record`(`record_id`)
+
+### 2.4 数据表汇总（56张表）
 
 | # | 表名 | 模块 |
 |---|------|------|
@@ -859,6 +1047,13 @@ erDiagram
 | 40-41 | faq_category, faq_item | 客服 |
 | 42 | page_config | 配置 |
 | 43-45 | daily_report, weekly_report, monthly_report | 报表 |
+| 46 | product_ext_insurance | 商品(保险扩展) |
+| 47-48 | bundle_config, bundle_item | 搭配售卖 |
+| 49-50 | camp_map, camp_map_zone | 营地地图 |
+| 51 | mini_game | H5游戏 |
+| 52-53 | expense_type, expense_request | 报销 |
+| 54 | performance_config | 绩效配置 |
+| 55-56 | performance_record, performance_detail | 绩效 |
 
 ---
 
@@ -1336,6 +1531,115 @@ erDiagram
 | 174 | `POST` | `/api/v1/upload/image` | 上传图片（商品图/损坏照片等） | 🎫 | 共用 |
 | 175 | `POST` | `/api/v1/upload/images` | 批量上传图片 | 🎫 | 共用 |
 
+#### 3.2.13 搭配售卖模块
+
+**C端接口**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 176 | `GET` | `/api/v1/products/{product_id}/bundles` | 获取商品可搭配项列表（含搭配价格） | 🌐 | 小程序 |
+| 177 | `POST` | `/api/v1/orders/{order_id}/addon` | 已下单追加搭配购买（生成子订单） | 👤 | 小程序 |
+
+**B端管理接口**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 178 | `GET` | `/api/v1/admin/bundles` | 搭配配置列表（分页+筛选主商品） | 🎫 | Web |
+| 179 | `POST` | `/api/v1/admin/bundles` | 创建搭配配置（含搭配项） | 🎫 | Web |
+| 180 | `GET` | `/api/v1/admin/bundles/{bundle_id}` | 搭配配置详情 | 🎫 | Web |
+| 181 | `PUT` | `/api/v1/admin/bundles/{bundle_id}` | 更新搭配配置 | 🎫 | Web |
+| 182 | `DELETE` | `/api/v1/admin/bundles/{bundle_id}` | 删除搭配配置（软删除） | 🎫 | Web |
+| 183 | `PUT` | `/api/v1/admin/bundles/{bundle_id}/status` | 搭配配置启用/停用 | 🎫 | Web |
+| 184 | `GET` | `/api/v1/admin/bundles/stats` | 搭配售卖数据统计（搭配率/搭配收入占比） | 🔑 | Web |
+| 185 | `POST` | `/api/v1/admin/orders/{order_id}/addon` | 后台为已有订单追加搭配 | 🎫 | Web |
+
+**已有接口变更**：
+- `POST /api/v1/orders`（#40 创建订单）：请求体新增 `bundle_items[]` 数组，包含 `{bundle_config_id, product_id, sku_id, quantity}`
+- `GET /api/v1/orders/{order_id}`（#41 订单详情）：响应体 `items[]` 新增 `bundle_group_id`、`is_bundle_item`、`bundle_config_name` 字段
+
+#### 3.2.14 秒杀完善模块
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 186 | `POST` | `/api/v1/seckill/{product_id}/prefill` | 秒杀预填资料提交（身份信息+免责签署+搭配选择） | 👤 | 小程序 |
+| 187 | `GET` | `/api/v1/seckill/{product_id}/prefill` | 获取已预填资料 | 👤 | 小程序 |
+| 188 | `GET` | `/api/v1/seckill/{product_id}/online-count` | 获取当前在线等待人数（HyperLogLog） | 🌐 | 小程序 |
+| 189 | `GET` | `/api/v1/admin/seckill/monitor` | 秒杀实时监控面板（库存/成单/在线/TPS） | 🔑 | Web |
+| 190 | `GET` | `/api/v1/admin/seckill/monitor/{product_id}` | 单商品秒杀监控详情 | 🔑 | Web |
+
+**已有接口变更**：
+- `POST /api/v1/orders/seckill`（秒杀下单）：支持 `prefill_token` 参数实现一键下单（自动绑定预填资料、免责签署、搭配项）
+
+#### 3.2.15 前端增强模块
+
+**天气系统**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 191 | `GET` | `/api/v1/weather/current` | 获取营地当前天气（缓存1小时） | 🌐 | 小程序 |
+| 192 | `GET` | `/api/v1/weather/forecast` | 获取营地7天天气预报（缓存1小时） | 🌐 | 小程序 |
+
+**营地地图管理（B端）**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 193 | `GET` | `/api/v1/camp-maps/active` | 获取当前发布的营地地图（C端） | 🌐 | 小程序 |
+| 194 | `GET` | `/api/v1/admin/camp-maps` | 营地地图列表 | 🎫 | Web |
+| 195 | `POST` | `/api/v1/admin/camp-maps` | 创建营地地图（上传底图+配置区域） | 🎫 | Web |
+| 196 | `PUT` | `/api/v1/admin/camp-maps/{map_id}` | 更新营地地图 | 🎫 | Web |
+| 197 | `DELETE` | `/api/v1/admin/camp-maps/{map_id}` | 删除营地地图 | 🎫 | Web |
+| 198 | `PUT` | `/api/v1/admin/camp-maps/{map_id}/publish` | 发布/取消发布地图 | 🎫 | Web |
+
+**H5小游戏管理（B端）**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 199 | `GET` | `/api/v1/games` | 获取已发布游戏列表（C端） | 🌐 | 小程序 |
+| 200 | `POST` | `/api/v1/games/{game_id}/token` | 获取游戏签名Token（HMAC防篡改） | 👤 | 小程序 |
+| 201 | `GET` | `/api/v1/admin/games` | 游戏配置列表 | 🎫 | Web |
+| 202 | `POST` | `/api/v1/admin/games` | 创建游戏配置 | 🎫 | Web |
+| 203 | `PUT` | `/api/v1/admin/games/{game_id}` | 更新游戏配置 | 🎫 | Web |
+| 204 | `PUT` | `/api/v1/admin/games/{game_id}/status` | 游戏上线/下线 | 🎫 | Web |
+
+#### 3.2.16 退款增强模块
+
+**已有接口变更**（无新增，均为原有退款审批接口增强）：
+
+- `POST /api/v1/admin/orders/{order_id}/approve-refund`（#54 审批退款）：
+  - 请求体新增 `inventory_release`(Boolean, 默认true) 控制是否释放库存
+  - 请求体新增 `custom_amount`(Decimal, 可选) 自定义退款金额
+  - 当 `custom_amount` 与系统计算金额偏差 >10%，需二次确认
+- `GET /api/v1/admin/orders`（#50 订单列表）：筛选条件新增 `has_refund_deviation`(Boolean) 支持筛选金额偏差订单
+- `GET /api/v1/admin/orders/{order_id}`（#51 订单详情）：响应新增 `refunded_amount`、退款明细中新增 `inventory_released`、`custom_amount`、`system_amount`、`amount_deviation_rate`
+- `GET /api/v1/admin/finance/transactions`（#82 交易流水）：筛选条件新增 `custom_amount_only`(Boolean) 支持筛选自定义金额退款
+
+#### 3.2.17 工作系统模块
+
+**报销管理**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 205 | `GET` | `/api/v1/admin/expenses/types` | 报销类型列表 | 🎫 | Web |
+| 206 | `POST` | `/api/v1/admin/expenses/types` | 创建报销类型 | 🔑 | Web |
+| 207 | `PUT` | `/api/v1/admin/expenses/types/{type_id}` | 更新报销类型 | 🔑 | Web |
+| 208 | `GET` | `/api/v1/admin/expenses` | 报销申请列表（分页+状态筛选+时间范围） | 🎫 | Web |
+| 209 | `POST` | `/api/v1/admin/expenses` | 提交报销申请 | 🎫 | Web |
+| 210 | `GET` | `/api/v1/admin/expenses/{expense_id}` | 报销申请详情 | 🎫 | Web |
+| 211 | `PUT` | `/api/v1/admin/expenses/{expense_id}/approve` | 审批报销（通过/驳回） | 🔑 | Web |
+| 212 | `PUT` | `/api/v1/admin/expenses/{expense_id}/pay` | 标记报销已打款 | 🔑 | Web |
+| 213 | `GET` | `/api/v1/admin/expenses/stats` | 报销统计（按类型/人员/月度汇总） | 🔑 | Web |
+
+**绩效管理**：
+
+| # | 方法 | 路径 | 功能说明 | 权限 | 端 |
+|---|------|------|----------|------|-----|
+| 214 | `GET` | `/api/v1/admin/performance/configs` | 绩效指标配置列表 | 🔑 | Web |
+| 215 | `POST` | `/api/v1/admin/performance/configs` | 创建/更新绩效指标配置 | 🔑 | Web |
+| 216 | `GET` | `/api/v1/admin/performance/records` | 绩效汇总列表（按员工+周期筛选） | 🔑 | Web |
+| 217 | `GET` | `/api/v1/admin/performance/records/{record_id}` | 绩效详情（含各指标分项） | 🔑 | Web |
+| 218 | `GET` | `/api/v1/admin/performance/ranking` | 绩效排行榜（按月/日+营地） | 🔑 | Web |
+| 219 | `POST` | `/api/v1/admin/performance/calculate` | 手动触发绩效计算（指定日期范围） | 🔑 | Web |
+
 ### 3.3 API统计汇总
 
 | 模块 | API数量 | 小程序专用 | Web专用 | 共用 |
@@ -1355,7 +1659,12 @@ erDiagram
 | 通知 | 4 | 4 | 0 | 0 |
 | 文件上传 | 2 | 0 | 0 | 2 |
 | 二次确认 | 2 | 0 | 2 | 0 |
-| **合计** | **175** | **57** | **80** | **33** |
+| 搭配售卖 | 10 | 2 | 7 | 1 |
+| 秒杀完善 | 5 | 3 | 2 | 0 |
+| 前端增强（天气+地图+游戏） | 14 | 5 | 8 | 1 |
+| 退款增强 | 0（4项变更） | — | — | — |
+| 工作系统（报销+绩效） | 15 | 0 | 15 | 0 |
+| **合计** | **219** | **67** | **112** | **34** |
 
 ---
 
@@ -2646,6 +2955,9 @@ graph LR
 | `seckill:info:{product_id}` | Hash: `{name,price,start_time,stock}` | 活动结束后 | 秒杀商品信息缓存 |
 | `seckill:queue:{product_id}` | List | 活动结束后 | 秒杀排队队列（扩展预留） |
 | `seckill:user_ordered:{product_id}:{user_id}` | String: `1` | 活动结束后 | 用户已抢购标记（防重复） |
+| `seckill:prefill:{product_id}:{user_id}` | Hash | 2小时 | 秒杀预填数据（身份信息+搭配选择+免责签署token） |
+| `seckill:online:{product_id}` | HyperLogLog | 开票后1小时 | 在线等待人数（PFADD统计UV） |
+| `seckill:monitor:{product_id}` | Hash | 开票后24小时 | 秒杀监控数据（成单数/TPS/库存变化时间线） |
 
 **商品与价格缓存**：
 
@@ -2668,6 +2980,9 @@ graph LR
 | `customer_service:info` | String: JSON | 1小时 | 客服信息缓存 |
 | `disclaimer:template:active` | String: JSON | 1小时 | 当前有效免责声明模板 |
 | `system:settings` | String: JSON | 10分钟 | 系统配置缓存 |
+| `weather:current:{site_id}` | String: JSON | 1小时 | 当前天气数据 |
+| `weather:forecast:{site_id}` | String: JSON | 1小时 | 7天天气预报 |
+| `game:token:{user_id}` | String: HMAC token | 30分钟 | H5游戏签名token |
 
 **验票系统**：
 
@@ -3092,22 +3407,29 @@ return remaining  -- 返回剩余库存
 | 15 | `task_weekly_report` | `0 5 * * 1`（每周一5点） | 聚合上周周报 | 同上 | 同上 |
 | 16 | `task_monthly_report` | `0 6 1 * *`（每月1日6点） | 聚合上月月报 | 同上 | 同上 |
 
-#### 7.2.6 通知类
+#### 7.2.6 绩效计算类
 
 | # | 任务名称 | Cron表达式 | 执行逻辑 | 失败处理 | 幂等性保障 |
 |---|---------|-----------|---------|---------|-----------|
-| 17 | `task_trip_remind` | `0 18 * * *`（每天18点） | 扫描明天有预定的用户，发送入营提醒微信订阅消息 | 发送失败记录日志 | `Notification` 去重 |
-| 18 | `task_activity_start_remind` | `*/1 * * * *`（每分钟） | 扫描即将在60分钟内和10分钟内开票的商品对应的已支付订单：60分钟档发送"活动即将开始"模板消息，10分钟档发送"活动马上开始"紧急提醒模板消息 | 同上 | 同上，额外以 `(user_id, template_type, product_id, activity_date)` 四元组去重，避免重复发送 |
-| 19 | `task_refund_approval_timeout` | `0 */2 * * *`（每2小时） | 退款申请超24小时未处理，站内通知管理员 | 记录日志 | 同一订单每24小时最多提醒一次 |
+| 17 | `task_performance_daily` | `0 2 * * *`（每天2点） | 计算前一天所有员工日绩效：遍历 `PerformanceConfig`(active)，从订单/验票/退款等表聚合各指标原始值，乘以权重得出加权得分，写入 `PerformanceRecord`(daily) + `PerformanceDetail`，计算营地内排名 | 逐人事务，失败跳过并告警 | `INSERT ON CONFLICT(staff_id, period_type, period_date) DO UPDATE` |
+| 18 | `task_performance_monthly` | `0 2 1 * *`（每月1日2点） | 聚合上月日绩效为月绩效：SUM 各指标原始值重新加权计算，写入 `PerformanceRecord`(monthly) + `PerformanceDetail`，计算月排名 | 同上 | 同上 |
 
-#### 7.2.7 清理类
+#### 7.2.7 通知类
 
 | # | 任务名称 | Cron表达式 | 执行逻辑 | 失败处理 | 幂等性保障 |
 |---|---------|-----------|---------|---------|-----------|
-| 20 | `task_cleanup_expired_tokens` | `0 3 * * *`（每天3点） | 清理Redis中残留的无TTL异常数据（`token_blacklist:*`, `verify_session:*`） | 记录日志 | 清理操作天然幂等 |
-| 21 | `task_cleanup_expired_verify_codes` | `0 */6 * * *`（每6小时） | 清理过期Redis Key + `ActivationCode` 中过期未使用的标记为expired | 记录日志 | `WHERE status='unused' AND expires_at < now()` |
-| 22 | `task_log_archive` | `0 4 1 * *`（每月1日4点） | 超过90天的 `OperationLog` 归档到 `OperationLogArchive` 表后删除原记录 | 重试3次并告警 | 基于归档日期判断 |
-| 23 | `task_inventory_consistency_check` | `*/10 * * * *`（每10分钟） | 对比Redis库存与DB Inventory表，不一致以DB为准覆盖Redis并记录告警。对应6.6.3节L3层保障 | 下次自动覆盖 | 全量对比+覆盖 |
+| 19 | `task_trip_remind` | `0 18 * * *`（每天18点） | 扫描明天有预定的用户，发送入营提醒微信订阅消息 | 发送失败记录日志 | `Notification` 去重 |
+| 20 | `task_activity_start_remind` | `*/1 * * * *`（每分钟） | 扫描即将在60分钟内和10分钟内开票的商品对应的已支付订单：60分钟档发送"活动即将开始"模板消息，10分钟档发送"活动马上开始"紧急提醒模板消息 | 同上 | 同上，额外以 `(user_id, template_type, product_id, activity_date)` 四元组去重，避免重复发送 |
+| 21 | `task_refund_approval_timeout` | `0 */2 * * *`（每2小时） | 退款申请超24小时未处理，站内通知管理员 | 记录日志 | 同一订单每24小时最多提醒一次 |
+
+#### 7.2.8 清理类
+
+| # | 任务名称 | Cron表达式 | 执行逻辑 | 失败处理 | 幂等性保障 |
+|---|---------|-----------|---------|---------|-----------|
+| 22 | `task_cleanup_expired_tokens` | `0 3 * * *`（每天3点） | 清理Redis中残留的无TTL异常数据（`token_blacklist:*`, `verify_session:*`） | 记录日志 | 清理操作天然幂等 |
+| 23 | `task_cleanup_expired_verify_codes` | `0 */6 * * *`（每6小时） | 清理过期Redis Key + `ActivationCode` 中过期未使用的标记为expired | 记录日志 | `WHERE status='unused' AND expires_at < now()` |
+| 24 | `task_log_archive` | `0 4 1 * *`（每月1日4点） | 超过90天的 `OperationLog` 归档到 `OperationLogArchive` 表后删除原记录 | 重试3次并告警 | 基于归档日期判断 |
+| 25 | `task_inventory_consistency_check` | `*/10 * * * *`（每10分钟） | 对比Redis库存与DB Inventory表，不一致以DB为准覆盖Redis并记录告警。对应6.6.3节L3层保障 | 下次自动覆盖 | 全量对比+覆盖 |
 
 ### 7.3 任务分类汇总
 
@@ -3118,9 +3440,10 @@ return remaining  -- 返回剩余库存
 | 会员类 | 5 | 年卡/次数卡到期、到期提醒、积分过期 |
 | 财务类 | 2 | 收入确认、押金超时提醒 |
 | 数据统计类 | 5 | Dashboard聚合、热力图、日/周/月报表 |
+| 绩效计算类 | 2 | 日绩效计算、月绩效汇总 |
 | 通知类 | 3 | 行程提醒、活动提醒、退款审批超时 |
 | 清理类 | 4 | Token清理、验证码清理、日志归档、库存一致性 |
-| **合计** | **23** | — |
+| **合计** | **25** | — |
 
 ### 7.4 Celery Beat 配置示例
 
@@ -3212,6 +3535,17 @@ beat_schedule = {
     "monthly-report": {
         "task": "app.tasks.stats.task_monthly_report",
         "schedule": crontab(hour=6, minute=0, day_of_month=1),
+        "options": {"queue": "stats"},
+    },
+    # ===== 绩效计算类 =====
+    "performance-daily": {
+        "task": "app.tasks.performance.task_performance_daily",
+        "schedule": crontab(hour=2, minute=0),
+        "options": {"queue": "stats"},
+    },
+    "performance-monthly": {
+        "task": "app.tasks.performance.task_performance_monthly",
+        "schedule": crontab(hour=2, minute=0, day_of_month=1),
         "options": {"queue": "stats"},
     },
     # ===== 通知类 =====
@@ -3553,6 +3887,7 @@ server/
 │   │   ├── base.py                      # 基类Mixin（id/created_at/updated_at/is_deleted）
 │   │   ├── user.py                      # User、UserAddress、UserIdentity
 │   │   ├── product.py                   # Product、各扩展表、SKU
+│   │   ├── bundle.py                    # BundleConfig、BundleItem、ProductExtInsurance
 │   │   ├── pricing.py                   # PricingRule、DateTypeConfig、DiscountRule
 │   │   ├── inventory.py                 # Inventory、InventoryLog
 │   │   ├── order.py                     # Order、OrderItem
@@ -3569,6 +3904,9 @@ server/
 │   │   ├── page_config.py              # PageConfig
 │   │   ├── system_setting.py            # SystemSetting
 │   │   ├── operation_log.py             # OperationLog
+│   │   ├── camp_map.py                  # CampMap、CampMapZone、MiniGame
+│   │   ├── expense.py                   # ExpenseType、ExpenseRequest
+│   │   ├── performance.py              # PerformanceConfig、PerformanceRecord、PerformanceDetail
 │   │   └── stats.py                     # DailyReport、WeeklyReport、MonthlyReport
 │   ├── schemas/                         # Pydantic请求/响应Schema
 │   │   ├── __init__.py
@@ -3585,6 +3923,11 @@ server/
 │   │   ├── faq.py                       # FAQ/客服
 │   │   ├── dashboard.py                 # Dashboard数据
 │   │   ├── admin.py                     # 管理后台（员工/权限/设置）
+│   │   ├── bundle.py                    # 搭配售卖
+│   │   ├── camp_map.py                  # 营地地图/游戏
+│   │   ├── expense.py                   # 报销
+│   │   ├── performance.py              # 绩效
+│   │   ├── weather.py                   # 天气
 │   │   └── common.py                    # 文件上传/二次确认
 │   ├── api/                             # FastAPI路由层（Router）
 │   │   ├── __init__.py
@@ -3603,6 +3946,7 @@ server/
 │   │       ├── faq.py                   # FAQ路由（#96-#101）
 │   │       ├── users.py                 # 用户路由（#102-#115）
 │   │       ├── notifications.py         # 通知路由（#170-#173）
+│   │       ├── weather.py               # 天气路由（#191-#192）
 │   │       ├── upload.py               # 文件上传路由（#174-#175）
 │   │       └── admin/                   # 管理后台路由
 │   │           ├── __init__.py
@@ -3619,7 +3963,13 @@ server/
 │   │           ├── settings.py          # 系统设置（#155-#158）
 │   │           ├── staff.py             # 权限管理（#159-#165）
 │   │           ├── operation_logs.py    # 操作日志（#166-#167）
-│   │           └── confirm.py           # 二次确认（#168-#169）
+│   │           ├── confirm.py           # 二次确认（#168-#169）
+│   │           ├── bundles.py           # 搭配售卖管理（#178-#185）
+│   │           ├── camp_maps.py         # 营地地图管理（#194-#198）
+│   │           ├── games.py             # H5游戏管理（#201-#204）
+│   │           ├── expenses.py          # 报销管理（#205-#213）
+│   │           ├── performance.py       # 绩效管理（#214-#219）
+│   │           └── seckill.py           # 秒杀监控（#189-#190）
 │   ├── services/                        # 业务逻辑层（Service）
 │   │   ├── __init__.py
 │   │   ├── auth_service.py              # 认证/登录/Token管理
@@ -3643,6 +3993,13 @@ server/
 │   │   ├── operation_log_service.py     # 操作日志
 │   │   ├── confirm_service.py           # 二次确认校验
 │   │   ├── upload_service.py            # 文件上传
+│   │   ├── bundle_service.py            # 搭配售卖逻辑
+│   │   ├── camp_map_service.py          # 营地地图管理
+│   │   ├── weather_service.py           # 天气数据获取/缓存
+│   │   ├── expense_service.py           # 报销申请/审批
+│   │   ├── performance_service.py       # 绩效计算/统计
+│   │   ├── seckill_service.py           # 秒杀预填/监控
+│   │   ├── game_service.py              # H5游戏/Token签名
 │   │   └── stats_service.py             # 报表/统计
 │   ├── repositories/                    # 数据访问层（Repository）
 │   │   ├── __init__.py
@@ -3660,6 +4017,10 @@ server/
 │   │   ├── notification_repo.py
 │   │   ├── faq_repo.py
 │   │   ├── stats_repo.py
+│   │   ├── bundle_repo.py              # 搭配配置/搭配项
+│   │   ├── camp_map_repo.py            # 营地地图/区域
+│   │   ├── expense_repo.py             # 报销类型/申请
+│   │   ├── performance_repo.py         # 绩效配置/记录/明细
 │   │   └── operation_log_repo.py
 │   ├── tasks/                           # Celery异步/定时任务
 │   │   ├── __init__.py
@@ -3669,6 +4030,7 @@ server/
 │   │   ├── finance.py                   # 收入确认/押金超时
 │   │   ├── notification.py              # 行程/活动/审批超时提醒
 │   │   ├── stats.py                     # Dashboard/热力图/日周月报
+│   │   ├── performance.py              # 日绩效/月绩效计算
 │   │   └── cleanup.py                   # Token/验证码/日志清理
 │   ├── middleware/                       # 自定义中间件
 │   │   ├── __init__.py
@@ -3747,6 +4109,10 @@ miniprogram/
 │   ├── user.service.ts                  # 用户/身份/地址API
 │   ├── notification.service.ts          # 通知API
 │   ├── faq.service.ts                   # FAQ/客服API
+│   ├── bundle.service.ts                # 搭配售卖API
+│   ├── weather.service.ts               # 天气API
+│   ├── game.service.ts                  # H5游戏API
+│   ├── seckill.service.ts              # 秒杀预填/在线人数API
 │   └── upload.service.ts               # 文件上传API
 ├── store/                               # 全局状态管理
 │   ├── index.ts                         # Store初始化
@@ -3767,7 +4133,10 @@ miniprogram/
 │   ├── loading/                         # 加载状态
 │   ├── image-viewer/                    # 图片预览
 │   ├── customer-service-btn/            # 客服悬浮按钮
-│   └── subscribe-guide/                 # 订阅消息引导弹窗
+│   ├── subscribe-guide/                 # 订阅消息引导弹窗
+│   ├── weather-card/                    # 天气卡片组件
+│   ├── bundle-picker/                   # 搭配商品选择器
+│   └── seckill-prefill/                 # 秒杀预填资料组件
 ├── pages/                               # 主包页面（TabBar + 高频页面）
 │   ├── index/                           # 首页（轮播/推荐/快捷入口）
 │   ├── category/                        # 分类页（7大品类入口/筛选）
@@ -3778,7 +4147,9 @@ miniprogram/
 │   ├── pages/
 │   │   ├── product-list/                # 商品列表页（筛选/排序）
 │   │   ├── product-detail/              # 商品详情页（轮播/日历/预定）
-│   │   └── seckill/                     # 秒杀页面（倒计时/快速下单）
+│   │   ├── seckill/                     # 秒杀页面（倒计时/快速下单）
+│   │   ├── camp-map/                    # 营地分区地图页（可交互区域/关联商品跳转）
+│   │   └── games/                       # H5小游戏列表/详情页（web-view嵌入）
 │   └── components/
 │       ├── attribute-filter/            # 营位属性筛选
 │       └── price-calendar/              # 价格日历
@@ -3849,6 +4220,13 @@ admin/
 │   │   ├── staff.ts                     # 员工/权限API
 │   │   ├── operation-log.ts            # 操作日志API
 │   │   ├── confirm.ts                   # 二次确认API
+│   │   ├── bundle.ts                    # 搭配售卖API
+│   │   ├── camp-map.ts                  # 营地地图API
+│   │   ├── game.ts                      # H5游戏API
+│   │   ├── expense.ts                   # 报销API
+│   │   ├── performance.ts              # 绩效API
+│   │   ├── seckill.ts                   # 秒杀监控API
+│   │   ├── weather.ts                   # 天气API
 │   │   └── upload.ts                    # 文件上传API
 │   ├── types/                           # TypeScript类型
 │   │   ├── api.ts                       # 请求/响应类型
@@ -3896,6 +4274,10 @@ admin/
 │   │   │       ├── ActivityExtForm.vue  # 活动扩展表单
 │   │   │       ├── ShopExtForm.vue      # 商品售卖扩展表单
 │   │   │       └── PricingRuleEditor.vue # 定价规则编辑器
+│   │   ├── bundle/
+│   │   │   ├── BundleConfigList.vue     # 搭配配置列表
+│   │   │   └── components/
+│   │   │       └── BundleConfigEditor.vue # 搭配配置编辑器
 │   │   ├── inventory/
 │   │   │   ├── InventoryManage.vue      # 库存管理（日历视图/批量调整）
 │   │   │   └── components/
@@ -3958,6 +4340,24 @@ admin/
 │   │   │       └── PermissionEditor.vue
 │   │   └── operation-log/
 │   │       └── OperationLogList.vue     # 操作日志查询
+│   │   ├── camp-map/
+│   │   │   ├── CampMapManage.vue        # 营地地图管理
+│   │   │   └── components/
+│   │   │       └── ZoneEditor.vue       # 区域编辑器
+│   │   ├── game/
+│   │   │   └── GameList.vue             # H5游戏配置列表
+│   │   ├── seckill/
+│   │   │   └── SeckillMonitor.vue       # 秒杀实时监控面板
+│   │   ├── expense/
+│   │   │   ├── ExpenseList.vue          # 报销申请列表
+│   │   │   ├── ExpenseStats.vue         # 报销统计
+│   │   │   └── components/
+│   │   │       └── ExpenseDetailDialog.vue # 报销详情弹窗
+│   │   ├── performance/
+│   │   │   ├── PerformanceManage.vue    # 绩效管理主页
+│   │   │   └── components/
+│   │   │       ├── PerformanceDetailDialog.vue # 绩效详情弹窗
+│   │   │       └── PerformanceConfigEditor.vue # 绩效指标配置编辑器
 │   ├── components/                      # 通用组件
 │   │   ├── ConfirmDialog.vue            # 二次确认弹窗（确认码/密码）
 │   │   ├── ImageUpload.vue              # 图片上传组件
