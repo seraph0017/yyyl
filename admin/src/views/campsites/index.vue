@@ -117,18 +117,34 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="router.push(`/campsites/${row.id}/edit`)">编辑</el-button>
-            <el-button text type="primary" @click="router.push(`/campsites/${row.id}/inventory`)">库存</el-button>
-            <el-button text :type="row.status === 'on_sale' ? 'warning' : 'success'" @click="handleToggleStatus(row)">
-              {{ row.status === 'on_sale' ? '下架' : '上架' }}
-            </el-button>
-            <el-popconfirm title="确定删除该营位？" @confirm="handleDelete(row.id)">
-              <template #reference>
-                <el-button text type="danger">删除</el-button>
-              </template>
-            </el-popconfirm>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="router.push(`/campsites/${row.id}/edit`)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="库存" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--inventory" circle size="small" @click="router.push(`/campsites/${row.id}/inventory`)">
+                  <el-icon><Box /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip :content="row.status === 'on_sale' ? '下架' : '上架'" placement="top" :show-after="400">
+                <el-button class="action-btn" :class="row.status === 'on_sale' ? 'action-btn--offline' : 'action-btn--online'" circle size="small" @click="handleToggleStatus(row)">
+                  <el-icon><Bottom v-if="row.status === 'on_sale'" /><Top v-else /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-popconfirm title="确定删除该营位？" @confirm="handleDelete(row.id)" width="200">
+                <template #reference>
+                  <el-tooltip content="删除" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--delete" circle size="small">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -153,7 +169,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Plus, Place } from '@element-plus/icons-vue'
+import { Search, Plus, Place, Edit, Delete, Top, Bottom, Box } from '@element-plus/icons-vue'
 import { getCampsites, getCampsiteStats, updateCampsiteStatus, deleteCampsite } from '@/api/campsite'
 import type { CampsiteListItem, CampsiteSearchParams, CampsiteStatsOverview } from '@/types/campsite'
 
@@ -253,26 +269,30 @@ onMounted(() => {
   margin-bottom: 16px;
 
   .stat-card {
-    background: #fff;
-    border-radius: 8px;
+    background: var(--color-bg-card);
+    border-radius: var(--radius-base);
     padding: 20px 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-light);
+    border: 1px solid var(--color-border-light);
+    transition: var(--transition-base);
+    &:hover { box-shadow: var(--shadow-base); transform: translateY(-2px); }
 
     .stat-value {
       font-size: 28px;
-      font-weight: 700;
-      color: #303133;
+      font-weight: 800;
+      color: var(--color-text);
       margin-bottom: 4px;
     }
 
     .stat-label {
       font-size: 13px;
-      color: #909399;
+      color: var(--color-text-placeholder);
+      letter-spacing: 0.5px;
     }
 
-    &.stat-success .stat-value { color: #67C23A; }
-    &.stat-primary .stat-value { color: #409EFF; }
-    &.stat-warning .stat-value { color: #E6A23C; }
+    &.stat-success .stat-value { color: var(--color-primary); }
+    &.stat-primary .stat-value { color: #4a8ba8; }
+    &.stat-warning .stat-value { color: var(--color-accent); }
   }
 }
 
@@ -290,32 +310,35 @@ onMounted(() => {
 .campsite-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 
   .campsite-cover {
-    width: 48px;
-    height: 48px;
-    border-radius: 6px;
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-small);
     flex-shrink: 0;
+    box-shadow: var(--shadow-light);
   }
 
   .image-placeholder {
-    width: 48px;
-    height: 48px;
-    background: #e8f5e9;
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, var(--color-bg), var(--color-bg-warm));
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #4CAF50;
-    border-radius: 6px;
+    color: var(--color-primary);
+    border-radius: var(--radius-small);
     font-size: 20px;
+    border: 1px solid var(--color-border-light);
   }
 
   .campsite-name {
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     margin-bottom: 4px;
-    color: #303133;
+    color: var(--color-text);
+    letter-spacing: 0.3px;
   }
 
   .campsite-meta {
@@ -325,10 +348,11 @@ onMounted(() => {
 
     .area-badge, .position-badge {
       font-size: 12px;
-      color: #909399;
-      background: #f5f7fa;
-      padding: 1px 6px;
-      border-radius: 3px;
+      color: var(--color-text-placeholder);
+      background: var(--color-bg-warm);
+      padding: 2px 8px;
+      border-radius: 4px;
+      border: 1px solid var(--color-border-light);
     }
   }
 }
@@ -340,29 +364,31 @@ onMounted(() => {
 
   .attr-icon {
     font-size: 16px;
-    opacity: 0.4;
+    opacity: 0.35;
     &.active { opacity: 1; }
   }
 }
 
 .price {
-  font-weight: 600;
-  color: #F44336;
+  font-weight: 700;
+  color: var(--color-accent);
 }
 
 .stock-info {
   .stock-available {
     font-weight: 600;
-    color: #67C23A;
-    &.stock-low { color: #E6A23C; }
+    color: var(--color-primary);
+    &.stock-low { color: var(--color-accent); }
   }
-  .stock-divider { color: #c0c4cc; margin: 0 2px; }
-  .stock-total { color: #909399; }
+  .stock-divider { color: var(--color-border); margin: 0 2px; }
+  .stock-total { color: var(--color-text-placeholder); }
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
 }
 </style>

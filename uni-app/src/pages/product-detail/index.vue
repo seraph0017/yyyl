@@ -75,8 +75,24 @@
     <!-- 日期选择 -->
     <view class="detail-date card" @tap="onOpenCalendar">
       <view class="detail-section-title">选择日期</view>
-      <view class="detail-date__selected" v-if="selectedDates.length > 0">
-        <text class="detail-date__chip" v-for="d in selectedDates" :key="d">{{ d }}</text>
+      <view class="detail-date__range" v-if="checkInDate && checkOutDate">
+        <view class="detail-date__point">
+          <text class="detail-date__label">入住</text>
+          <text class="detail-date__value">{{ formatDateShort(checkInDate) }}</text>
+        </view>
+        <view class="detail-date__arrow-line">
+          <view class="detail-date__line"></view>
+          <text class="detail-date__nights">{{ selectedDates.length }}晚</text>
+          <view class="detail-date__line"></view>
+        </view>
+        <view class="detail-date__point">
+          <text class="detail-date__label">离店</text>
+          <text class="detail-date__value">{{ formatDateShort(checkOutDate) }}</text>
+        </view>
+      </view>
+      <view class="detail-date__selected" v-else-if="checkInDate">
+        <text class="detail-date__chip">入住: {{ formatDateShort(checkInDate) }}</text>
+        <text class="detail-date__hint">请选择离店日期</text>
       </view>
       <view class="detail-date__placeholder" v-else>
         <text>请选择入营日期</text>
@@ -113,7 +129,7 @@
     <!-- 商品描述 -->
     <view class="detail-desc card">
       <view class="detail-section-title">商品介绍</view>
-      <text class="detail-desc__content">{{ product.description }}</text>
+      <rich-text class="detail-desc__content" :nodes="product.description"></rich-text>
     </view>
 
     <!-- 底部操作栏 -->
@@ -166,32 +182,46 @@
             :class="[
               'calendar-day',
               item.isCurrentMonth ? '' : 'calendar-day--other',
+              item.isCheckIn ? 'calendar-day--check-in' : '',
+              item.isCheckOut ? 'calendar-day--check-out' : '',
+              item.isInRange ? 'calendar-day--in-range' : '',
               item.isSelected ? 'calendar-day--selected' : '',
               item.isToday ? 'calendar-day--today' : '',
+              (item.isCheckIn && checkOutDate) ? 'calendar-day--has-checkout' : '',
               !item.isAvailable || item.isPast ? 'calendar-day--disabled' : ''
             ]"
             @tap="onSelectDate(item)"
           >
             <text class="calendar-day__num">{{ item.day }}</text>
-            <text class="calendar-day__price" v-if="item.isCurrentMonth && item.isAvailable && item.price > 0">¥{{ item.price }}</text>
+            <text class="calendar-day__tag" v-if="item.isCheckIn && item.isCurrentMonth">入住</text>
+            <text class="calendar-day__tag" v-else-if="item.isCheckOut && item.isCurrentMonth">离店</text>
+            <text class="calendar-day__price" v-else-if="item.isCurrentMonth && item.isAvailable && item.price > 0">¥{{ item.price }}</text>
             <text class="calendar-day__label" v-if="item.isCurrentMonth && !item.isAvailable && !item.isPast">售罄</text>
           </view>
         </view>
 
         <view class="calendar-legend">
           <view class="calendar-legend__item">
-            <view class="calendar-legend__dot calendar-legend__dot--workday"></view>
-            <text>工作日</text>
+            <view class="calendar-legend__dot calendar-legend__dot--checkin"></view>
+            <text>入住</text>
+          </view>
+          <view class="calendar-legend__item">
+            <view class="calendar-legend__dot calendar-legend__dot--checkout"></view>
+            <text>离店</text>
           </view>
           <view class="calendar-legend__item">
             <view class="calendar-legend__dot calendar-legend__dot--weekend"></view>
-            <text>周末</text>
+            <text>周末价</text>
           </view>
         </view>
 
         <view class="calendar-footer">
-          <text class="calendar-footer__info">已选 {{ selectedDates.length }} 天</text>
-          <view class="calendar-footer__btn" @tap="onCloseCalendar">
+          <view class="calendar-footer__summary" v-if="selectedDates.length > 0">
+            <text class="calendar-footer__nights">{{ selectedDates.length }}晚</text>
+            <text class="calendar-footer__price">合计 ¥{{ totalPrice }}</text>
+          </view>
+          <text class="calendar-footer__info" v-else>请选择入住日期</text>
+          <view class="calendar-footer__btn" @tap="onConfirmCalendar">
             <text>确定</text>
           </view>
         </view>
@@ -248,11 +278,16 @@ interface ICalendarDay {
   isToday: boolean
   isPast: boolean
   isCurrentMonth: boolean
+  isCheckIn: boolean
+  isCheckOut: boolean
+  isInRange: boolean
 }
 
 const product = ref<IProduct | null>(null)
 const swiperCurrent = ref(0)
-const selectedDates = ref<string[]>([])
+const selectedDates = ref<string[]>([])       // 住宿日期（入住~离店前一天）
+const checkInDate = ref<string | null>(null)   // 入住日期
+const checkOutDate = ref<string | null>(null)  // 离店日期
 const calendarDays = ref<ICalendarDay[]>([])
 const currentMonth = ref('')
 const calendarYear = ref(2026)
@@ -266,6 +301,16 @@ const disclaimerAgreed = ref(false)
 const loading = ref(true)
 const isFavorite = ref(false)
 const notStarted = ref(false)
+
+/** 最大连续预定天数限制（PRD 3.2.1: MAX_CONSECUTIVE = 5，即最多住5晚） */
+const MAX_BOOKING_NIGHTS = 5
+
+/** 格式化日期为短格式 (M月D日 周X) */
+function formatDateShort(dateStr: string): string {
+  const d = new Date(dateStr)
+  const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${weekDays[d.getDay()]}`
+}
 
 onLoad((options) => {
   const id = options?.id || '1'
@@ -356,6 +401,9 @@ function generateCalendar() {
 
   const days: ICalendarDay[] = []
 
+  const ciDate = checkInDate.value
+  const coDate = checkOutDate.value
+
   // 上月补位
   const prevMonthLastDay = new Date(year, month - 1, 0).getDate()
   for (let i = startWeekDay - 1; i >= 0; i--) {
@@ -366,6 +414,7 @@ function generateCalendar() {
     days.push({
       date: dateStr, day: d, price: 0, dateType: '', stock: 0,
       isAvailable: false, isSelected: false, isToday: false, isPast: true, isCurrentMonth: false,
+      isCheckIn: false, isCheckOut: false, isInRange: false,
     })
   }
 
@@ -376,6 +425,11 @@ function generateCalendar() {
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
     const isPast = dateStr < todayStr
 
+    const isCheckIn = dateStr === ciDate
+    const isCheckOut = dateStr === coDate
+    const isInRange = !!(ciDate && coDate && dateStr > ciDate && dateStr < coDate)
+    const isSelected = isCheckIn || isCheckOut || isInRange
+
     days.push({
       date: dateStr,
       day: d,
@@ -383,10 +437,13 @@ function generateCalendar() {
       dateType: isWeekend ? '周末' : '工作日',
       stock: isPast ? 0 : Math.floor(Math.random() * 8) + 1,
       isAvailable: !isPast,
-      isSelected: selectedDates.value.includes(dateStr),
+      isSelected,
       isToday: dateStr === todayStr,
       isPast,
       isCurrentMonth: true,
+      isCheckIn,
+      isCheckOut,
+      isInRange,
     })
   }
 
@@ -399,6 +456,7 @@ function generateCalendar() {
     days.push({
       date: dateStr, day: d, price: 0, dateType: '', stock: 0,
       isAvailable: false, isSelected: false, isToday: false, isPast: false, isCurrentMonth: false,
+      isCheckIn: false, isCheckOut: false, isInRange: false,
     })
   }
 
@@ -444,21 +502,87 @@ function onNextMonth() {
   generateCalendar()
 }
 
-/** 选择日期 */
+/** 选择日期 — 范围模式（入住→离店） */
 function onSelectDate(item: ICalendarDay) {
   if (!item.isAvailable || item.isPast) return
 
   const date = item.date
-  const index = selectedDates.value.indexOf(date)
-  if (index >= 0) {
-    selectedDates.value.splice(index, 1)
+
+  if (!checkInDate.value) {
+    // 第一次点击：设置入住日
+    checkInDate.value = date
+    checkOutDate.value = null
+    selectedDates.value = []
+  } else if (!checkOutDate.value) {
+    // 第二次点击：设置离店日
+    if (date === checkInDate.value) {
+      // 同一天取消
+      checkInDate.value = null
+      selectedDates.value = []
+    } else if (date < checkInDate.value) {
+      // 选了更早的日期，重新设入住日
+      checkInDate.value = date
+      checkOutDate.value = null
+      selectedDates.value = []
+    } else {
+      // 校验连续天数限制
+      const nights = daysBetween(checkInDate.value, date)
+      if (nights > MAX_BOOKING_NIGHTS) {
+        uni.showToast({
+          title: `最多连续预定${MAX_BOOKING_NIGHTS}晚`,
+          icon: 'none',
+        })
+        return
+      }
+      // 设置离店日，自动生成入住~离店前一天的日期范围
+      checkOutDate.value = date
+      fillDateRange()
+    }
   } else {
-    selectedDates.value.push(date)
-    selectedDates.value.sort()
+    // 已有完整范围，重新选择
+    checkInDate.value = date
+    checkOutDate.value = null
+    selectedDates.value = []
   }
 
   generateCalendar()
   calcPrice()
+}
+
+/** 计算两个日期之间的天数 */
+function daysBetween(startStr: string, endStr: string): number {
+  const start = new Date(startStr)
+  const end = new Date(endStr)
+  return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+}
+
+/** 填充入住到离店前一天的所有日期 */
+function fillDateRange() {
+  const dates: string[] = []
+  if (!checkInDate.value || !checkOutDate.value) return
+
+  const start = new Date(checkInDate.value)
+  const end = new Date(checkOutDate.value)
+
+  const cursor = new Date(start)
+  while (cursor < end) {
+    const y = cursor.getFullYear()
+    const m = String(cursor.getMonth() + 1).padStart(2, '0')
+    const d = String(cursor.getDate()).padStart(2, '0')
+    dates.push(`${y}-${m}-${d}`)
+    cursor.setDate(cursor.getDate() + 1)
+  }
+
+  selectedDates.value = dates
+}
+
+/** 确认日历选择 */
+function onConfirmCalendar() {
+  if (checkInDate.value && !checkOutDate.value) {
+    uni.showToast({ title: '请选择离店日期', icon: 'none' })
+    return
+  }
+  showCalendar.value = false
 }
 
 /** 计算价格 */
@@ -573,53 +697,58 @@ function onGoBack() {
   padding-bottom: 160rpx;
 }
 
-/* 自定义导航栏 */
+/* 自定义导航栏 — 磨砂玻璃 */
 .custom-nav {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 200;
-  background-color: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(20px);
-  box-shadow: 0 1rpx 6rpx rgba(0, 0, 0, 0.06);
+  background: rgba(250, 246, 240, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 1rpx 8rpx rgba(42, 37, 32, 0.05);
 
   &__content {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 16rpx;
+    padding: 0 20rpx;
   }
 
   &__back {
-    width: 72rpx;
-    height: 72rpx;
+    width: 68rpx;
+    height: 68rpx;
     display: flex;
     justify-content: center;
     align-items: center;
     border-radius: 50%;
+    background: rgba(42, 37, 32, 0.04);
+    transition: var(--transition-base);
 
     &:active {
-      background-color: rgba(0, 0, 0, 0.05);
+      background-color: rgba(42, 37, 32, 0.1);
+      transform: scale(0.92);
     }
   }
 
   &__back-icon {
-    font-size: 52rpx;
-    font-weight: 300;
+    font-size: 48rpx;
+    font-weight: 400;
     color: var(--color-text);
     line-height: 1;
-    margin-top: -4rpx;
+    margin-top: -2rpx;
   }
 
   &__title {
     font-size: var(--font-size-md);
     font-weight: 600;
     color: var(--color-text);
+    letter-spacing: 1rpx;
   }
 
   &__right {
-    width: 72rpx;
+    width: 68rpx;
   }
 }
 
@@ -628,23 +757,36 @@ function onGoBack() {
   position: relative;
 
   &__inner {
-    height: 560rpx;
+    height: 600rpx;
   }
 
   &__slide {
     width: 100%;
     height: 100%;
+    position: relative;
 
     image {
       width: 100%;
       height: 100%;
+    }
+
+    /* 底部渐变遮罩 */
+    &::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 160rpx;
+      background: linear-gradient(to top, rgba(250, 246, 240, 0.6), transparent);
+      pointer-events: none;
     }
   }
 
   &__placeholder {
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #2E7D32, #4CAF50);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -657,21 +799,25 @@ function onGoBack() {
 
   &__placeholder-text {
     font-size: var(--font-size-lg) !important;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 254, 250, 0.8);
     margin-top: 16rpx;
+    letter-spacing: 2rpx;
   }
 
   &__indicator {
     position: absolute;
-    bottom: 24rpx;
-    right: 24rpx;
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 6rpx 16rpx;
+    bottom: 28rpx;
+    right: 28rpx;
+    background: rgba(42, 37, 32, 0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    padding: 8rpx 20rpx;
     border-radius: var(--radius-round);
 
     text {
       font-size: var(--font-size-xs);
-      color: #fff;
+      color: var(--color-text-white);
+      letter-spacing: 2rpx;
     }
   }
 }
@@ -697,10 +843,11 @@ function onGoBack() {
   &__name {
     display: block;
     font-size: var(--font-size-xl);
-    font-weight: 700;
+    font-weight: 800;
     color: var(--color-text);
     margin-top: 16rpx;
-    line-height: 1.4;
+    line-height: 1.5;
+    letter-spacing: 1rpx;
   }
 
   &__sales {
@@ -708,6 +855,7 @@ function onGoBack() {
     font-size: var(--font-size-sm);
     color: var(--color-text-placeholder);
     margin-top: 8rpx;
+    letter-spacing: 0.5rpx;
   }
 }
 
@@ -716,9 +864,10 @@ function onGoBack() {
   align-items: center;
   gap: 16rpx;
   margin-top: 20rpx;
-  padding: 16rpx 20rpx;
-  background: linear-gradient(135deg, rgba(229, 57, 53, 0.08), rgba(255, 107, 53, 0.08));
-  border-radius: var(--radius-md);
+  padding: 18rpx 24rpx;
+  background: linear-gradient(135deg, rgba(196, 92, 74, 0.08), rgba(212, 128, 74, 0.08));
+  border: 1rpx solid rgba(196, 92, 74, 0.1);
+  border-radius: var(--radius-lg);
 
   &__label {
     font-size: var(--font-size-base);
@@ -727,18 +876,33 @@ function onGoBack() {
   }
 }
 
-/* 通用段标题 */
+/* 通用段标题 — 左侧渐变指示条 */
 .detail-section-title {
   font-size: var(--font-size-md);
-  font-weight: 600;
+  font-weight: 700;
   color: var(--color-text);
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
+  padding-left: 20rpx;
+  position: relative;
+  letter-spacing: 0.5rpx;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 6rpx;
+    height: 60%;
+    background: linear-gradient(to bottom, var(--color-primary), var(--color-accent));
+    border-radius: 3rpx;
+  }
 }
 
 /* 属性标签 */
 .detail-attrs {
   margin: 0 24rpx 16rpx;
-  padding: 24rpx;
+  padding: 28rpx;
 
   &__list {
     display: grid;
@@ -750,13 +914,26 @@ function onGoBack() {
 .detail-attr {
   display: flex;
   align-items: center;
-  padding: 16rpx;
-  background-color: var(--color-bg-light);
+  padding: 20rpx 16rpx;
+  background: linear-gradient(135deg, var(--color-bg-light), var(--color-bg-warm));
   border-radius: var(--radius-md);
+  border: 1rpx solid rgba(42, 37, 32, 0.03);
+  transition: var(--transition-base);
+
+  &:active {
+    transform: scale(0.97);
+  }
 
   &__icon {
-    font-size: 32rpx;
-    margin-right: 12rpx;
+    font-size: 36rpx;
+    margin-right: 14rpx;
+    width: 56rpx;
+    height: 56rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.7);
+    border-radius: var(--radius-sm);
   }
 
   &__content {
@@ -767,12 +944,14 @@ function onGoBack() {
   &__label {
     font-size: var(--font-size-xs);
     color: var(--color-text-placeholder);
+    letter-spacing: 0.5rpx;
   }
 
   &__value {
     font-size: var(--font-size-sm);
     color: var(--color-text);
-    font-weight: 500;
+    font-weight: 600;
+    margin-top: 2rpx;
   }
 }
 
@@ -781,10 +960,59 @@ function onGoBack() {
   margin: 0 24rpx 16rpx;
   padding: 24rpx;
 
+  &__range {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16rpx 0;
+  }
+
+  &__point {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6rpx;
+  }
+
+  &__label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-placeholder);
+    letter-spacing: 1rpx;
+  }
+
+  &__value {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  &__arrow-line {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12rpx;
+    margin: 0 20rpx;
+  }
+
+  &__line {
+    flex: 1;
+    height: 2rpx;
+    background: linear-gradient(to right, var(--color-primary), var(--color-accent));
+    border-radius: 1rpx;
+  }
+
+  &__nights {
+    font-size: var(--font-size-sm);
+    color: var(--color-accent);
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
   &__selected {
     display: flex;
     flex-wrap: wrap;
     gap: 12rpx;
+    align-items: center;
   }
 
   &__chip {
@@ -795,6 +1023,11 @@ function onGoBack() {
     font-size: var(--font-size-sm);
     border-radius: var(--radius-round);
     font-weight: 500;
+  }
+
+  &__hint {
+    font-size: var(--font-size-sm);
+    color: var(--color-accent);
   }
 
   &__placeholder {
@@ -891,15 +1124,17 @@ function onGoBack() {
   right: 0;
   display: flex;
   align-items: center;
-  padding: 16rpx 24rpx;
-  background-color: var(--color-bg-white);
-  box-shadow: 0 -4rpx 16rpx rgba(0, 0, 0, 0.06);
+  padding: 16rpx 28rpx;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  border-top: 1rpx solid rgba(42, 37, 32, 0.06);
+  box-shadow: 0 -4rpx 24rpx rgba(42, 37, 32, 0.06);
   z-index: 100;
 
   &__left {
     display: flex;
-    gap: 24rpx;
-    margin-right: 24rpx;
+    gap: 28rpx;
+    margin-right: 28rpx;
   }
 
   &__icon-btn {
@@ -909,12 +1144,13 @@ function onGoBack() {
     gap: 2rpx;
 
     text:first-child { font-size: 36rpx; }
-    &:active { opacity: 0.7; }
+    &:active { opacity: 0.7; transform: scale(0.92); }
   }
 
   &__icon-text {
     font-size: 18rpx !important;
     color: var(--color-text-secondary);
+    letter-spacing: 0.5rpx;
   }
 
   &__right {
@@ -925,28 +1161,30 @@ function onGoBack() {
 
   &__cart-btn {
     flex: 1;
-    height: 84rpx;
+    height: 88rpx;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: linear-gradient(135deg, #FFC107, #FF9800);
+    background: linear-gradient(135deg, var(--color-accent), #b8944e);
     border-radius: var(--radius-xl);
+    box-shadow: 0 4rpx 16rpx rgba(200, 168, 114, 0.3);
 
-    text { font-size: var(--font-size-base); color: #fff; font-weight: 600; }
-    &:active { opacity: 0.85; }
+    text { font-size: var(--font-size-base); color: #fff; font-weight: 600; letter-spacing: 2rpx; }
+    &:active { opacity: 0.9; transform: scale(0.98); }
   }
 
   &__book-btn {
     flex: 1;
-    height: 84rpx;
+    height: 88rpx;
     display: flex;
     justify-content: center;
     align-items: center;
     background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
     border-radius: var(--radius-xl);
+    box-shadow: 0 4rpx 16rpx rgba(45, 74, 62, 0.25);
 
-    text { font-size: var(--font-size-base); color: #fff; font-weight: 600; }
-    &:active { opacity: 0.85; }
+    text { font-size: var(--font-size-base); color: #fff; font-weight: 600; letter-spacing: 2rpx; }
+    &:active { opacity: 0.9; transform: scale(0.98); }
   }
 }
 
@@ -1024,6 +1262,7 @@ function onGoBack() {
   min-height: 90rpx;
   border-radius: var(--radius-sm);
   transition: all 0.2s ease;
+  position: relative;
 
   &__num {
     font-size: var(--font-size-base);
@@ -1043,6 +1282,13 @@ function onGoBack() {
     margin-top: 2rpx;
   }
 
+  &__tag {
+    font-size: 16rpx;
+    color: rgba(255, 255, 255, 0.9);
+    margin-top: 2rpx;
+    letter-spacing: 1rpx;
+  }
+
   &--other {
     .calendar-day__num { color: #D0D0D0; }
   }
@@ -1051,7 +1297,36 @@ function onGoBack() {
     .calendar-day__num { color: var(--color-primary); font-weight: 700; }
   }
 
-  &--selected {
+  /* 入住日 — 深色端点（默认全圆角，有离店日时左圆角） */
+  &--check-in {
+    background-color: var(--color-primary);
+    border-radius: var(--radius-sm);
+    .calendar-day__num { color: #fff; font-weight: 700; }
+    .calendar-day__price { color: rgba(255, 255, 255, 0.8); }
+
+    &.calendar-day--has-checkout {
+      border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+    }
+  }
+
+  /* 离店日 — 深色右端点 */
+  &--check-out {
+    background-color: var(--color-primary);
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    .calendar-day__num { color: #fff; font-weight: 700; }
+    .calendar-day__price { color: rgba(255, 255, 255, 0.8); }
+  }
+
+  /* 范围中间日期 — 浅色连续背景 */
+  &--in-range {
+    background-color: rgba(45, 74, 62, 0.1);
+    border-radius: 0;
+    .calendar-day__num { color: var(--color-primary); font-weight: 600; }
+    .calendar-day__price { color: var(--color-accent); }
+  }
+
+  /* 兜底selected（单选入住时全圆角） */
+  &--selected:not(.calendar-day--check-in):not(.calendar-day--check-out):not(.calendar-day--in-range) {
     background-color: var(--color-primary);
     .calendar-day__num { color: #fff; }
     .calendar-day__price { color: rgba(255, 255, 255, 0.8); }
@@ -1084,7 +1359,8 @@ function onGoBack() {
     height: 16rpx;
     border-radius: 50%;
 
-    &--workday { background-color: var(--color-primary); }
+    &--checkin { background-color: var(--color-primary); }
+    &--checkout { background-color: var(--color-primary); border: 2rpx solid var(--color-accent); }
     &--weekend { background-color: var(--color-orange); }
   }
 }
@@ -1094,6 +1370,24 @@ function onGoBack() {
   justify-content: space-between;
   align-items: center;
   margin-top: 24rpx;
+
+  &__summary {
+    display: flex;
+    align-items: baseline;
+    gap: 16rpx;
+  }
+
+  &__nights {
+    font-size: var(--font-size-base);
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  &__price {
+    font-size: var(--font-size-lg);
+    font-weight: 800;
+    color: var(--color-accent);
+  }
 
   &__info {
     font-size: var(--font-size-base);
@@ -1118,7 +1412,9 @@ function onGoBack() {
 .disclaimer-mask {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: rgba(42, 37, 32, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 1000;
   display: flex;
   justify-content: center;
@@ -1128,61 +1424,78 @@ function onGoBack() {
 .disclaimer-popup {
   width: 85%;
   max-height: 80vh;
-  background-color: var(--color-bg-white);
+  background: var(--color-bg-white);
   border-radius: var(--radius-xl);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: fadeIn 0.2s ease;
+  animation: fadeIn 0.3s var(--ease-out-expo);
+  box-shadow: 0 24rpx 64rpx rgba(42, 37, 32, 0.15);
 }
 
 .disclaimer-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 28rpx 32rpx;
-  border-bottom: 1rpx solid #F0F0F0;
+  padding: 32rpx 36rpx;
+  border-bottom: 1rpx solid var(--color-bg-light);
+  background: linear-gradient(135deg, rgba(200, 168, 114, 0.05), transparent);
 }
 
 .disclaimer-title {
   font-size: var(--font-size-lg);
   font-weight: 700;
   color: var(--color-text);
+  letter-spacing: 1rpx;
 }
 
 .disclaimer-close {
   font-size: var(--font-size-xl);
   color: var(--color-text-placeholder);
   padding: 8rpx;
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 50%;
+  transition: var(--transition-base);
+
+  &:active {
+    background: var(--color-bg-light);
+  }
 }
 
 .disclaimer-content {
-  padding: 28rpx 32rpx;
+  padding: 32rpx 36rpx;
   max-height: 50vh;
 
   text {
     font-size: var(--font-size-base);
     color: var(--color-text-secondary);
-    line-height: 1.8;
+    line-height: 2;
     white-space: pre-wrap;
+    letter-spacing: 0.5rpx;
   }
 }
 
 .disclaimer-footer {
-  padding: 20rpx 32rpx 32rpx;
+  padding: 24rpx 36rpx 36rpx;
 }
 
 .disclaimer-agree-btn {
   width: 100%;
-  height: 84rpx;
+  height: 88rpx;
   display: flex;
   justify-content: center;
   align-items: center;
-  background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
   border-radius: var(--radius-xl);
+  box-shadow: 0 4rpx 16rpx rgba(45, 74, 62, 0.2);
+  transition: var(--transition-base);
 
-  text { font-size: var(--font-size-base); color: #fff; font-weight: 600; }
-  &:active { opacity: 0.85; }
+  text { font-size: var(--font-size-base); color: var(--color-text-white); font-weight: 600; letter-spacing: 2rpx; }
+  &:active { opacity: 0.85; transform: scale(0.98); }
 }
 
 /* 动画 */
@@ -1192,7 +1505,7 @@ function onGoBack() {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: scale(0.9); }
+  from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
 }
 
@@ -1201,6 +1514,7 @@ function onGoBack() {
   display: flex;
   justify-content: center;
   align-items: center;
-  text { font-size: var(--font-size-base); color: var(--color-text-placeholder); }
+  background: var(--color-bg);
+  text { font-size: var(--font-size-base); color: var(--color-text-placeholder); letter-spacing: 1rpx; }
 }
 </style>

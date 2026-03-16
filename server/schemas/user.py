@@ -102,12 +102,14 @@ class UserIdentityCreate(UserIdentityBase):
     """新增出行人身份信息"""
 
     is_self: bool = Field(default=False, description="是否本人")
+    is_default: bool = Field(default=False, description="是否默认出行人")
 
 
 class UserIdentityUpdate(UserIdentityBase):
     """更新出行人身份信息"""
 
     is_self: Optional[bool] = Field(default=None, description="是否本人")
+    is_default: Optional[bool] = Field(default=None, description="是否默认出行人")
 
 
 class UserIdentityResponse(BaseModel):
@@ -122,6 +124,7 @@ class UserIdentityResponse(BaseModel):
     phone: Optional[str] = Field(default=None, description="手机号（脱敏）")
     custom_fields: Optional[List[Dict[str, Any]]] = Field(default=None, description="自定义字段")
     is_self: bool = Field(description="是否本人")
+    is_default: bool = Field(description="是否默认出行人")
     created_at: datetime = Field(description="创建时间")
     updated_at: datetime = Field(description="更新时间")
 

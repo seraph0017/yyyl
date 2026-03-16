@@ -258,7 +258,7 @@ onMounted(fetchDetail)
 <style lang="scss" scoped>
 .form-tip {
   margin-left: 8px;
-  color: #909399;
+  color: var(--color-text-placeholder);
   font-size: 13px;
 }
 

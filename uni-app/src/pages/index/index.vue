@@ -1,35 +1,43 @@
 <template>
   <view class="page-index">
-    <!-- 顶部品牌区 -->
-    <view class="header">
-      <view class="header__brand">
-        <text class="header__logo">{{ site.logoEmoji }}</text>
-        <view class="header__title">
-          <text class="header__name">{{ site.brandName }}</text>
-          <text class="header__slogan">{{ site.slogan }}</text>
+    <!-- 沉浸式品牌头部 -->
+    <view class="hero-header">
+      <view class="hero-header__bg" />
+      <view class="hero-header__content">
+        <view class="hero-header__top">
+          <view class="hero-header__brand">
+            <text class="hero-header__logo">{{ site.logoEmoji }}</text>
+            <view class="hero-header__title">
+              <text class="hero-header__name">{{ site.brandName }}</text>
+              <text class="hero-header__slogan">{{ site.slogan }}</text>
+            </view>
+          </view>
         </view>
-      </view>
-      <view class="header__search" @tap="onSearchTap">
-        <text class="header__search-icon">🔍</text>
-        <text class="header__search-text">搜索营位、活动、装备...</text>
+        <!-- 搜索框 -->
+        <view class="search-bar" @tap="onSearchTap">
+          <text class="search-bar__icon">🔍</text>
+          <text class="search-bar__text">搜索营位、活动、装备...</text>
+        </view>
       </view>
     </view>
 
-    <!-- 轮播区 -->
+    <!-- 轮播区 — 圆角卡片式 -->
     <view class="banner-section">
       <swiper
         class="banner-swiper"
         :indicator-dots="false"
         autoplay
         circular
-        :interval="4000"
-        :duration="500"
+        :interval="4500"
+        :duration="600"
         @change="onSwiperChange"
+        previous-margin="24rpx"
+        next-margin="24rpx"
       >
-        <swiper-item v-for="item in banners" :key="item.id">
+        <swiper-item v-for="item in banners" :key="item.id" class="banner-swiper-item">
           <view
             class="banner-card"
-            :style="{ backgroundColor: item.color }"
+            :class="{ 'banner-card--active': swiperCurrent === banners.indexOf(item) }"
             @tap="onBannerTap(item.id)"
           >
             <image
@@ -38,29 +46,31 @@
               mode="aspectFill"
               v-if="item.image"
             />
-            <view class="banner-card__content" v-else>
+            <view class="banner-card__overlay" />
+            <view class="banner-card__content" v-if="!item.image || true">
               <text class="banner-card__title">{{ item.title }}</text>
-              <view class="banner-card__btn">
-                <text>立即查看</text>
+              <view class="banner-card__action">
+                <text>了解详情</text>
+                <text class="banner-card__arrow">→</text>
               </view>
             </view>
           </view>
         </swiper-item>
       </swiper>
-      <view class="banner-dots">
+      <view class="banner-indicator">
         <view
-          class="banner-dot"
-          :class="{ 'banner-dot--active': swiperCurrent === index }"
+          class="banner-indicator__dot"
+          :class="{ 'banner-indicator__dot--active': swiperCurrent === index }"
           v-for="(item, index) in banners"
           :key="item.id"
         />
       </view>
     </view>
 
-    <!-- 分类导航 -->
-    <view class="category-nav">
-      <view class="section-title">
-        <text class="section-title__text">探索露营</text>
+    <!-- 分类导航 — 优雅图标卡片 -->
+    <view class="category-section">
+      <view class="section-header">
+        <text class="section-heading">探索露营</text>
       </view>
       <view class="category-grid">
         <view
@@ -69,7 +79,7 @@
           :key="item.key"
           @tap="onCategoryTap(item.key)"
         >
-          <view class="category-item__icon">
+          <view class="category-item__icon" :style="{ background: item.bg }">
             <text>{{ item.icon }}</text>
           </view>
           <text class="category-item__name">{{ item.name }}</text>
@@ -78,15 +88,17 @@
     </view>
 
     <!-- 天气预报 -->
-    <weather-card />
+    <view class="weather-section">
+      <weather-card />
+    </view>
 
     <!-- 热门推荐 -->
     <view class="recommend-section">
-      <view class="section-title">
-        <text class="section-title__text">🔥 热门推荐</text>
-        <view class="section-title__more" @tap="onViewMore">
+      <view class="section-header">
+        <text class="section-heading">精选推荐</text>
+        <view class="section-header__more" @tap="onViewMore">
           <text>查看更多</text>
-          <text class="section-title__arrow">›</text>
+          <text class="section-header__arrow">›</text>
         </view>
       </view>
 
@@ -131,7 +143,7 @@
       </view>
     </view>
 
-    <view class="safe-bottom" style="height: 20rpx" />
+    <view class="safe-bottom" style="height: 40rpx" />
   </view>
 </template>
 
@@ -150,19 +162,20 @@ interface ICategoryNav {
   key: string
   name: string
   icon: string
+  bg: string
   url?: string
 }
 
 const banners = ref<IBanner[]>([])
 const categories = ref<ICategoryNav[]>([
-  { key: 'daily_camping', name: '日常露营', icon: '🏕️' },
-  { key: 'event_camping', name: '活动露营', icon: '🎃' },
-  { key: 'equipment_rental', name: '装备租赁', icon: '⛺' },
-  { key: 'daily_activity', name: '日常活动', icon: '🛶' },
-  { key: 'special_activity', name: '特定活动', icon: '🎪' },
-  { key: 'camp_shop', name: '小商店', icon: '🛒' },
-  { key: 'camp_map', name: '营地地图', icon: '🗺️', url: '/pages-sub/product/camp-map/index' },
-  { key: 'games', name: '趣味游戏', icon: '🎮', url: '/pages-sub/product/games/index' },
+  { key: 'daily_camping', name: '日常露营', icon: '🏕️', bg: 'linear-gradient(135deg, #e8f5e9, #c8e6c9)' },
+  { key: 'event_camping', name: '活动露营', icon: '🎃', bg: 'linear-gradient(135deg, #fff3e0, #ffe0b2)' },
+  { key: 'equipment_rental', name: '装备租赁', icon: '⛺', bg: 'linear-gradient(135deg, #f3e5f5, #e1bee7)' },
+  { key: 'daily_activity', name: '日常活动', icon: '🛶', bg: 'linear-gradient(135deg, #e3f2fd, #bbdefb)' },
+  { key: 'special_activity', name: '特定活动', icon: '🎪', bg: 'linear-gradient(135deg, #fce4ec, #f8bbd0)' },
+  { key: 'camp_shop', name: '小商店', icon: '🛒', bg: 'linear-gradient(135deg, #fff8e1, #ffecb3)' },
+  { key: 'camp_map', name: '营地地图', icon: '🗺️', bg: 'linear-gradient(135deg, #e0f2f1, #b2dfdb)', url: '/pages-sub/product/camp-map/index' },
+  { key: 'games', name: '趣味游戏', icon: '🎮', bg: 'linear-gradient(135deg, #ede7f6, #d1c4e9)', url: '/pages-sub/product/games/index' },
 ])
 const recommendProducts = ref<IProduct[]>([])
 const swiperCurrent = ref(0)
@@ -235,9 +248,9 @@ async function loadData() {
     banners.value = loadedBanners.length > 0
       ? loadedBanners
       : [
-          { id: 1, image: '', title: '🌲 春日露营季 · 限时特惠', link: '', color: site.primaryColor },
-          { id: 2, image: '', title: '🎶 仲夏夜星空音乐节', link: '', color: '#FF6B35' },
-          { id: 3, image: '', title: '⛺ 新品装备上线 · 全场9折', link: '', color: '#2196F3' },
+          { id: 1, image: '', title: '🌲 春日露营季 · 限时特惠', link: '', color: '#2d4a3e' },
+          { id: 2, image: '', title: '🎶 仲夏夜星空音乐节', link: '', color: '#3d3054' },
+          { id: 3, image: '', title: '⛺ 新品装备上线 · 全场9折', link: '', color: '#4a3020' },
         ]
 
     recommendProducts.value = products
@@ -246,12 +259,11 @@ async function loadData() {
   } catch (err) {
     console.error('[首页] loadData 异常:', err)
     loading.value = false
-    // 确保即使出错也显示 fallback 内容
     if (banners.value.length === 0) {
       banners.value = [
-        { id: 1, image: '', title: '🌲 春日露营季 · 限时特惠', link: '', color: site.primaryColor },
-        { id: 2, image: '', title: '🎶 仲夏夜星空音乐节', link: '', color: '#FF6B35' },
-        { id: 3, image: '', title: '⛺ 新品装备上线 · 全场9折', link: '', color: '#2196F3' },
+        { id: 1, image: '', title: '🌲 春日露营季 · 限时特惠', link: '', color: '#2d4a3e' },
+        { id: 2, image: '', title: '🎶 仲夏夜星空音乐节', link: '', color: '#3d3054' },
+        { id: 3, image: '', title: '⛺ 新品装备上线 · 全场9折', link: '', color: '#4a3020' },
       ]
     }
     uni.showToast({ title: '加载失败，下拉刷新重试', icon: 'none' })
@@ -303,146 +315,364 @@ onShareAppMessage(() => ({
 .page-index {
   min-height: 100vh;
   background-color: var(--color-bg);
-  padding-bottom: 20rpx;
 }
 
-.header {
-  padding: 20rpx 32rpx;
-  background: linear-gradient(180deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+/* ========== 沉浸式品牌头部 ========== */
+.hero-header {
+  position: relative;
+  padding: 0 0 32rpx;
+  overflow: hidden;
+
+  &__bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 380rpx;
+    background: linear-gradient(
+      165deg,
+      #1e3a2f 0%,
+      var(--color-primary) 35%,
+      var(--color-primary-light) 70%,
+      var(--color-bg) 100%
+    );
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 70% 20%, rgba(200, 168, 114, 0.12) 0%, transparent 60%),
+        radial-gradient(circle at 15% 90%, rgba(255, 255, 255, 0.06) 0%, transparent 40%);
+    }
+  }
+
+  &__content {
+    position: relative;
+    z-index: 1;
+    padding: 24rpx 36rpx;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 20rpx);
+  }
+
+  &__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28rpx;
+  }
 
   &__brand {
     display: flex;
     align-items: center;
-    margin-bottom: 20rpx;
   }
 
-  &__logo { font-size: 56rpx; margin-right: 16rpx; }
+  &__logo {
+    font-size: 56rpx;
+    margin-right: 16rpx;
+    filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.2));
+  }
 
-  &__title { display: flex; flex-direction: column; }
+  &__title {
+    display: flex;
+    flex-direction: column;
+  }
 
   &__name {
-    font-size: var(--font-size-xl);
-    font-weight: 700;
-    color: #fff;
-    letter-spacing: 4rpx;
+    font-size: var(--font-size-xxl);
+    font-weight: 800;
+    color: #fffefa;
+    letter-spacing: 6rpx;
+    text-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.15);
   }
 
   &__slogan {
     font-size: var(--font-size-xs);
-    color: rgba(255, 255, 255, 0.8);
-    margin-top: 2rpx;
-    letter-spacing: 2rpx;
+    color: rgba(255, 254, 250, 0.7);
+    margin-top: 4rpx;
+    letter-spacing: 3rpx;
+    font-weight: 300;
   }
-
-  &__search {
-    display: flex;
-    align-items: center;
-    height: 72rpx;
-    background-color: rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-round);
-    padding: 0 24rpx;
-
-    &:active { background-color: rgba(255, 255, 255, 0.3); }
-  }
-
-  &__search-icon { font-size: 32rpx; margin-right: 12rpx; }
-  &__search-text { font-size: var(--font-size-base); color: rgba(255, 255, 255, 0.7); }
 }
 
-.banner-section { padding: 24rpx 32rpx 12rpx; position: relative; }
+/* ========== 搜索框 — 磨砂玻璃 ========== */
+.search-bar {
+  display: flex;
+  align-items: center;
+  height: 76rpx;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(20px);
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-round);
+  padding: 0 28rpx;
+  transition: var(--transition-base);
 
-.banner-swiper { height: 320rpx; border-radius: var(--radius-xl); overflow: hidden; }
+  &:active {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  &__icon {
+    font-size: 28rpx;
+    margin-right: 12rpx;
+    opacity: 0.9;
+  }
+
+  &__text {
+    font-size: var(--font-size-sm);
+    color: rgba(255, 255, 255, 0.6);
+    letter-spacing: 1rpx;
+  }
+}
+
+/* ========== 轮播区 — 卡片式 ========== */
+.banner-section {
+  padding: 0 0 20rpx;
+  margin-top: -16rpx;
+  position: relative;
+}
+
+.banner-swiper {
+  height: 340rpx;
+}
+
+.banner-swiper-item {
+  padding: 0 8rpx;
+}
 
 .banner-card {
-  width: 100%; height: 100%; border-radius: var(--radius-xl); overflow: hidden; position: relative;
+  width: 100%;
+  height: 310rpx;
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  position: relative;
+  transition: transform 0.4s var(--ease-out-expo);
 
-  &__image { width: 100%; height: 100%; }
+  &--active {
+    transform: scale(1);
+  }
+
+  &__image {
+    width: 100%;
+    height: 100%;
+  }
+
+  &__overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      180deg,
+      transparent 30%,
+      rgba(30, 40, 35, 0.7) 100%
+    );
+  }
 
   &__content {
-    width: 100%; height: 100%; display: flex; flex-direction: column;
-    justify-content: center; padding: 40rpx; box-sizing: border-box;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 32rpx;
+    z-index: 1;
   }
 
   &__title {
-    font-size: var(--font-size-xl); font-weight: 700; color: #fff;
-    line-height: 1.4; text-shadow: 0 2rpx 4rpx rgba(0, 0, 0, 0.2);
+    font-size: var(--font-size-lg);
+    font-weight: 700;
+    color: #fffefa;
+    line-height: 1.4;
+    text-shadow: 0 2rpx 6rpx rgba(0, 0, 0, 0.3);
+    letter-spacing: 2rpx;
   }
 
-  &__btn {
-    display: inline-flex; align-items: center; padding: 12rpx 28rpx;
-    background-color: rgba(255, 255, 255, 0.25); backdrop-filter: blur(10px);
-    border-radius: var(--radius-round); margin-top: 24rpx; align-self: flex-start;
-    text { font-size: var(--font-size-sm); color: #fff; font-weight: 500; }
+  &__action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8rpx;
+    margin-top: 16rpx;
+    padding: 8rpx 24rpx;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 1rpx solid rgba(255, 255, 255, 0.2);
+    border-radius: var(--radius-round);
+
+    text {
+      font-size: var(--font-size-xs);
+      color: rgba(255, 255, 255, 0.9);
+      font-weight: 500;
+      letter-spacing: 1rpx;
+    }
+  }
+
+  &__arrow {
+    font-size: var(--font-size-sm);
   }
 }
 
-.banner-dots { display: flex; justify-content: center; margin-top: 16rpx; gap: 8rpx; }
-
-.banner-dot {
-  width: 12rpx; height: 12rpx; border-radius: 50%; background-color: #d9d9d9;
-  transition: all 0.3s ease;
-
-  &--active { width: 32rpx; border-radius: 6rpx; background-color: var(--color-primary); }
+/* 没有图片时的渐变背景 */
+.banner-card:not(:has(.banner-card__image)) {
+  background: linear-gradient(135deg, #2d4a3e, #3d6b5a);
 }
 
-.category-nav { padding: 24rpx 32rpx; }
+.banner-indicator {
+  display: flex;
+  justify-content: center;
+  margin-top: 16rpx;
+  gap: 10rpx;
 
-.section-title {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx;
+  &__dot {
+    width: 8rpx;
+    height: 8rpx;
+    border-radius: 50%;
+    background-color: var(--color-text-placeholder);
+    opacity: 0.3;
+    transition: all 0.4s var(--ease-out-expo);
 
-  &__text { font-size: var(--font-size-lg); font-weight: 700; color: var(--color-text); }
+    &--active {
+      width: 28rpx;
+      border-radius: 4rpx;
+      background: linear-gradient(90deg, var(--color-accent), var(--color-primary-light));
+      opacity: 1;
+    }
+  }
+}
+
+/* ========== 分类导航 — 精致方块 ========== */
+.category-section {
+  padding: 24rpx 36rpx 8rpx;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 28rpx;
 
   &__more {
-    display: flex; align-items: center; font-size: var(--font-size-sm);
-    color: var(--color-text-placeholder);
-    &:active { color: var(--color-primary); }
+    display: flex;
+    align-items: center;
+    gap: 4rpx;
+
+    text {
+      font-size: var(--font-size-sm);
+      color: var(--color-text-placeholder);
+      letter-spacing: 1rpx;
+    }
+
+    &:active text {
+      color: var(--color-primary);
+    }
   }
 
-  &__arrow { font-size: var(--font-size-lg); margin-left: 4rpx; }
+  &__arrow {
+    font-size: var(--font-size-lg);
+  }
 }
 
-.category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20rpx 0; }
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24rpx 16rpx;
+}
 
 .category-item {
-  display: flex; flex-direction: column; align-items: center; padding: 8rpx 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4rpx 0;
+  transition: var(--transition-base);
 
-  &:active { opacity: 0.7; }
-
-  &__icon {
-    width: 96rpx; height: 96rpx; display: flex; justify-content: center; align-items: center;
-    background-color: var(--color-bg-white); border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm); margin-bottom: 12rpx;
-    text { font-size: 44rpx; }
+  &:active {
+    transform: scale(0.92);
   }
 
-  &__name { font-size: var(--font-size-xs); color: var(--color-text-secondary); font-weight: 500; }
+  &__icon {
+    width: 100rpx;
+    height: 100rpx;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: var(--radius-xl);
+    margin-bottom: 12rpx;
+    box-shadow: var(--shadow-sm);
+    border: 1rpx solid rgba(255, 255, 255, 0.6);
+
+    text {
+      font-size: 44rpx;
+    }
+  }
+
+  &__name {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    letter-spacing: 1rpx;
+  }
 }
 
-.recommend-section { padding: 12rpx 32rpx; }
+/* ========== 天气区 ========== */
+.weather-section {
+  padding: 8rpx 36rpx 0;
+}
+
+/* ========== 热门推荐 ========== */
+.recommend-section {
+  padding: 24rpx 36rpx 0;
+}
 
 .product-grid {
-  display: flex; gap: 16rpx;
-  &__col { flex: 1; display: flex; flex-direction: column; gap: 16rpx; }
+  display: flex;
+  gap: 16rpx;
+
+  &__col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 16rpx;
+  }
 }
 
-.skeleton-card { background-color: var(--color-bg-card); border-radius: var(--radius-lg); overflow: hidden; }
+/* ========== 骨架屏 ========== */
+.skeleton-card {
+  background-color: var(--color-bg-card);
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border: 1rpx solid rgba(42, 37, 32, 0.04);
+}
 
 .skeleton-image {
-  width: 100%; height: 280rpx;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%; animation: shimmer 1.5s infinite;
+  width: 100%;
+  height: 280rpx;
+  background: linear-gradient(
+    110deg,
+    var(--color-bg-light) 0%,
+    var(--color-bg-warm) 30%,
+    var(--color-bg-light) 60%,
+    var(--color-bg-warm) 100%
+  );
+  background-size: 300% 100%;
+  animation: shimmer 2s infinite ease-in-out;
 }
 
 .skeleton-text {
-  height: 28rpx; margin: 16rpx 16rpx 0;
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%; border-radius: 4rpx; animation: shimmer 1.5s infinite;
+  height: 28rpx;
+  margin: 16rpx 20rpx 0;
+  background: linear-gradient(
+    110deg,
+    var(--color-bg-light) 0%,
+    var(--color-bg-warm) 30%,
+    var(--color-bg-light) 60%
+  );
+  background-size: 300% 100%;
+  border-radius: 6rpx;
+  animation: shimmer 2s infinite ease-in-out;
 
-  &--short { width: 60%; margin-bottom: 16rpx; }
+  &--short {
+    width: 55%;
+    margin-bottom: 20rpx;
+  }
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% { background-position: 300% 0; }
+  100% { background-position: -300% 0; }
 }
 </style>

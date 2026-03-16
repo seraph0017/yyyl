@@ -64,10 +64,20 @@
           </template>
         </el-table-column>
         <el-table-column prop="sort_order" label="排序" width="70" align="center" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="handleEdit(row)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="删除" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--delete" circle size="small" @click="handleDelete(row)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -154,7 +164,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Plus, Delete } from '@element-plus/icons-vue'
+import { Search, Plus, Delete, Edit } from '@element-plus/icons-vue'
 import { getBundleConfigs, createBundleConfig, updateBundleConfig, deleteBundleConfig, getBundleStats } from '@/api/bundle'
 import { formatPrice, formatDate } from '@/utils'
 import type { BundleConfig, BundleConfigCreate, BundleItemCreate, BundleStats } from '@/types'
@@ -354,21 +364,25 @@ onMounted(() => {
 
   .stat-card {
     flex: 1;
-    background: #fff;
-    border-radius: 8px;
+    background: var(--color-bg-card);
+    border-radius: var(--radius-base);
     padding: 20px 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-light);
+    border: 1px solid var(--color-border-light);
+    transition: var(--transition-base);
+    &:hover { box-shadow: var(--shadow-base); }
 
     .stat-label {
       font-size: 13px;
-      color: #909399;
+      color: var(--color-text-placeholder);
       margin-bottom: 8px;
+      letter-spacing: 0.5px;
     }
     .stat-value {
       font-size: 28px;
-      font-weight: 600;
-      color: #303133;
-      &.price { color: #F44336; }
+      font-weight: 800;
+      color: var(--color-text);
+      &.price { color: var(--color-accent); }
     }
   }
 }
@@ -387,6 +401,8 @@ onMounted(() => {
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
 }
 </style>

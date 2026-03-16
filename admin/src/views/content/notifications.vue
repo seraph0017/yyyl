@@ -4,20 +4,20 @@
     <el-row :gutter="16" class="mb-20">
       <el-col :span="8">
         <div class="card-box" style="text-align: center;">
-          <div style="font-size: 32px; font-weight: 700; color: #2E7D32;">{{ stats.total_sent || 0 }}</div>
-          <div style="color: #909399; margin-top: 4px;">总发送数</div>
+          <div style="font-size: 32px; font-weight: 800; color: var(--color-primary);">{{ stats.total_sent || 0 }}</div>
+          <div style="color: var(--color-text-placeholder); margin-top: 4px;">总发送数</div>
         </div>
       </el-col>
       <el-col :span="8">
         <div class="card-box" style="text-align: center;">
-          <div style="font-size: 32px; font-weight: 700; color: #4CAF50;">{{ ((stats.success_rate || 0) * 100).toFixed(1) }}%</div>
-          <div style="color: #909399; margin-top: 4px;">发送成功率</div>
+          <div style="font-size: 32px; font-weight: 800; color: var(--color-primary-light);">{{ ((stats.success_rate || 0) * 100).toFixed(1) }}%</div>
+          <div style="color: var(--color-text-placeholder); margin-top: 4px;">发送成功率</div>
         </div>
       </el-col>
       <el-col :span="8">
         <div class="card-box" style="text-align: center;">
-          <div style="font-size: 32px; font-weight: 700; color: #FF9800;">{{ (stats.template_stats || []).length }}</div>
-          <div style="color: #909399; margin-top: 4px;">模板数量</div>
+          <div style="font-size: 32px; font-weight: 800; color: var(--color-accent);">{{ (stats.template_stats || []).length }}</div>
+          <div style="color: var(--color-text-placeholder); margin-top: 4px;">模板数量</div>
         </div>
       </el-col>
     </el-row>

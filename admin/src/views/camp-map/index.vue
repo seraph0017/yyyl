@@ -28,8 +28,16 @@
               </div>
             </div>
             <div class="map-item-actions">
-              <el-button text type="primary" size="small" @click.stop="handleEditMap(map)">编辑</el-button>
-              <el-button text type="danger" size="small" @click.stop="handleDeleteMap(map)">删除</el-button>
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click.stop="handleEditMap(map)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="删除" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--delete" circle size="small" @click.stop="handleDeleteMap(map)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
             </div>
           </div>
           <el-empty v-if="!loading && mapList.length === 0" description="暂无地图" />
@@ -76,10 +84,20 @@
               </template>
             </el-table-column>
             <el-table-column prop="sort_order" label="排序" width="60" align="center" />
-            <el-table-column label="操作" width="140" fixed="right">
+            <el-table-column label="操作" width="120" fixed="right" align="center">
               <template #default="{ row }">
-                <el-button text type="primary" size="small" @click="handleEditZone(row)">编辑</el-button>
-                <el-button text type="danger" size="small" @click="handleDeleteZone(row)">删除</el-button>
+                <div class="action-buttons">
+                  <el-tooltip content="编辑" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--edit" circle size="small" @click="handleEditZone(row)">
+                      <el-icon><Edit /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-tooltip content="删除" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--delete" circle size="small" @click="handleDeleteZone(row)">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -162,7 +180,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getCampMaps, createCampMap, updateCampMap, deleteCampMap, createCampMapZone, updateCampMapZone, deleteCampMapZone } from '@/api/camp-map'
 import { get, getToken } from '@/utils/request'
 import type { CampMap, CampMapZone, CampMapCreate, CampMapZoneCreate } from '@/types'
@@ -372,22 +390,22 @@ onMounted(() => {
     transition: background 0.2s;
     border: 1px solid transparent;
 
-    &:hover { background: #f5f7fa; }
+    &:hover { background: var(--color-bg-warm); }
     &.active {
-      background: rgba(76, 175, 80, 0.08);
-      border-color: #4CAF50;
+      background: rgba(61, 139, 94, 0.06);
+      border-color: var(--color-primary);
     }
 
     .map-item-name {
       font-size: 14px;
-      font-weight: 500;
+      font-weight: 600;
       margin-bottom: 4px;
     }
     .map-item-meta {
       display: flex;
       align-items: center;
       gap: 8px;
-      .zone-count { font-size: 12px; color: #909399; }
+      .zone-count { font-size: 12px; color: var(--color-text-placeholder); }
     }
     .map-item-actions {
       flex-shrink: 0;
@@ -396,14 +414,14 @@ onMounted(() => {
 }
 
 .map-image-wrapper {
-  border: 1px solid #ebeef5;
-  border-radius: 6px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-small);
   overflow: hidden;
   min-height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fafafa;
+  background: var(--color-bg-warm);
 
   .map-image {
     max-height: 400px;
@@ -418,6 +436,6 @@ onMounted(() => {
 
 .text-secondary {
   font-size: 12px;
-  color: #909399;
+  color: var(--color-text-placeholder);
 }
 </style>

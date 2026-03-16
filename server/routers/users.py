@@ -74,7 +74,11 @@ async def list_identities(
         select(UserIdentity).where(
             UserIdentity.user_id == user.id,
             UserIdentity.is_deleted.is_(False),
-        ).order_by(UserIdentity.is_self.desc(), UserIdentity.created_at.desc())
+        ).order_by(
+            UserIdentity.is_default.desc(),
+            UserIdentity.is_self.desc(),
+            UserIdentity.created_at.desc(),
+        )
     )
     identities = list(result.scalars().all())
     items = [UserIdentityResponse.model_validate(i) for i in identities]
@@ -88,6 +92,10 @@ async def create_identity(
     user: User = Depends(get_current_user),
 ):
     """添加出行人身份信息"""
+    # 如果设为默认，先取消其他默认
+    if body.is_default:
+        await _clear_default_identity(db, user.id)
+
     identity = UserIdentity(
         user_id=user.id,
         name=body.name,
@@ -95,6 +103,7 @@ async def create_identity(
         phone=body.phone,
         custom_fields=body.custom_fields,
         is_self=body.is_self,
+        is_default=body.is_default,
     )
     db.add(identity)
     await db.flush()
@@ -112,6 +121,10 @@ async def update_identity(
     """更新出行人身份信息"""
     identity = await _get_user_identity(db, identity_id, user.id)
 
+    # 如果设为默认，先取消其他默认
+    if body.is_default:
+        await _clear_default_identity(db, user.id)
+
     if body.name is not None:
         identity.name = body.name
     if body.id_card is not None:
@@ -122,6 +135,8 @@ async def update_identity(
         identity.custom_fields = body.custom_fields
     if body.is_self is not None:
         identity.is_self = body.is_self
+    if body.is_default is not None:
+        identity.is_default = body.is_default
 
     await db.flush()
     result = UserIdentityResponse.model_validate(identity)
@@ -253,6 +268,19 @@ async def _get_user_identity(
             detail={"code": 40401, "message": "身份信息不存在"},
         )
     return identity
+
+
+async def _clear_default_identity(db: AsyncSession, user_id: int) -> None:
+    """取消用户的所有默认出行人"""
+    result = await db.execute(
+        select(UserIdentity).where(
+            UserIdentity.user_id == user_id,
+            UserIdentity.is_default.is_(True),
+            UserIdentity.is_deleted.is_(False),
+        )
+    )
+    for ident in result.scalars().all():
+        ident.is_default = False
 
 
 async def _get_user_address(

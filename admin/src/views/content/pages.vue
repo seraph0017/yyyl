@@ -11,9 +11,15 @@
         <el-table-column label="更新时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column label="操作" width="80" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="editPage(row)">编辑</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="editPage(row)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -36,6 +42,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Edit } from '@element-plus/icons-vue'
 import { getPageConfigs, updatePageConfig } from '@/api/system'
 import { formatDateTime } from '@/utils'
 import type { PageConfig } from '@/types'

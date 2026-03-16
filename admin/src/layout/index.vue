@@ -1,27 +1,29 @@
 <template>
   <el-container class="layout-container">
     <!-- 侧边栏 -->
-    <el-aside :width="appStore.sidebarCollapsed ? '64px' : '220px'" class="layout-aside">
-      <div class="logo-container">
-        <img src="@/assets/logo.svg" alt="logo" class="logo-icon" />
-        <span v-if="!appStore.sidebarCollapsed" class="logo-text">{{ brand.name }}</span>
+    <el-aside :width="appStore.sidebarCollapsed ? '68px' : '240px'" class="layout-aside">
+      <div class="sidebar-brand">
+        <img src="@/assets/logo.svg" alt="logo" class="sidebar-brand__logo" />
+        <transition name="fade-text">
+          <span v-if="!appStore.sidebarCollapsed" class="sidebar-brand__name">{{ brand.name }}</span>
+        </transition>
       </div>
-      <el-scrollbar>
+      <el-scrollbar class="sidebar-scroll">
         <el-menu
           :default-active="activeMenu"
           :collapse="appStore.sidebarCollapsed"
           router
           class="sidebar-menu"
-          background-color="#1a1a2e"
-          text-color="#a0a0b8"
-          active-text-color="#4CAF50"
+          background-color="transparent"
+          text-color="#8a9a90"
+          active-text-color="#7ed4a0"
         >
           <template v-for="item in menuItems" :key="item.path">
-            <el-menu-item v-if="!item.children" :index="item.path">
+            <el-menu-item v-if="!item.children" :index="item.path" class="sidebar-menu-item">
               <el-icon><component :is="item.icon" /></el-icon>
               <template #title>{{ item.title }}</template>
             </el-menu-item>
-            <el-sub-menu v-else :index="item.path">
+            <el-sub-menu v-else :index="item.path" class="sidebar-submenu">
               <template #title>
                 <el-icon><component :is="item.icon" /></el-icon>
                 <span>{{ item.title }}</span>
@@ -30,6 +32,7 @@
                 v-for="child in item.children"
                 :key="child.path"
                 :index="child.path"
+                class="sidebar-menu-item sidebar-menu-item--child"
               >
                 {{ child.title }}
               </el-menu-item>
@@ -37,18 +40,25 @@
           </template>
         </el-menu>
       </el-scrollbar>
+
+      <!-- 侧边栏底部版本号 -->
+      <div class="sidebar-footer" v-if="!appStore.sidebarCollapsed">
+        <span class="sidebar-footer__version">v1.5</span>
+      </div>
     </el-aside>
 
     <!-- 主区域 -->
-    <el-container>
+    <el-container class="layout-body">
       <!-- 顶栏 -->
       <el-header class="layout-header">
         <div class="header-left">
-          <el-icon class="collapse-btn" @click="appStore.toggleSidebar">
-            <Fold v-if="!appStore.sidebarCollapsed" />
-            <Expand v-else />
-          </el-icon>
-          <el-breadcrumb separator="/">
+          <div class="collapse-btn" @click="appStore.toggleSidebar">
+            <el-icon :size="18">
+              <Fold v-if="!appStore.sidebarCollapsed" />
+              <Expand v-else />
+            </el-icon>
+          </div>
+          <el-breadcrumb separator="/" class="header-breadcrumb">
             <el-breadcrumb-item
               v-for="item in breadcrumbs"
               :key="item.path"
@@ -60,17 +70,17 @@
         </div>
         <div class="header-right">
           <el-dropdown trigger="click" @command="handleCommand">
-            <div class="user-info">
-              <el-avatar :size="32" :src="userStore.userInfo?.avatar">
+            <div class="user-capsule">
+              <el-avatar :size="30" :src="userStore.userInfo?.avatar" class="user-capsule__avatar">
                 {{ userStore.userInfo?.real_name?.charAt(0) || 'A' }}
               </el-avatar>
-              <span class="username">{{ userStore.userInfo?.real_name || '管理员' }}</span>
-              <el-icon><ArrowDown /></el-icon>
+              <span class="user-capsule__name">{{ userStore.userInfo?.real_name || '管理员' }}</span>
+              <el-icon :size="12"><ArrowDown /></el-icon>
             </div>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item>
-                  <el-tag size="small" type="success">{{ userStore.roleName }}</el-tag>
+                <el-dropdown-item disabled>
+                  <el-tag size="small" effect="plain" type="success" round>{{ userStore.roleName }}</el-tag>
                 </el-dropdown-item>
                 <el-dropdown-item divided command="logout">
                   <el-icon><SwitchButton /></el-icon>退出登录
@@ -84,7 +94,7 @@
       <!-- 内容区 -->
       <el-main class="layout-main">
         <router-view v-slot="{ Component }">
-          <transition name="fade" mode="out-in">
+          <transition name="page-fade" mode="out-in">
             <keep-alive :include="cachedViews">
               <component :is="Component" />
             </keep-alive>
@@ -113,17 +123,14 @@ const route = useRoute()
 const appStore = useAppStore()
 const userStore = useUserStore()
 
-// 缓存的视图
 const cachedViews = ['Dashboard', 'Products', 'Campsites', 'Orders', 'Members']
 
-// 当前激活菜单
 const activeMenu = computed(() => {
   const { activeMenu } = route.meta
   if (activeMenu) return activeMenu as string
   return route.path
 })
 
-// 面包屑
 const breadcrumbs = computed(() => {
   const matched = route.matched.filter(item => item.meta?.title)
   return matched.map(item => ({
@@ -132,7 +139,6 @@ const breadcrumbs = computed(() => {
   }))
 })
 
-// 菜单配置
 const menuItems = computed(() => {
   const items = [
     { path: '/dashboard', title: 'Dashboard', icon: DataAnalysis },
@@ -195,7 +201,6 @@ const menuItems = computed(() => {
     },
   ]
 
-  // 非管理员隐藏部分菜单
   if (!userStore.isAdmin) {
     return items.filter(item => !['finance', '/system-group', '/work-group'].includes(item.path))
   }
@@ -215,93 +220,246 @@ function handleCommand(command: string) {
   overflow: hidden;
 }
 
+// ==================== 侧边栏 — 深邃森林 ====================
 .layout-aside {
-  background: #1a1a2e;
-  transition: width 0.3s;
+  background: var(--color-sidebar);
+  transition: width 0.4s var(--ease-out-expo);
   overflow: hidden;
+  position: relative;
 
-  .logo-container {
-    height: 60px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 16px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-
-    .logo-icon {
-      width: 32px;
-      height: 32px;
-    }
-
-    .logo-text {
-      font-size: 18px;
-      font-weight: 600;
-      color: #fff;
-      white-space: nowrap;
-    }
-  }
-
-  .sidebar-menu {
-    border: none;
-
-    :deep(.el-menu-item.is-active) {
-      background: rgba(76, 175, 80, 0.15);
-      border-right: 3px solid #4CAF50;
-    }
+  // 右侧微光分割线
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent 0%,
+      rgba(61, 139, 94, 0.15) 30%,
+      rgba(200, 168, 114, 0.1) 70%,
+      transparent 100%
+    );
   }
 }
 
-.layout-header {
-  height: 60px;
+.sidebar-brand {
+  height: 64px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  z-index: 10;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
+  &__logo {
+    width: 30px;
+    height: 30px;
+    flex-shrink: 0;
+    filter: drop-shadow(0 0 8px rgba(61, 139, 94, 0.3));
+  }
 
-    .collapse-btn {
-      font-size: 20px;
-      cursor: pointer;
-      color: #606266;
-      &:hover { color: var(--color-primary); }
+  &__name {
+    font-size: 17px;
+    font-weight: 700;
+    color: #e0e8e4;
+    white-space: nowrap;
+    letter-spacing: 2px;
+  }
+}
+
+.sidebar-scroll {
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar-menu {
+  border: none;
+  padding: 8px 0;
+
+  :deep(.el-menu-item) {
+    height: 44px;
+    line-height: 44px;
+    margin: 2px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    transition: all 0.25s ease;
+
+    &:hover {
+      background: var(--color-sidebar-hover) !important;
+    }
+
+    &.is-active {
+      background: var(--color-sidebar-active) !important;
+      color: var(--color-text-sidebar-active) !important;
+      font-weight: 600;
+      position: relative;
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 3px;
+        height: 18px;
+        background: linear-gradient(180deg, var(--color-primary-light), var(--color-accent));
+        border-radius: 0 3px 3px 0;
+      }
     }
   }
 
-  .header-right {
-    .user-info {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      .username {
-        font-size: 14px;
-        color: #303133;
+  :deep(.el-sub-menu) {
+    .el-sub-menu__title {
+      height: 44px;
+      line-height: 44px;
+      margin: 2px 8px;
+      border-radius: 8px;
+      font-size: 13px;
+      letter-spacing: 0.5px;
+
+      &:hover {
+        background: var(--color-sidebar-hover) !important;
       }
     }
   }
 }
 
+.sidebar-footer {
+  padding: 12px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.04);
+
+  &__version {
+    font-size: 11px;
+    color: rgba(138, 154, 144, 0.4);
+    letter-spacing: 1px;
+  }
+}
+
+// ==================== 主体区域 ====================
+.layout-body {
+  flex: 1;
+  overflow: hidden;
+}
+
+// ==================== 顶栏 ====================
+.layout-header {
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--color-border-light);
+  z-index: 10;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.collapse-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: var(--transition-base);
+
+  &:hover {
+    background: var(--color-bg-warm);
+    color: var(--color-primary);
+  }
+}
+
+.header-breadcrumb {
+  :deep(.el-breadcrumb__item) {
+    .el-breadcrumb__inner {
+      font-weight: 400;
+      color: var(--color-text-placeholder);
+      letter-spacing: 0.3px;
+    }
+
+    &:last-child .el-breadcrumb__inner {
+      color: var(--color-text);
+      font-weight: 500;
+    }
+  }
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.user-capsule {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: var(--transition-base);
+  border: 1px solid transparent;
+
+  &:hover {
+    background: var(--color-bg-warm);
+    border-color: var(--color-border-light);
+  }
+
+  &__avatar {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  &__name {
+    font-size: 13px;
+    color: var(--color-text);
+    font-weight: 500;
+    letter-spacing: 0.5px;
+  }
+}
+
+// ==================== 内容区 ====================
 .layout-main {
   background: var(--color-bg);
   overflow-y: auto;
   padding: 0;
 }
 
-// 路由切换动画
-.fade-enter-active,
-.fade-leave-active {
+// ==================== 路由动画 ====================
+.page-fade-enter-active {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.page-fade-leave-active {
+  transition: opacity 0.15s ease;
+}
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+.page-fade-leave-to {
+  opacity: 0;
+}
+
+// ==================== 文字淡入淡出 ====================
+.fade-text-enter-active,
+.fade-text-leave-active {
   transition: opacity 0.2s ease;
 }
-.fade-enter-from,
-.fade-leave-to {
+.fade-text-enter-from,
+.fade-text-leave-to {
   opacity: 0;
 }
 </style>

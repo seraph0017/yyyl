@@ -3,25 +3,25 @@
     <!-- 财务概览卡片 -->
     <el-row :gutter="16" class="mb-20">
       <el-col :span="6">
-        <div class="finance-card" style="border-left-color: #FF9800;">
+        <div class="finance-card" style="border-left-color: var(--color-accent);">
           <div class="fc-label">待确认金额</div>
           <div class="fc-value">¥{{ formatPrice(overview.pending_amount || 0) }}</div>
         </div>
       </el-col>
       <el-col :span="6">
-        <div class="finance-card" style="border-left-color: #4CAF50;">
+        <div class="finance-card" style="border-left-color: var(--color-primary);">
           <div class="fc-label">可提现金额</div>
           <div class="fc-value text-success">¥{{ formatPrice(overview.withdrawable_amount || 0) }}</div>
         </div>
       </el-col>
       <el-col :span="6">
-        <div class="finance-card" style="border-left-color: #2196F3;">
+        <div class="finance-card" style="border-left-color: #4a8ba8;">
           <div class="fc-label">押金专户</div>
           <div class="fc-value">¥{{ formatPrice(overview.deposit_amount || 0) }}</div>
         </div>
       </el-col>
       <el-col :span="6">
-        <div class="finance-card" style="border-left-color: #2E7D32;">
+        <div class="finance-card" style="border-left-color: var(--color-primary-light);">
           <div class="fc-label">本月收入</div>
           <div class="fc-value text-primary">¥{{ formatPrice(overview.month_income || 0) }}</div>
         </div>
@@ -119,9 +119,18 @@ onMounted(() => { fetchOverview(); fetchTransactions() })
 
 <style lang="scss" scoped>
 .finance-card {
-  background: #fff; border-radius: 8px; padding: 20px; border-left: 4px solid; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-  .fc-label { font-size: 13px; color: #909399; margin-bottom: 8px; }
-  .fc-value { font-size: 24px; font-weight: 700; color: #303133; }
+  background: var(--color-bg-card);
+  border-radius: var(--radius-base);
+  padding: 24px;
+  border-left: 4px solid;
+  box-shadow: var(--shadow-light);
+  border-top: 1px solid var(--color-border-light);
+  border-right: 1px solid var(--color-border-light);
+  border-bottom: 1px solid var(--color-border-light);
+  transition: var(--transition-base);
+  &:hover { box-shadow: var(--shadow-base); transform: translateY(-2px); }
+  .fc-label { font-size: 13px; color: var(--color-text-placeholder); margin-bottom: 10px; letter-spacing: 0.5px; }
+  .fc-value { font-size: 26px; font-weight: 800; color: var(--color-text); letter-spacing: 0.5px; }
 }
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border-light); }
 </style>

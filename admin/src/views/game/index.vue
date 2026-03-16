@@ -59,10 +59,20 @@
           </template>
         </el-table-column>
         <el-table-column prop="sort_order" label="排序" width="70" align="center" />
-        <el-table-column label="操作" width="160" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="handleEdit(row)">编辑</el-button>
-            <el-button text type="danger" @click="handleDelete(row)">删除</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="handleEdit(row)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="删除" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--delete" circle size="small" @click="handleDelete(row)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -124,7 +134,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Plus } from '@element-plus/icons-vue'
+import { Search, Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getGames, createGame, updateGame, deleteGame } from '@/api/game'
 import type { MiniGame, MiniGameCreate } from '@/types'
 
@@ -243,7 +253,7 @@ onMounted(fetchData)
 </script>
 
 <style lang="scss" scoped>
-.text-secondary { font-size: 12px; color: #909399; }
-.points { font-weight: 600; color: #E6A23C; }
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+.text-secondary { font-size: 12px; color: var(--color-text-placeholder); }
+.points { font-weight: 700; color: var(--color-accent); }
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border-light); }
 </style>

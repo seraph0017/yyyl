@@ -37,21 +37,25 @@ const formatOriginal = computed(() => props.originalPrice.toFixed(2))
 .price-tag {
   display: inline-flex;
   align-items: baseline;
-  color: var(--color-orange);
+  color: var(--color-accent, #c8a872);
   font-weight: 700;
 
   &__symbol {
     font-size: 22rpx;
+    font-weight: 500;
+    margin-right: 1rpx;
   }
 
   &__integer {
     font-size: 36rpx;
     font-variant-numeric: tabular-nums;
+    letter-spacing: 1rpx;
   }
 
   &__decimal {
     font-size: 22rpx;
     font-variant-numeric: tabular-nums;
+    opacity: 0.85;
   }
 
   &__original {
@@ -59,7 +63,8 @@ const formatOriginal = computed(() => props.originalPrice.toFixed(2))
     font-size: var(--font-size-sm);
     font-weight: 400;
     text-decoration: line-through;
-    margin-left: 8rpx;
+    margin-left: 10rpx;
+    opacity: 0.6;
   }
 
   /* 尺寸变体 */
@@ -71,7 +76,7 @@ const formatOriginal = computed(() => props.originalPrice.toFixed(2))
 
   &--large {
     .price-tag__symbol { font-size: 28rpx; }
-    .price-tag__integer { font-size: 48rpx; }
+    .price-tag__integer { font-size: 52rpx; letter-spacing: 2rpx; }
     .price-tag__decimal { font-size: 28rpx; }
   }
 }

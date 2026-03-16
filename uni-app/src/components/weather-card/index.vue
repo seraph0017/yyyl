@@ -14,19 +14,25 @@
         <view class="weather-current__left">
           <text class="weather-current__icon">{{ weatherEmoji }}</text>
           <view class="weather-current__info">
-            <text class="weather-current__temp">{{ current.temperature }}°</text>
+            <view class="weather-current__temp-row">
+              <text class="weather-current__temp">{{ current.temperature }}</text>
+              <text class="weather-current__degree">°C</text>
+            </view>
             <text class="weather-current__desc">{{ current.description || current.weather }}</text>
           </view>
         </view>
         <view class="weather-current__right">
           <view class="weather-current__detail">
-            <text class="weather-detail__label">💨 {{ current.wind }}</text>
+            <text class="weather-detail__icon">💨</text>
+            <text class="weather-detail__label">{{ current.wind }}</text>
           </view>
           <view class="weather-current__detail">
-            <text class="weather-detail__label">💧 {{ current.humidity }}%</text>
+            <text class="weather-detail__icon">💧</text>
+            <text class="weather-detail__label">{{ current.humidity }}%</text>
           </view>
           <view class="weather-current__detail">
-            <text class="weather-detail__label">🌅 {{ current.sunrise }}</text>
+            <text class="weather-detail__icon">🌅</text>
+            <text class="weather-detail__label">{{ current.sunrise }}</text>
           </view>
         </view>
       </view>
@@ -177,30 +183,42 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .weather-card {
-  margin: 24rpx 32rpx 0;
-  background: linear-gradient(135deg, #e8f5e9 0%, #fff8e1 100%);
+  background: linear-gradient(145deg, #eef5ed 0%, #f8f2e4 50%, #fdf5e8 100%);
   border-radius: var(--radius-xl);
   overflow: hidden;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-md);
+  border: 1rpx solid rgba(200, 168, 114, 0.12);
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: -20rpx;
+    right: -20rpx;
+    width: 160rpx;
+    height: 160rpx;
+    background: radial-gradient(circle, rgba(200, 168, 114, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
 
   &__skeleton {
-    padding: 32rpx;
+    padding: 36rpx;
     display: flex;
     flex-direction: column;
     gap: 20rpx;
   }
 
   &__content {
-    padding: 28rpx;
+    padding: 28rpx 32rpx;
   }
 }
 
 .skeleton-bar {
   height: 28rpx;
   border-radius: var(--radius-sm);
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s infinite;
+  background: linear-gradient(110deg, var(--color-bg-light) 0%, var(--color-bg-warm) 30%, var(--color-bg-light) 60%);
+  background-size: 300% 100%;
+  animation: shimmer 2s infinite ease-in-out;
 
   &--lg { width: 60%; height: 48rpx; }
   &--sm { width: 40%; }
@@ -208,8 +226,8 @@ onMounted(() => {
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% { background-position: 300% 0; }
+  100% { background-position: -300% 0; }
 }
 
 .weather-current {
@@ -225,6 +243,7 @@ onMounted(() => {
 
   &__icon {
     font-size: 72rpx;
+    filter: drop-shadow(0 2rpx 4rpx rgba(0, 0, 0, 0.1));
   }
 
   &__info {
@@ -232,48 +251,81 @@ onMounted(() => {
     flex-direction: column;
   }
 
+  &__temp-row {
+    display: flex;
+    align-items: flex-start;
+  }
+
   &__temp {
     font-size: 56rpx;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--color-text);
-    line-height: 1.1;
+    line-height: 1;
+    letter-spacing: 2rpx;
+  }
+
+  &__degree {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: 500;
+    margin-top: 8rpx;
+    margin-left: 2rpx;
   }
 
   &__desc {
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
-    margin-top: 4rpx;
+    margin-top: 6rpx;
+    letter-spacing: 1rpx;
   }
 
   &__right {
     display: flex;
     flex-direction: column;
-    gap: 6rpx;
+    gap: 8rpx;
   }
 
   &__detail {
     display: flex;
     align-items: center;
+    gap: 6rpx;
   }
 }
 
-.weather-detail__label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
+.weather-detail {
+  &__icon {
+    font-size: 20rpx;
+  }
+
+  &__label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    letter-spacing: 0.5rpx;
+  }
 }
 
 .weather-tip {
   display: flex;
   align-items: center;
-  gap: 10rpx;
-  margin-top: 20rpx;
-  padding: 16rpx 20rpx;
-  border-radius: var(--radius-md);
-  background-color: rgba(76, 175, 80, 0.12);
+  gap: 12rpx;
+  margin-top: 24rpx;
+  padding: 16rpx 24rpx;
+  border-radius: var(--radius-lg);
 
-  &--good { background-color: rgba(76, 175, 80, 0.12); }
-  &--warn { background-color: rgba(255, 152, 0, 0.12); }
-  &--bad { background-color: rgba(229, 57, 53, 0.12); }
+  &--good {
+    background: linear-gradient(135deg, rgba(90, 158, 111, 0.1), rgba(90, 158, 111, 0.05));
+    border: 1rpx solid rgba(90, 158, 111, 0.15);
+  }
+
+  &--warn {
+    background: linear-gradient(135deg, rgba(212, 165, 53, 0.1), rgba(212, 165, 53, 0.05));
+    border: 1rpx solid rgba(212, 165, 53, 0.15);
+  }
+
+  &--bad {
+    background: linear-gradient(135deg, rgba(196, 92, 74, 0.1), rgba(196, 92, 74, 0.05));
+    border: 1rpx solid rgba(196, 92, 74, 0.15);
+  }
 
   &__icon {
     font-size: 32rpx;
@@ -283,12 +335,13 @@ onMounted(() => {
     font-size: var(--font-size-sm);
     color: var(--color-text);
     font-weight: 500;
+    letter-spacing: 1rpx;
   }
 }
 
 .weather-forecast {
   display: flex;
-  gap: 16rpx;
+  gap: 12rpx;
   margin-top: 24rpx;
   white-space: nowrap;
 }
@@ -298,15 +351,19 @@ onMounted(() => {
   flex-direction: column;
   align-items: center;
   min-width: 140rpx;
-  padding: 16rpx 12rpx;
-  background-color: rgba(255, 255, 255, 0.6);
-  border-radius: var(--radius-md);
+  padding: 18rpx 14rpx;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+  border: 1rpx solid rgba(255, 255, 255, 0.8);
   flex-shrink: 0;
 
   &__date {
     font-size: var(--font-size-xs);
     color: var(--color-text-secondary);
     margin-bottom: 8rpx;
+    font-weight: 500;
+    letter-spacing: 1rpx;
   }
 
   &__icon {
@@ -318,11 +375,12 @@ onMounted(() => {
     font-size: var(--font-size-xs);
     color: var(--color-text);
     margin-bottom: 4rpx;
+    font-weight: 500;
   }
 
   &__temp {
     font-size: var(--font-size-xs);
-    color: var(--color-text-secondary);
+    color: var(--color-text-placeholder);
   }
 }
 </style>

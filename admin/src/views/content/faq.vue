@@ -12,12 +12,24 @@
             <el-table-column prop="name" label="分类名称" />
             <el-table-column prop="item_count" label="条目数" width="70" align="center" />
             <el-table-column prop="sort_order" label="排序" width="60" align="center" />
-            <el-table-column label="操作" width="120">
+            <el-table-column label="操作" width="100" align="center">
               <template #default="{ row }">
-                <el-button text type="primary" size="small" @click="editCategory(row)">编辑</el-button>
-                <el-popconfirm title="确定删除？" @confirm="handleDeleteCategory(row.id)">
-                  <template #reference><el-button text type="danger" size="small">删除</el-button></template>
-                </el-popconfirm>
+                <div class="action-buttons">
+                  <el-tooltip content="编辑" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--edit" circle size="small" @click="editCategory(row)">
+                      <el-icon><Edit /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-popconfirm title="确定删除？" @confirm="handleDeleteCategory(row.id)" width="180">
+                    <template #reference>
+                      <el-tooltip content="删除" placement="top" :show-after="400">
+                        <el-button class="action-btn action-btn--delete" circle size="small">
+                          <el-icon><Delete /></el-icon>
+                        </el-button>
+                      </el-tooltip>
+                    </template>
+                  </el-popconfirm>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -40,12 +52,24 @@
                 <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '启用' : '停用' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="120">
+            <el-table-column label="操作" width="100" align="center">
               <template #default="{ row }">
-                <el-button text type="primary" size="small" @click="editItem(row)">编辑</el-button>
-                <el-popconfirm title="确定删除？" @confirm="handleDeleteItem(row.id)">
-                  <template #reference><el-button text type="danger" size="small">删除</el-button></template>
-                </el-popconfirm>
+                <div class="action-buttons">
+                  <el-tooltip content="编辑" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--edit" circle size="small" @click="editItem(row)">
+                      <el-icon><Edit /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                  <el-popconfirm title="确定删除？" @confirm="handleDeleteItem(row.id)" width="180">
+                    <template #reference>
+                      <el-tooltip content="删除" placement="top" :show-after="400">
+                        <el-button class="action-btn action-btn--delete" circle size="small">
+                          <el-icon><Delete /></el-icon>
+                        </el-button>
+                      </el-tooltip>
+                    </template>
+                  </el-popconfirm>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -91,7 +115,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getFaqCategories, createFaqCategory, updateFaqCategory, deleteFaqCategory, getFaqItems, createFaqItem, updateFaqItem, deleteFaqItem } from '@/api/system'
 import type { FaqCategory, FaqItem } from '@/types'
 

@@ -28,9 +28,15 @@
         <el-table-column label="时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="详情" width="80" align="center">
+        <el-table-column label="详情" width="70" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="showDetail(row)">查看</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="查看" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--view" circle size="small" @click="showDetail(row)">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -62,6 +68,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { View } from '@element-plus/icons-vue'
 import { getOperationLogs } from '@/api/system'
 import { formatDateTime } from '@/utils'
 import type { OperationLog, OperationLogSearchParams } from '@/types'
@@ -89,6 +96,6 @@ onMounted(fetchData)
 </script>
 
 <style lang="scss" scoped>
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
-.json-block { background: #f5f7fa; padding: 12px; border-radius: 4px; font-size: 12px; max-height: 200px; overflow-y: auto; }
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border-light); }
+.json-block { background: var(--color-bg-warm); padding: 14px; border-radius: var(--radius-small); font-size: 12px; max-height: 200px; overflow-y: auto; border: 1px solid var(--color-border-light); }
 </style>

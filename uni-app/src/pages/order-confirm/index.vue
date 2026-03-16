@@ -146,9 +146,40 @@ async function loadData() {
 
     // 加载商品信息（如果是直接购买）
     if (productId.value) {
-      const p = await get<IProduct>(`/products/${productId.value}`)
+      const raw = await get<Record<string, any>>(`/products/${productId.value}`)
+
+      // 映射API原始数据为IProduct结构
+      let category = (raw.category || raw.type || 'daily_camping') as string
+      if (category === 'rental') category = 'equipment_rental'
+      if (category === 'shop') category = 'camp_shop'
+
+      const price = parseFloat(raw.base_price) || 0
+
+      const p: IProduct = {
+        id: raw.id,
+        name: raw.name || '',
+        category: category as IProduct['category'],
+        description: raw.description || '',
+        cover_image: '',
+        images: [],
+        base_price: price,
+        current_price: price,
+        original_price: price,
+        status: raw.status || 'on_sale',
+        tags: [],
+        attributes: [],
+        stock: raw.stock || 0,
+        sales_count: 0,
+        ticket_start_time: raw.sale_start_at || null,
+        is_seckill: raw.is_seckill || false,
+        has_disclaimer: raw.require_disclaimer !== false,
+        identity_mode: raw.identity_mode || 'optional',
+        deposit_amount: raw.ext_rental?.deposit_amount || 0,
+      }
+
       product.value = p
       needAddress.value = p.category === 'merchandise'
+
       const total = p.current_price * (dates.value.length || 1) * quantity.value
       const discount = dates.value.length >= 2 ? Math.floor(total * 0.2) : 0
       totalPrice.value = total

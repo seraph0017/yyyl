@@ -39,7 +39,7 @@
             </el-form-item>
             <el-form-item label="退票截止时间">
               <el-input-number v-model="settings.refund_deadline_hours" :min="0" />
-              <span style="margin-left: 8px; color: #909399;">使用日期前N小时</span>
+              <span style="margin-left: 8px; color: var(--color-text-placeholder);">使用日期前N小时</span>
             </el-form-item>
             <el-form-item label="退票手续费(%)">
               <el-input-number v-model="settings.refund_fee_rate" :min="0" :max="100" :step="5" />

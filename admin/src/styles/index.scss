@@ -1,27 +1,56 @@
-// 某露营地 — Web管理后台全局样式
+// 一月一露 — 「深邃极光」管理后台设计系统
+// Northern Lights Dashboard · 暗色科技 + 自然光韵
 
-// 变量
+// ==================== 变量系统 ====================
 :root {
-  --color-primary: #2E7D32;
-  --color-primary-light: #4CAF50;
-  --color-primary-lighter: #81C784;
-  --color-primary-lightest: #C8E6C9;
-  --color-bg: #f5f7fa;
-  --color-bg-warm: #FFF8F0;
+  // 主色系 — 深邃森林
+  --color-primary: #3d8b5e;
+  --color-primary-light: #52b67a;
+  --color-primary-lighter: #7ed4a0;
+  --color-primary-lightest: #d0f0dc;
+  --color-primary-glow: rgba(61, 139, 94, 0.25);
+
+  // 点缀色 — 极光
+  --color-accent: #c8a872;
+  --color-accent-glow: rgba(200, 168, 114, 0.2);
+
+  // 背景色 — 深邃层次
+  --color-bg: #f0ede8;
+  --color-bg-warm: #faf6f0;
   --color-bg-card: #ffffff;
-  --color-text: #303133;
-  --color-text-secondary: #606266;
-  --color-text-placeholder: #909399;
-  --color-border: #DCDFE6;
-  --color-border-light: #E4E7ED;
-  --shadow-base: 0 2px 12px rgba(0, 0, 0, 0.06);
-  --shadow-light: 0 2px 8px rgba(0, 0, 0, 0.04);
-  --radius-base: 8px;
-  --radius-small: 4px;
-  --radius-large: 12px;
+  --color-sidebar: #141e1a;
+  --color-sidebar-hover: rgba(61, 139, 94, 0.08);
+  --color-sidebar-active: rgba(61, 139, 94, 0.15);
+
+  // 文字色
+  --color-text: #2a2520;
+  --color-text-secondary: #6b6560;
+  --color-text-placeholder: #a09890;
+  --color-text-sidebar: #8a9a90;
+  --color-text-sidebar-active: #7ed4a0;
+
+  // 边框与分割线
+  --color-border: #e8e2dc;
+  --color-border-light: #f0ece6;
+
+  // 阴影 — 柔和自然
+  --shadow-base: 0 4px 20px rgba(42, 37, 32, 0.06);
+  --shadow-light: 0 2px 12px rgba(42, 37, 32, 0.04);
+  --shadow-elevated: 0 8px 40px rgba(42, 37, 32, 0.08);
+  --shadow-glow: 0 4px 24px var(--color-primary-glow);
+
+  // 圆角
+  --radius-base: 12px;
+  --radius-small: 6px;
+  --radius-large: 16px;
+  --radius-xl: 20px;
+
+  // 过渡
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --transition-base: all 0.35s var(--ease-out-expo);
 }
 
-// Reset
+// ==================== Reset ====================
 *,
 *::before,
 *::after {
@@ -33,44 +62,55 @@
 html, body, #app {
   width: 100%;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'PingFang SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   font-size: 14px;
   color: var(--color-text);
   background-color: var(--color-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  letter-spacing: 0.3px;
 }
 
-// 滚动条
+// ==================== 滚动条 — 极细 ====================
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c0c4cc;
+  background: rgba(61, 139, 94, 0.2);
   border-radius: 3px;
+  &:hover {
+    background: rgba(61, 139, 94, 0.35);
+  }
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 
-// NProgress
+// ==================== NProgress ====================
 #nprogress .bar {
-  background: var(--color-primary) !important;
-  height: 3px !important;
+  background: linear-gradient(90deg, var(--color-primary), var(--color-accent)) !important;
+  height: 2px !important;
 }
 
-// 工具类
+// ==================== 工具类 ====================
 .page-container {
-  padding: 20px;
+  padding: 24px;
+  min-height: calc(100vh - 60px);
 }
 
 .card-box {
   background: var(--color-bg-card);
   border-radius: var(--radius-base);
   box-shadow: var(--shadow-light);
-  padding: 20px;
-  margin-bottom: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+  border: 1px solid var(--color-border-light);
+  transition: var(--transition-base);
+
+  &:hover {
+    box-shadow: var(--shadow-base);
+  }
 }
 
 .flex-between {
@@ -80,10 +120,11 @@ html, body, #app {
 }
 
 .text-primary { color: var(--color-primary); }
-.text-success { color: #4CAF50; }
-.text-warning { color: #FF9800; }
-.text-danger { color: #F44336; }
-.text-info { color: #607D8B; }
+.text-success { color: #52b67a; }
+.text-warning { color: #d4a535; }
+.text-danger { color: #c45c4a; }
+.text-info { color: #4a8ba8; }
+.text-accent { color: var(--color-accent); }
 
 .mt-8 { margin-top: 8px; }
 .mt-16 { margin-top: 16px; }
@@ -91,3 +132,179 @@ html, body, #app {
 .mb-8 { margin-bottom: 8px; }
 .mb-16 { margin-bottom: 16px; }
 .mb-20 { margin-bottom: 20px; }
+
+// ==================== 链接/选择增强 ====================
+::selection {
+  background: rgba(61, 139, 94, 0.15);
+  color: var(--color-primary);
+}
+
+// ==================== 表格操作按钮 — 全局统一 ====================
+.action-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.action-btn {
+  width: 32px !important;
+  height: 32px !important;
+  border: 1.5px solid transparent !important;
+  transition: all 0.3s var(--ease-out-expo) !important;
+  font-size: 15px !important;
+
+  .el-icon { font-size: 15px; }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  }
+
+  &:active {
+    transform: translateY(0) scale(0.95);
+  }
+
+  // 编辑 — 主色调
+  &--edit {
+    color: var(--color-primary) !important;
+    background: rgba(61, 139, 94, 0.08) !important;
+    border-color: rgba(61, 139, 94, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      box-shadow: 0 4px 14px var(--color-primary-glow);
+    }
+  }
+
+  // 详情/查看 — 深蓝
+  &--view {
+    color: #4a8ba8 !important;
+    background: rgba(74, 139, 168, 0.08) !important;
+    border-color: rgba(74, 139, 168, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: #4a8ba8 !important;
+      border-color: #4a8ba8 !important;
+      box-shadow: 0 4px 14px rgba(74, 139, 168, 0.3);
+    }
+  }
+
+  // 库存/规则 — 靛蓝
+  &--inventory {
+    color: #5c6bc0 !important;
+    background: rgba(92, 107, 192, 0.08) !important;
+    border-color: rgba(92, 107, 192, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: #5c6bc0 !important;
+      border-color: #5c6bc0 !important;
+      box-shadow: 0 4px 14px rgba(92, 107, 192, 0.3);
+    }
+  }
+
+  // 上架 — 绿色
+  &--online {
+    color: #52b67a !important;
+    background: rgba(82, 182, 122, 0.08) !important;
+    border-color: rgba(82, 182, 122, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: #52b67a !important;
+      border-color: #52b67a !important;
+      box-shadow: 0 4px 14px rgba(82, 182, 122, 0.3);
+    }
+  }
+
+  // 下架 — 琥珀色
+  &--offline {
+    color: var(--color-accent) !important;
+    background: var(--color-accent-glow) !important;
+    border-color: rgba(200, 168, 114, 0.25) !important;
+    &:hover {
+      color: #fff !important;
+      background: var(--color-accent) !important;
+      border-color: var(--color-accent) !important;
+      box-shadow: 0 4px 14px var(--color-accent-glow);
+    }
+  }
+
+  // 通过/审批 — 成功绿
+  &--approve {
+    color: #52b67a !important;
+    background: rgba(82, 182, 122, 0.08) !important;
+    border-color: rgba(82, 182, 122, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: #52b67a !important;
+      border-color: #52b67a !important;
+      box-shadow: 0 4px 14px rgba(82, 182, 122, 0.3);
+    }
+  }
+
+  // 驳回/退款审批 — 警告橙
+  &--reject {
+    color: #d4a535 !important;
+    background: rgba(212, 165, 53, 0.08) !important;
+    border-color: rgba(212, 165, 53, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: #d4a535 !important;
+      border-color: #d4a535 !important;
+      box-shadow: 0 4px 14px rgba(212, 165, 53, 0.3);
+    }
+  }
+
+  // 打款 — 铜金
+  &--pay {
+    color: var(--color-accent) !important;
+    background: var(--color-accent-glow) !important;
+    border-color: rgba(200, 168, 114, 0.25) !important;
+    &:hover {
+      color: #fff !important;
+      background: var(--color-accent) !important;
+      border-color: var(--color-accent) !important;
+      box-shadow: 0 4px 14px var(--color-accent-glow);
+    }
+  }
+
+  // 删除/移除 — 柔和红
+  &--delete {
+    color: #e06060 !important;
+    background: rgba(224, 96, 96, 0.06) !important;
+    border-color: rgba(224, 96, 96, 0.15) !important;
+    &:hover {
+      color: #fff !important;
+      background: #e06060 !important;
+      border-color: #e06060 !important;
+      box-shadow: 0 4px 14px rgba(224, 96, 96, 0.3);
+    }
+  }
+
+  // 保存 — 主色
+  &--save {
+    color: var(--color-primary) !important;
+    background: rgba(61, 139, 94, 0.08) !important;
+    border-color: rgba(61, 139, 94, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: var(--color-primary) !important;
+      border-color: var(--color-primary) !important;
+      box-shadow: 0 4px 14px var(--color-primary-glow);
+    }
+  }
+
+  // 取消 — 灰
+  &--cancel {
+    color: var(--color-text-placeholder) !important;
+    background: rgba(160, 152, 144, 0.06) !important;
+    border-color: rgba(160, 152, 144, 0.2) !important;
+    &:hover {
+      color: #fff !important;
+      background: #9e9e9e !important;
+      border-color: #9e9e9e !important;
+      box-shadow: 0 4px 14px rgba(158, 158, 158, 0.3);
+    }
+  }
+}

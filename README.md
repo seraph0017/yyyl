@@ -6,6 +6,8 @@
 
 **v1.5 新增功能**：搭配组合套餐、营地地图与互动游戏、天气服务集成、内部报销/绩效管理、秒杀预填加速。
 
+**v1.6 UI/UX 全面升级**：小程序采用「野奢」（Organic Luxury Outdoor）设计系统 — 侘寂美学 + 户外奢华风格；管理后台采用「深邃极光」（Northern Lights Dashboard）设计系统 — 暗森林侧边栏 + 极光渐变 + 玻璃拟态卡片；全量表格操作按钮统一为圆形图标按钮 + 光晕动效；新增出行人管理页面完全重设计、日历范围选择等。
+
 ---
 
 ## 📐 系统架构
@@ -587,7 +589,51 @@ npm run type-check
 
 ---
 
-## 🎨 品牌 & 营地配置
+## 🎨 UI/UX 设计系统
+
+### 小程序 — 「野奢」(Organic Luxury Outdoor)
+
+以侘寂美学 + 户外奢华为核心理念，打造沉浸式的露营预订体验：
+
+| 元素 | 说明 |
+|------|------|
+| **色板** | 深苔绿 `#2d4a3e` + 暖铜金 `#c8a872` + 暖沙背景 `#faf6f0` |
+| **磨砂玻璃** | `backdrop-filter: blur(20px)` 导航栏、搜索栏、Tab栏 |
+| **渐变指示条** | 段标题底部铜金渐变装饰线 |
+| **日历交互** | 范围选择模式 — 入住(左圆角) → N晚 → 离店(右圆角)，最多连续5晚 |
+| **出行人管理** | 姓名首字头像、铜金默认角标、底部弹出式表单 |
+
+### 管理后台 — 「深邃极光」(Northern Lights Dashboard)
+
+以暗森林色调 + 极光渐变为设计语言，专为户外运营管理打造：
+
+| 元素 | 说明 |
+|------|------|
+| **色板** | 森林绿 `#3d8b5e` + 铜金 `#c8a872` + 暗森林侧边栏 `#141e1a` |
+| **玻璃拟态** | Dashboard 卡片半透明 + 内发光边框 |
+| **极光渐变** | 侧边栏 logo 区域 + 登录页动态背景 |
+| **操作按钮** | 全局统一 32px 圆形图标按钮 — 11种配色变体 + hover上浮光晕动效 |
+| **变量系统** | `--color-primary`、`--color-accent`、`--color-primary-glow` 等全局 CSS 变量 |
+
+操作按钮变体一览：
+
+| 变体 | 用途 | 配色 |
+|------|------|------|
+| `action-btn--edit` | 编辑 | 森林绿 |
+| `action-btn--view` | 详情/查看 | 深蓝 |
+| `action-btn--inventory` | 库存/规则 | 靛蓝 |
+| `action-btn--online` | 上架 | 清新绿 |
+| `action-btn--offline` | 下架 | 琥珀金 |
+| `action-btn--approve` | 通过/审批 | 成功绿 |
+| `action-btn--reject` | 驳回 | 警告橙 |
+| `action-btn--pay` | 打款 | 铜金 |
+| `action-btn--delete` | 删除/移除 | 柔和红 |
+| `action-btn--save` | 保存 | 主色绿 |
+| `action-btn--cancel` | 取消 | 灰色 |
+
+---
+
+## 🏕️ 品牌 & 营地配置
 
 项目支持多营地独立品牌，同一套代码构建不同营地的应用：
 
@@ -616,7 +662,7 @@ npm run type-check
 | **管理后台前端** | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts |
 | **后端 API** | Python 3.11 + FastAPI + Uvicorn (ASGI) |
 | **ORM** | SQLAlchemy 2.0 (Async) |
-| **数据库** | PostgreSQL 15（56张表） |
+| **数据库** | PostgreSQL 15（57张表） |
 | **缓存/队列** | Redis 7 |
 | **异步任务** | Celery + Redis Broker（25个定时任务） |
 | **数据库迁移** | Alembic |

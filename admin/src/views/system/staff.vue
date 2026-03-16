@@ -26,12 +26,24 @@
         <el-table-column label="最后登录" width="170">
           <template #default="{ row }">{{ row.last_login_at ? formatDateTime(row.last_login_at) : '从未登录' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="editStaff(row)">编辑</el-button>
-            <el-popconfirm title="确定移除该员工？" @confirm="handleDelete(row.id)">
-              <template #reference><el-button text type="danger" size="small">移除</el-button></template>
-            </el-popconfirm>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="editStaff(row)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-popconfirm title="确定移除该员工？" @confirm="handleDelete(row.id)" width="200">
+                <template #reference>
+                  <el-tooltip content="移除" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--delete" circle size="small">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -59,7 +71,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getStaffList, createStaff, updateStaff, deleteStaff, getRoles } from '@/api/system'
 import { formatDateTime } from '@/utils'
 import type { StaffMember } from '@/types'

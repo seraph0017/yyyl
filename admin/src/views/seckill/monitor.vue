@@ -282,14 +282,15 @@ onBeforeUnmount(() => {
 
   .monitor-label {
     font-size: 13px;
-    color: #909399;
+    color: var(--color-text-placeholder);
     margin-bottom: 4px;
+    letter-spacing: 0.5px;
   }
   .monitor-value {
     font-size: 28px;
-    font-weight: 700;
-    color: #303133;
-    &.danger { color: #F56C6C; }
+    font-weight: 800;
+    color: var(--color-text);
+    &.danger { color: #c45c4a; }
   }
 }
 
@@ -305,7 +306,7 @@ onBeforeUnmount(() => {
 
     .conversion-label {
       font-size: 13px;
-      color: #606266;
+      color: var(--color-text-secondary);
       white-space: nowrap;
     }
   }
@@ -316,7 +317,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
 }
 
-.text-secondary { font-size: 12px; color: #909399; }
+.text-secondary { font-size: 12px; color: var(--color-text-placeholder); }
 .mt-16 { margin-top: 16px; }
 
 .report-content {

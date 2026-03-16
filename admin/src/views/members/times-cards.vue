@@ -17,10 +17,20 @@
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'" size="small">{{ row.status === 'active' ? '启用' : '停用' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="180">
+        <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" size="small" @click="editConfig(row)">编辑</el-button>
-            <el-button text type="warning" size="small" @click="manageRules(row)">消耗规则</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="editConfig(row)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="消耗规则" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--inventory" circle size="small" @click="manageRules(row)">
+                  <el-icon><Setting /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>

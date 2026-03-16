@@ -60,10 +60,20 @@
         <el-table-column label="下单时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="140" fixed="right">
+        <el-table-column label="操作" width="120" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="router.push(`/orders/${row.id}`)">详情</el-button>
-            <el-button v-if="row.status === 'refunding'" text type="warning" @click="handleRefund(row)">审批退款</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="详情" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--view" circle size="small" @click="router.push(`/orders/${row.id}`)">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="row.status === 'refunding'" content="审批退款" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--reject" circle size="small" @click="handleRefund(row)">
+                  <el-icon><RefreshLeft /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -87,7 +97,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search } from '@element-plus/icons-vue'
+import { Search, View, RefreshLeft } from '@element-plus/icons-vue'
 import { getOrders, approveRefund } from '@/api/order'
 import { formatPrice, formatDateTime, orderStatusMap, paymentStatusMap } from '@/utils'
 import type { Order, OrderSearchParams } from '@/types'
@@ -173,7 +183,7 @@ onMounted(fetchData)
 </script>
 
 <style lang="scss" scoped>
-.text-secondary { font-size: 12px; color: #909399; }
-.price { font-weight: 600; color: #F44336; }
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+.text-secondary { font-size: 12px; color: var(--color-text-placeholder); }
+.price { font-weight: 700; color: var(--color-accent); letter-spacing: 0.5px; }
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border-light); }
 </style>

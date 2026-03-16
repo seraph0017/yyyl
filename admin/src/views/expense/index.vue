@@ -73,12 +73,30 @@
         <el-table-column label="提交时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="handleDetail(row)">详情</el-button>
-            <el-button v-if="row.status === 'pending'" text type="success" @click="handleApprove(row, true)">通过</el-button>
-            <el-button v-if="row.status === 'pending'" text type="warning" @click="handleApprove(row, false)">驳回</el-button>
-            <el-button v-if="row.status === 'approved'" text type="primary" @click="handleMarkPaid(row)">打款</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="详情" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--view" circle size="small" @click="handleDetail(row)">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="row.status === 'pending'" content="通过" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--approve" circle size="small" @click="handleApprove(row, true)">
+                  <el-icon><Check /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="row.status === 'pending'" content="驳回" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--reject" circle size="small" @click="handleApprove(row, false)">
+                  <el-icon><Close /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip v-if="row.status === 'approved'" content="打款" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--pay" circle size="small" @click="handleMarkPaid(row)">
+                  <el-icon><Wallet /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -164,7 +182,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { Search, Plus, TrendCharts } from '@element-plus/icons-vue'
+import { Search, Plus, TrendCharts, View, Check, Close, Wallet } from '@element-plus/icons-vue'
 import { getExpenses, getExpenseTypes as fetchExpenseTypesApi, getExpenseStats, createExpense, approveExpense, markExpensePaid, getExpenseDetail } from '@/api/expense'
 import { formatPrice, formatDate, formatDateTime } from '@/utils'
 import type { ExpenseRequest, ExpenseType, ExpenseStats } from '@/types'
@@ -355,26 +373,27 @@ onMounted(() => {
 
     &.clickable {
       cursor: pointer;
-      transition: box-shadow 0.2s;
-      &:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12); }
+      transition: var(--transition-base);
+      &:hover { box-shadow: var(--shadow-base); transform: translateY(-2px); }
     }
 
     .stat-label {
       font-size: 13px;
-      color: #909399;
+      color: var(--color-text-placeholder);
       margin-bottom: 8px;
+      letter-spacing: 0.5px;
     }
     .stat-value {
       font-size: 28px;
-      font-weight: 600;
-      color: #303133;
-      &.price { color: #F44336; }
+      font-weight: 800;
+      color: var(--color-text);
+      &.price { color: var(--color-accent); }
     }
   }
 }
 
-.price { font-weight: 600; color: #F44336; }
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+.price { font-weight: 700; color: var(--color-accent); }
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border-light); }
 .mt-16 { margin-top: 16px; }
 .mb-8 { margin-bottom: 8px; }
 
@@ -387,8 +406,8 @@ onMounted(() => {
   .receipt-image {
     width: 120px;
     height: 90px;
-    border-radius: 4px;
-    border: 1px solid #ebeef5;
+    border-radius: var(--radius-small);
+    border: 1px solid var(--color-border-light);
   }
 }
 </style>

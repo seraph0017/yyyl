@@ -210,6 +210,10 @@ class UserIdentity(Base):
         Boolean, nullable=False, default=False, server_default="false",
         comment="是否本人"
     )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+        comment="默认出行人"
+    )
 
     # 关系
     user: Mapped["User"] = relationship(back_populates="identities")

@@ -89,7 +89,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit } from '@element-plus/icons-vue'
 import { getAnnualCardConfigs, createAnnualCardConfig, updateAnnualCardConfig, getPointsExchangeConfigs, createPointsExchangeConfig, updatePointsExchangeConfig } from '@/api/member'
 import { formatPrice } from '@/utils'
 import type { AnnualCardConfig, PointsExchangeConfig } from '@/types'

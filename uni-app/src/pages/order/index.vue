@@ -285,11 +285,13 @@ function onGoShopping() {
   background-color: var(--color-bg);
 }
 
-/* Tab 栏 */
+/* Tab 栏 — 磨砂玻璃 */
 .order-tabs {
   display: flex;
-  background-color: var(--color-bg-white);
-  border-bottom: 1rpx solid #f0f0f0;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1rpx solid rgba(42, 37, 32, 0.05);
   position: sticky;
   top: 0;
   z-index: 10;
@@ -300,57 +302,67 @@ function onGoShopping() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24rpx 0 20rpx;
+  padding: 28rpx 0 22rpx;
   position: relative;
+  transition: var(--transition-base);
 
   text {
     font-size: var(--font-size-base);
     color: var(--color-text-secondary);
+    letter-spacing: 0.5rpx;
   }
 
   &--active text {
     color: var(--color-primary);
-    font-weight: 600;
+    font-weight: 700;
   }
 
   &__line {
     position: absolute;
     bottom: 4rpx;
-    width: 40rpx;
+    width: 44rpx;
     height: 6rpx;
-    background-color: var(--color-primary);
+    background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
     border-radius: 3rpx;
   }
 }
 
 /* 订单列表 */
 .order-list {
-  padding: 16rpx 32rpx;
+  padding: 20rpx 28rpx;
 }
 
 .order-card {
   margin-bottom: 20rpx;
-  padding: 24rpx;
+  padding: 28rpx;
   background-color: var(--color-bg-card);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-sm);
+  border: 1rpx solid rgba(42, 37, 32, 0.03);
+  transition: var(--transition-base);
+
+  &:active {
+    transform: scale(0.99);
+  }
 
   &__header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     padding-bottom: 20rpx;
-    border-bottom: 1rpx solid #f5f5f5;
+    border-bottom: 1rpx solid var(--color-bg-light);
   }
 
   &__no {
     font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
+    color: var(--color-text-placeholder);
+    letter-spacing: 0.5rpx;
   }
 
   &__status {
     font-size: var(--font-size-sm);
-    font-weight: 600;
+    font-weight: 700;
+    letter-spacing: 0.5rpx;
   }
 
   &__items {
@@ -358,8 +370,8 @@ function onGoShopping() {
   }
 
   &__footer {
-    padding-top: 16rpx;
-    border-top: 1rpx solid #f5f5f5;
+    padding-top: 20rpx;
+    border-top: 1rpx solid var(--color-bg-light);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -371,9 +383,10 @@ function onGoShopping() {
   }
 
   &__total-price {
-    font-size: var(--font-size-lg);
-    color: var(--color-text);
-    font-weight: 700;
+    font-size: var(--font-size-xl);
+    color: var(--color-accent);
+    font-weight: 800;
+    letter-spacing: 1rpx;
   }
 
   &__actions {
@@ -386,15 +399,15 @@ function onGoShopping() {
 .order-item {
   display: flex;
   align-items: center;
-  padding: 12rpx 0;
+  padding: 14rpx 0;
 
   &__image {
-    width: 120rpx;
-    height: 120rpx;
-    border-radius: var(--radius-md);
+    width: 128rpx;
+    height: 128rpx;
+    border-radius: var(--radius-lg);
     overflow: hidden;
     flex-shrink: 0;
-    margin-right: 16rpx;
+    margin-right: 20rpx;
 
     image {
       width: 100%;
@@ -405,13 +418,13 @@ function onGoShopping() {
   &__placeholder {
     width: 100%;
     height: 100%;
-    background-color: var(--color-bg-light);
+    background: linear-gradient(135deg, var(--color-bg-light), var(--color-bg-warm));
     display: flex;
     justify-content: center;
     align-items: center;
 
     text {
-      font-size: 40rpx;
+      font-size: 44rpx;
     }
   }
 
@@ -423,14 +436,15 @@ function onGoShopping() {
   &__name {
     font-size: var(--font-size-base);
     color: var(--color-text);
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: 0.5rpx;
   }
 
   &__date {
     display: block;
     font-size: var(--font-size-sm);
     color: var(--color-text-placeholder);
-    margin-top: 6rpx;
+    margin-top: 8rpx;
   }
 
   &__right {
@@ -442,7 +456,7 @@ function onGoShopping() {
   &__price {
     font-size: var(--font-size-base);
     color: var(--color-text);
-    font-weight: 500;
+    font-weight: 600;
     display: block;
   }
 
@@ -454,23 +468,27 @@ function onGoShopping() {
 
 /* 操作按钮 */
 .order-btn {
-  height: 60rpx;
-  padding: 0 28rpx;
+  height: 64rpx;
+  padding: 0 32rpx;
   display: flex;
   justify-content: center;
   align-items: center;
   border-radius: var(--radius-round);
   font-size: var(--font-size-sm);
-  font-weight: 500;
+  font-weight: 600;
+  letter-spacing: 1rpx;
+  transition: var(--transition-base);
 
   &--primary {
-    background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary));
-    color: #fff;
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light));
+    box-shadow: 0 4rpx 12rpx rgba(45, 74, 62, 0.2);
+    text { color: var(--color-text-white); }
   }
 
   &--outline {
-    border: 2rpx solid var(--color-text-placeholder);
+    border: 2rpx solid rgba(42, 37, 32, 0.15);
     color: var(--color-text-secondary);
+    text { color: var(--color-text-secondary); }
   }
 
   &--text {
@@ -479,6 +497,7 @@ function onGoShopping() {
 
   &:active {
     opacity: 0.7;
+    transform: scale(0.96);
   }
 }
 
@@ -492,11 +511,12 @@ function onGoShopping() {
 /* 加载提示 */
 .loading-tip {
   text-align: center;
-  padding: 40rpx;
+  padding: 48rpx;
 
   text {
     font-size: var(--font-size-sm);
     color: var(--color-text-placeholder);
+    letter-spacing: 1rpx;
   }
 }
 </style>

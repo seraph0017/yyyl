@@ -37,15 +37,29 @@
                 </template>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="160">
+            <el-table-column label="操作" width="120" align="center">
               <template #default="{ row }">
-                <template v-if="editingConfigId === row.id">
-                  <el-button text type="primary" size="small" @click="saveConfig(row)">保存</el-button>
-                  <el-button text size="small" @click="cancelEditConfig">取消</el-button>
-                </template>
-                <template v-else>
-                  <el-button text type="primary" size="small" @click="startEditConfig(row)">编辑</el-button>
-                </template>
+                <div class="action-buttons">
+                  <template v-if="editingConfigId === row.id">
+                    <el-tooltip content="保存" placement="top" :show-after="400">
+                      <el-button class="action-btn action-btn--save" circle size="small" @click="saveConfig(row)">
+                        <el-icon><Check /></el-icon>
+                      </el-button>
+                    </el-tooltip>
+                    <el-tooltip content="取消" placement="top" :show-after="400">
+                      <el-button class="action-btn action-btn--cancel" circle size="small" @click="cancelEditConfig">
+                        <el-icon><Close /></el-icon>
+                      </el-button>
+                    </el-tooltip>
+                  </template>
+                  <template v-else>
+                    <el-tooltip content="编辑" placement="top" :show-after="400">
+                      <el-button class="action-btn action-btn--edit" circle size="small" @click="startEditConfig(row)">
+                        <el-icon><Edit /></el-icon>
+                      </el-button>
+                    </el-tooltip>
+                  </template>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -199,7 +213,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, Download } from '@element-plus/icons-vue'
+import { Search, Refresh, Download, Edit, Check, Close } from '@element-plus/icons-vue'
 import {
   getPerformanceConfigs, updatePerformanceConfigs,
   getPerformanceRecords, getPerformanceRanking,
@@ -397,7 +411,7 @@ onMounted(() => {
 .rank-number {
   font-size: 16px;
   font-weight: 600;
-  color: #909399;
+  color: var(--color-text-placeholder);
 }
 
 .pagination-wrapper {

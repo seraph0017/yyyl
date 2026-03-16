@@ -122,9 +122,9 @@ function renderSalesChart(details: any[]) {
       { type: 'value', name: '金额(元)' },
     ],
     series: [
-      { name: '订单数', type: 'bar', data: details.map(d => d.orders), itemStyle: { color: '#4CAF50', borderRadius: [4,4,0,0] } },
-      { name: '收入', type: 'line', yAxisIndex: 1, data: details.map(d => d.income / 100), smooth: true, itemStyle: { color: '#2E7D32' } },
-      { name: '退款', type: 'line', yAxisIndex: 1, data: details.map(d => (d.refund || 0) / 100), smooth: true, itemStyle: { color: '#F44336' }, lineStyle: { type: 'dashed' } },
+      { name: '订单数', type: 'bar', data: details.map(d => d.orders), itemStyle: { color: '#3d8b5e', borderRadius: [4,4,0,0] } },
+      { name: '收入', type: 'line', yAxisIndex: 1, data: details.map(d => d.income / 100), smooth: true, itemStyle: { color: '#2d4a3e' } },
+      { name: '退款', type: 'line', yAxisIndex: 1, data: details.map(d => (d.refund || 0) / 100), smooth: true, itemStyle: { color: '#c45c4a' }, lineStyle: { type: 'dashed' } },
     ],
   })
 }
@@ -148,8 +148,10 @@ onUnmounted(() => { chartInstance?.dispose() })
 
 <style lang="scss" scoped>
 .stat-mini {
-  background: #f5f7fa; border-radius: 8px; padding: 16px; text-align: center;
-  .stat-mini-label { font-size: 13px; color: #909399; margin-bottom: 4px; }
-  .stat-mini-value { font-size: 22px; font-weight: 700; color: #303133; }
+  background: var(--color-bg-warm); border-radius: var(--radius-base); padding: 20px; text-align: center;
+  border: 1px solid var(--color-border-light); transition: var(--transition-base);
+  &:hover { box-shadow: var(--shadow-light); }
+  .stat-mini-label { font-size: 13px; color: var(--color-text-placeholder); margin-bottom: 6px; letter-spacing: 0.5px; }
+  .stat-mini-value { font-size: 24px; font-weight: 800; color: var(--color-text); }
 }
 </style>

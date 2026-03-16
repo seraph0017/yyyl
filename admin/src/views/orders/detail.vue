@@ -91,5 +91,5 @@ onMounted(fetchOrder)
 </script>
 
 <style lang="scss" scoped>
-.price { font-weight: 600; color: #F44336; }
+.price { font-weight: 700; color: var(--color-accent); letter-spacing: 0.5px; }
 </style>

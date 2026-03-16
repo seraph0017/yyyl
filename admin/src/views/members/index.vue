@@ -33,7 +33,7 @@
               <el-avatar :size="36" :src="row.avatar">{{ row.nickname?.charAt(0) }}</el-avatar>
               <div>
                 <div>{{ row.nickname }}</div>
-                <div style="font-size: 12px; color: #909399;">{{ row.phone }}</div>
+                <div style="font-size: 12px; color: var(--color-text-placeholder);">{{ row.phone }}</div>
               </div>
             </div>
           </template>
@@ -55,9 +55,15 @@
         <el-table-column label="注册时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.registered_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120" fixed="right">
+        <el-table-column label="操作" width="80" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="router.push(`/members/${row.user_id}`)">详情</el-button>
+            <div class="action-buttons">
+              <el-tooltip content="详情" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--view" circle size="small" @click="router.push(`/members/${row.user_id}`)">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -72,7 +78,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Ticket } from '@element-plus/icons-vue'
+import { Ticket, View } from '@element-plus/icons-vue'
 import { getMembers } from '@/api/member'
 import { formatPrice, formatDateTime } from '@/utils'
 import type { MemberInfo, MemberSearchParams } from '@/types'
@@ -95,5 +101,5 @@ onMounted(fetchData)
 </script>
 
 <style lang="scss" scoped>
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--color-border-light); }
 </style>

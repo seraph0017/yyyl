@@ -56,17 +56,37 @@
         <el-table-column label="更新时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="160" fixed="right" align="center">
           <template #default="{ row }">
-            <el-button text type="primary" @click="router.push(`/products/${row.id}/edit`)">编辑</el-button>
-            <el-button text :type="row.status === 'active' ? 'warning' : 'success'" @click="handleToggleStatus(row)">
-              {{ row.status === 'active' ? '下架' : '上架' }}
-            </el-button>
-            <el-popconfirm title="确定删除该商品？" @confirm="handleDelete(row.id)">
-              <template #reference>
-                <el-button text type="danger">删除</el-button>
-              </template>
-            </el-popconfirm>
+            <div class="action-buttons">
+              <el-tooltip content="编辑" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--edit" circle size="small" @click="router.push(`/products/${row.id}/edit`)">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip :content="row.status === 'active' ? '下架' : '上架'" placement="top" :show-after="400">
+                <el-button
+                  class="action-btn"
+                  :class="row.status === 'active' ? 'action-btn--offline' : 'action-btn--online'"
+                  circle size="small"
+                  @click="handleToggleStatus(row)"
+                >
+                  <el-icon>
+                    <Bottom v-if="row.status === 'active'" />
+                    <Top v-else />
+                  </el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-popconfirm title="确定删除该商品？" @confirm="handleDelete(row.id)" width="200">
+                <template #reference>
+                  <el-tooltip content="删除" placement="top" :show-after="400">
+                    <el-button class="action-btn action-btn--delete" circle size="small">
+                      <el-icon><Delete /></el-icon>
+                    </el-button>
+                  </el-tooltip>
+                </template>
+              </el-popconfirm>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -91,7 +111,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Search, Plus, Picture } from '@element-plus/icons-vue'
+import { Search, Plus, Picture, Edit, Delete, Top, Bottom } from '@element-plus/icons-vue'
 import { getProducts, updateProductStatus, deleteProduct } from '@/api/product'
 import { formatPrice, formatDateTime, getCategoryName, categoryMap } from '@/utils'
 import type { Product, ProductSearchParams } from '@/types'
@@ -159,42 +179,48 @@ onMounted(fetchData)
 .product-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 
   .product-cover {
-    width: 48px;
-    height: 48px;
-    border-radius: 6px;
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-small);
     flex-shrink: 0;
+    box-shadow: var(--shadow-light);
   }
 
   .image-placeholder {
-    width: 48px;
-    height: 48px;
-    background: #f5f7fa;
+    width: 52px;
+    height: 52px;
+    background: linear-gradient(135deg, var(--color-bg), var(--color-bg-warm));
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #c0c4cc;
-    border-radius: 6px;
+    color: var(--color-text-placeholder);
+    border-radius: var(--radius-small);
+    border: 1px solid var(--color-border-light);
   }
 
   .product-name {
     font-size: 14px;
-    font-weight: 500;
-    margin-bottom: 4px;
-    color: #303133;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--color-text);
+    letter-spacing: 0.3px;
   }
 }
 
 .price {
-  font-weight: 600;
-  color: #F44336;
+  font-weight: 700;
+  color: var(--color-accent);
+  letter-spacing: 0.5px;
 }
 
 .pagination-wrapper {
   display: flex;
   justify-content: flex-end;
-  margin-top: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
 }
 </style>
