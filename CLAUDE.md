@@ -120,3 +120,36 @@ docker-compose up -d --build
 
 - **Mini-program**: "野奢" (Organic Luxury Outdoor) — wabi-sabi aesthetics. Colors: deep moss green `#2d4a3e` + warm copper gold `#c8a872` + warm sand `#faf6f0`.
 - **Admin dashboard**: "深邃极光" (Northern Lights Dashboard) — dark forest sidebar + aurora gradients + glassmorphism cards. Action buttons: 32px circular icon buttons with 11 color variants and hover glow effects (`action-btn--edit`, `action-btn--delete`, etc.).
+
+## 需求→PRD→开发工作流
+
+所有新功能开发遵循以下标准流程：
+
+### 1. 需求提交
+- 用户将新需求文档放入 `needs/{日期}/` 目录（如 `needs/0331/new-need.md`）
+- 需求文档为自然语言描述，无格式要求
+
+### 2. PRD 撰写（产品 Agent）
+- **产品 Agent** 基于 `needs/` 中的新需求，结合现有 PRD 基线，撰写增量 PRD 文档
+- PRD 输出到 `prd/` 目录，命名格式：`yyyl_prd_v{版本号}_increment.md`
+- PRD 包含：变更总览、功能描述、用户故事、业务规则、数据模型变更、API 变更、前端变更、异常处理、验收标准、数据库索引设计、兼容性分析
+
+### 3. 架构师评审（架构师 Agent）
+- **架构师 Agent** 对 PRD 进行严格评审，维度包括：数据模型完备性、API 设计合理性、前端架构可行性、安全性、业务规则严密性、系统兼容性
+- 评审输出：逐维度评分（1-10）+ 加权总分 + 必须修补的问题（CRITICAL/HIGH）+ 改进建议（MEDIUM）
+
+### 4. 迭代修订
+- 产品 Agent 根据架构师反馈修订 PRD
+- 架构师 Agent 进行复审确认
+- **反复迭代直到架构师评审评分 ≥ 8.5 且结论为 APPROVED**
+
+### 5. 进入开发
+- PRD 达到 APPROVED 状态后，方可进入开发阶段
+- 开发遵循现有的 TDD + Code Review 工作流
+
+### PRD 版本历史
+| 版本 | 日期 | 状态 | 说明 |
+|------|------|------|------|
+| v1.4 | 2026-03-11 | ✅ 正式基线 | 初始 PRD，全功能定义 |
+| v1.5 | 2026-03-15 | ✅ 架构师 APPROVED (9.0+) | 增量：搭配售卖、秒杀完善、前端增强、退款增强、工作系统 |
+| v1.6 | 2026-03-31 | ✅ 架构师 APPROVED (8.8) | 增量：小程序可视化装修系统、企业宣传首页 |
