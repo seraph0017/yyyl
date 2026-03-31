@@ -8,7 +8,12 @@ from __future__ import annotations
 import json
 from typing import List
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Defaults that are clearly insecure — used to detect unrotated secrets
+_INSECURE_JWT_DEFAULT = "change-me-in-production"
+_INSECURE_AES_DEFAULT = "change-me-32-byte-key-in-prod!!"
 
 
 class Settings(BaseSettings):
@@ -36,7 +41,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # ---- JWT配置 ----
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    JWT_SECRET_KEY: str = _INSECURE_JWT_DEFAULT
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 120  # 2小时
     JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7天
@@ -63,7 +68,7 @@ class Settings(BaseSettings):
     XHS_APPS: str = '{}'
 
     # ---- AES加密配置 ----
-    AES_ENCRYPTION_KEY: str = "change-me-32-byte-key-in-prod!!"
+    AES_ENCRYPTION_KEY: str = _INSECURE_AES_DEFAULT
 
     # ---- CORS配置 ----
     CORS_ORIGINS: str = '["http://localhost:3000","http://localhost:8080"]'
@@ -83,6 +88,54 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.APP_ENV == "production"
 
+    @model_validator(mode="after")
+    def _check_insecure_defaults(self) -> "Settings":
+        """Warn at construction time if insecure defaults are still in use."""
+        if self.JWT_SECRET_KEY == _INSECURE_JWT_DEFAULT:
+            import warnings
+            warnings.warn(
+                "JWT_SECRET_KEY is using the insecure default. "
+                "Set a strong secret via the JWT_SECRET_KEY env var.",
+                stacklevel=2,
+            )
+        if self.AES_ENCRYPTION_KEY == _INSECURE_AES_DEFAULT:
+            import warnings
+            warnings.warn(
+                "AES_ENCRYPTION_KEY is using the insecure default. "
+                "Set a strong 32-byte key via the AES_ENCRYPTION_KEY env var.",
+                stacklevel=2,
+            )
+        return self
+
+    def validate_production_secrets(self) -> None:
+        """Raise ValueError if production is running with insecure defaults."""
+        if not self.is_production:
+            return
+
+        errors: list[str] = []
+
+        if self.JWT_SECRET_KEY == _INSECURE_JWT_DEFAULT:
+            errors.append(
+                "JWT_SECRET_KEY must not be the default "
+                f"'{_INSECURE_JWT_DEFAULT}' in production"
+            )
+        if self.AES_ENCRYPTION_KEY == _INSECURE_AES_DEFAULT:
+            errors.append(
+                "AES_ENCRYPTION_KEY must not be the default "
+                f"'{_INSECURE_AES_DEFAULT}' in production"
+            )
+        if not self.WECHAT_APP_ID:
+            errors.append("WECHAT_APP_ID must not be empty in production")
+
+        if errors:
+            raise ValueError(
+                "Production security check failed:\n  - "
+                + "\n  - ".join(errors)
+            )
+
 
 # 全局单例
 settings = Settings()
+
+# 生产环境启动时校验敏感配置
+settings.validate_production_secrets()

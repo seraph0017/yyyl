@@ -58,6 +58,7 @@ async def list_products(
     site_id = get_site_id(request)
     products, total = await product_service.list_products(
         db,
+        site_id=site_id,
         keyword=params.keyword,
         product_type=params.type,
         category=params.category,
@@ -68,8 +69,6 @@ async def list_products(
         page=pagination.page,
         page_size=pagination.page_size,
     )
-    # 按 site_id 过滤
-    products = [p for p in products if p.site_id == site_id]
     items = [ProductListItem.model_validate(p) for p in products]
     return PaginatedResponse.create(
         items=items,
@@ -160,6 +159,7 @@ async def admin_list_products(
     site_id = get_site_id(request)
     products, total = await product_service.list_products(
         db,
+        site_id=site_id,
         keyword=params.keyword,
         product_type=params.type,
         category=params.category,
@@ -170,8 +170,6 @@ async def admin_list_products(
         page=pagination.page,
         page_size=pagination.page_size,
     )
-    # 按 site_id 过滤本营地商品
-    products = [p for p in products if p.site_id == site_id]
     items = [ProductListItem.model_validate(p) for p in products]
     return PaginatedResponse.create(
         items=items,

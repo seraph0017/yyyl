@@ -4,6 +4,7 @@ import NProgress from 'nprogress'
 import 'nprogress/nprogress.css'
 import { getToken } from '@/utils/request'
 import { brandConfig } from '@/config/brand'
+import { useUserStore } from '@/stores/user'
 
 NProgress.configure({ showSpinner: false })
 
@@ -217,7 +218,7 @@ const router = createRouter({
 })
 
 // 路由守卫
-router.beforeEach((to, _from, next) => {
+router.beforeEach(async (to, _from, next) => {
   NProgress.start()
   document.title = `${to.meta.title || '管理后台'} - ${brandConfig.name}`
 
@@ -235,12 +236,21 @@ router.beforeEach((to, _from, next) => {
     if (!token) {
       next(`/login?redirect=${to.path}`)
     } else {
-      // 角色权限检查
+      const userStore = useUserStore()
+
+      // 页面刷新后，store为空时需要服务端验证token有效性
+      if (!userStore.isVerified) {
+        const isValid = await userStore.verifyAndRefreshUser()
+        if (!isValid) {
+          next(`/login?redirect=${to.path}`)
+          return
+        }
+      }
+
+      // 角色权限检查（使用store的响应式状态）
       const requiredRoles = to.meta.roles as string[] | undefined
       if (requiredRoles) {
-        const userInfo = JSON.parse(localStorage.getItem('user_info') || '{}')
-        const userRole = userInfo?.role?.role_code
-        if (userRole && requiredRoles.includes(userRole)) {
+        if (userStore.hasRole(requiredRoles)) {
           next()
         } else {
           next('/dashboard')

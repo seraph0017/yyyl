@@ -73,8 +73,8 @@ async def create_order(
     discount_amount = Decimal("0")
     deposit_amount = Decimal("0")
     order_type = ""
-    order_items = []
-    locked_inventories = []  # 记录已锁定的库存，异常时回滚
+    order_items: List[Dict[str, Any]] = []
+    locked_inventories: List[Tuple[int, Any, int, Any, Any]] = []  # 记录已锁定的库存，异常时回滚
 
     try:
         for item_data in items_data:
@@ -119,10 +119,9 @@ async def create_order(
                 )
 
             # 4. 计算价格并锁定库存（按日期逐天处理）
-            unit_price = product.base_price
             for d in dates:
                 # 锁定库存
-                inv = await inventory_service.lock_inventory(
+                await inventory_service.lock_inventory(
                     db, product_id, d, quantity, order_id=0,
                     sku_id=sku_id, time_slot=time_slot,
                 )
@@ -150,75 +149,72 @@ async def create_order(
             if product.ext_rental and product.ext_rental.deposit_amount > 0:
                 deposit_amount += product.ext_rental.deposit_amount * quantity
 
-    except HTTPException:
-        # 回滚已锁定的库存
+        # 5. 应用折扣规则（连续天数折扣 vs 多人折扣，互斥取最优）
+        discount_amount, discount_type_result, discount_detail_result = (
+            await _calculate_discount(db, items_data, order_items, total_amount)
+        )
+
+        # 6. 创建订单
+        actual_amount = total_amount - discount_amount + deposit_amount
+        payment_timeout = 1800  # 默认30分钟
+
+        order = Order(
+            order_no=generate_order_no(),
+            user_id=user.id,
+            order_type=order_type,
+            status="pending_payment",
+            total_amount=total_amount,
+            discount_amount=discount_amount,
+            actual_amount=actual_amount,
+            deposit_amount=deposit_amount,
+            discount_type=discount_type_result,
+            discount_detail=discount_detail_result,
+            payment_method=payment_method,
+            payment_status="unpaid",
+            times_card_id=times_card_id,
+            address_id=address_id,
+            remark=remark,
+            expire_at=datetime.now(timezone.utc) + timedelta(seconds=payment_timeout),
+        )
+        db.add(order)
+        await db.flush()
+
+        # 7. 创建订单项
+        for oi_data in order_items:
+            identity_ids = oi_data.pop("identity_ids", [])
+            parent_item_id = oi_data.pop("parent_item_id", None)
+
+            # 如果有多个身份信息，为每个身份创建一个订单项
+            if identity_ids:
+                for identity_id in identity_ids:
+                    oi = OrderItem(
+                        order_id=order.id,
+                        identity_id=identity_id,
+                        parent_item_id=parent_item_id,
+                        **oi_data,
+                    )
+                    db.add(oi)
+            else:
+                oi = OrderItem(
+                    order_id=order.id,
+                    parent_item_id=parent_item_id,
+                    **oi_data,
+                )
+                db.add(oi)
+
+        await db.flush()
+        logger.info(f"[订单] 创建: order_id={order.id}, order_no={order.order_no}, user={user.id}")
+
+        return order
+
+    except Exception:
+        # 回滚已锁定的库存（任何异常都必须释放，防止库存死锁）
         for pid, d, qty, sid, ts in locked_inventories:
             try:
                 await inventory_service.release_inventory(db, pid, d, qty, 0, sid, ts)
             except Exception:
                 logger.error(f"[订单] 回滚库存失败: product={pid}, date={d}")
         raise
-
-    # 5. 应用折扣规则（连续天数折扣 vs 多人折扣，互斥取最优）
-    discount_amount, discount_type_result, discount_detail_result = (
-        await _calculate_discount(db, items_data, order_items, total_amount)
-    )
-
-    # 6. 创建订单
-    actual_amount = total_amount - discount_amount + deposit_amount
-    payment_timeout = 1800  # 默认30分钟
-
-    order = Order(
-        order_no=generate_order_no(),
-        user_id=user.id,
-        order_type=order_type,
-        status="pending_payment",
-        total_amount=total_amount,
-        discount_amount=discount_amount,
-        actual_amount=actual_amount,
-        deposit_amount=deposit_amount,
-        discount_type=discount_type_result,
-        discount_detail=discount_detail_result,
-        payment_method=payment_method,
-        payment_status="unpaid",
-        times_card_id=times_card_id,
-        address_id=address_id,
-        remark=remark,
-        expire_at=datetime.now(timezone.utc) + timedelta(seconds=payment_timeout),
-    )
-    db.add(order)
-    await db.flush()
-
-    # 7. 创建订单项
-    for oi_data in order_items:
-        identity_ids = oi_data.pop("identity_ids", [])
-        parent_item_id = oi_data.pop("parent_item_id", None)
-
-        # 如果有多个身份信息，为每个身份创建一个订单项
-        if identity_ids:
-            for identity_id in identity_ids:
-                oi = OrderItem(
-                    order_id=order.id,
-                    identity_id=identity_id,
-                    parent_item_id=parent_item_id,
-                    **oi_data,
-                )
-                db.add(oi)
-        else:
-            oi = OrderItem(
-                order_id=order.id,
-                parent_item_id=parent_item_id,
-                **oi_data,
-            )
-            db.add(oi)
-
-    # 更新库存锁定记录中的 order_id
-    # (已在 lock_inventory 中传入 order_id=0，这里无需再更新)
-
-    await db.flush()
-    logger.info(f"[订单] 创建: order_id={order.id}, order_no={order.order_no}, user={user.id}")
-
-    return order
 
 
 async def cancel_order(
@@ -660,6 +656,7 @@ async def get_order_detail(
 async def list_orders(
     db: AsyncSession,
     *,
+    site_id: Optional[int] = None,
     user_id: Optional[int] = None,
     order_status: Optional[str] = None,
     order_type: Optional[str] = None,
@@ -676,6 +673,7 @@ async def list_orders(
 
     Args:
         db: 数据库会话
+        site_id: 营地ID（SQL WHERE 过滤）
         user_id: 用户ID（C端）
         order_status: 订单状态
         order_type: 订单类型
@@ -697,6 +695,8 @@ async def list_orders(
         .where(Order.is_deleted.is_(False))
     )
 
+    if site_id is not None:
+        query = query.where(Order.site_id == site_id)
     if user_id:
         query = query.where(Order.user_id == user_id)
     if order_status:

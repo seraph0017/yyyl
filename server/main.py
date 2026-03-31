@@ -4,19 +4,27 @@
 
 from __future__ import annotations
 
+import logging
+import traceback
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from config import settings
 from database import engine
 from redis_client import close_redis, init_redis
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -55,6 +63,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---- Request ID 中间件 ----
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """为每个请求生成唯一 request_id，写入响应头和日志上下文"""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
+
+
+# ---- 全局异常处理 ----
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """请求参数校验失败：返回结构化错误"""
+    request_id = getattr(request.state, "request_id", None)
+    logger.warning(
+        f"[请求校验失败] request_id={request_id} path={request.url.path} errors={exc.errors()}"
+    )
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": "Validation error",
+            "errors": [
+                {
+                    "loc": list(err.get("loc", [])),
+                    "msg": err.get("msg", ""),
+                    "type": err.get("type", ""),
+                }
+                for err in exc.errors()
+            ],
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """兜底异常处理：记录完整堆栈，返回安全响应"""
+    request_id = getattr(request.state, "request_id", None)
+    logger.error(
+        f"[未捕获异常] request_id={request_id} path={request.url.path}\n"
+        f"{traceback.format_exc()}"
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
 
 
 # ---- 健康检查 ----

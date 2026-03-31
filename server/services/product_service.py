@@ -44,6 +44,7 @@ ALLOWED_SORT_FIELDS = {"id", "name", "base_price", "sort_order", "created_at", "
 async def list_products(
     db: AsyncSession,
     *,
+    site_id: Optional[int] = None,
     keyword: Optional[str] = None,
     product_type: Optional[str] = None,
     category: Optional[str] = None,
@@ -60,6 +61,7 @@ async def list_products(
 
     Args:
         db: 数据库会话
+        site_id: 营地ID（SQL WHERE 过滤）
         keyword: 搜索关键词
         product_type: 商品类型筛选
         category: 分类筛选
@@ -76,6 +78,9 @@ async def list_products(
         (商品列表, 总数)
     """
     query = select(Product).where(Product.is_deleted.is_(False))
+
+    if site_id is not None:
+        query = query.where(Product.site_id == site_id)
 
     # 筛选条件
     if keyword:

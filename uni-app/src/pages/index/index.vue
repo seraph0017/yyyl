@@ -47,7 +47,7 @@
               v-if="item.image"
             />
             <view class="banner-card__overlay" />
-            <view class="banner-card__content" v-if="!item.image || true">
+            <view class="banner-card__content" v-if="!item.image">
               <text class="banner-card__title">{{ item.title }}</text>
               <view class="banner-card__action">
                 <text>了解详情</text>

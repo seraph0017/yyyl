@@ -14,7 +14,10 @@ export const useUserStore = defineStore('user', () => {
   const isAdmin = computed(() => ['admin', 'super_admin'].includes(roleCode.value))
   const isSuperAdmin = computed(() => roleCode.value === 'super_admin')
 
-  // 初始化用户信息（从localStorage恢复）
+  // 是否已通过服务端验证
+  const isVerified = ref(false)
+
+  // 初始化用户信息（从localStorage恢复，并验证token有效性）
   function initUser() {
     const cached = localStorage.getItem('user_info')
     if (cached) {
@@ -26,6 +29,30 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  // 验证token并刷新用户信息（页面刷新后调用）
+  async function verifyAndRefreshUser(): Promise<boolean> {
+    if (isVerified.value) return true
+    if (!getToken()) return false
+    try {
+      const res = await getMe()
+      userInfo.value = res.data
+      localStorage.setItem('user_info', JSON.stringify(res.data))
+      isVerified.value = true
+      return true
+    } catch {
+      // Token无效，清除登录状态
+      userInfo.value = null
+      clearToken()
+      isVerified.value = false
+      return false
+    }
+  }
+
+  // 检查用户是否拥有指定角色
+  function hasRole(roles: string[]): boolean {
+    return !!roleCode.value && roles.includes(roleCode.value)
+  }
+
   // 登录
   async function login(username: string, password: string) {
     const res = await loginApi({ username, password })
@@ -33,6 +60,7 @@ export const useUserStore = defineStore('user', () => {
     setToken(data.access_token, data.refresh_token)
     userInfo.value = data.user
     localStorage.setItem('user_info', JSON.stringify(data.user))
+    isVerified.value = true
     return data
   }
 
@@ -42,6 +70,7 @@ export const useUserStore = defineStore('user', () => {
       const res = await getMe()
       userInfo.value = res.data
       localStorage.setItem('user_info', JSON.stringify(res.data))
+      isVerified.value = true
     } catch {
       // Token无效则清除
       logout()
@@ -56,6 +85,7 @@ export const useUserStore = defineStore('user', () => {
       // 忽略登出接口失败
     } finally {
       userInfo.value = null
+      isVerified.value = false
       clearToken()
       router.push('/login')
     }
@@ -64,11 +94,14 @@ export const useUserStore = defineStore('user', () => {
   return {
     userInfo,
     isLoggedIn,
+    isVerified,
     roleName,
     roleCode,
     isAdmin,
     isSuperAdmin,
     initUser,
+    verifyAndRefreshUser,
+    hasRole,
     login,
     fetchUserInfo,
     logout,

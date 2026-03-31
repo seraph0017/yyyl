@@ -11,7 +11,7 @@
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
@@ -23,6 +23,7 @@ from middleware.auth import get_current_user
 from models.order import Cart, CartItem, Order, OrderItem, OrderStatus, PaymentStatus
 from models.product import Product, ProductStatus, SKU, SKUStatus
 from models.user import User
+from schemas.cart import CartAddItemRequest, CartCheckoutRequest
 from schemas.common import ResponseModel
 from utils.helpers import generate_order_no
 
@@ -134,20 +135,14 @@ async def list_cart_items(
 
 @router.post("/items", summary="添加商品到购物车")
 async def add_cart_item(
-    body: Dict[str, Any] = Body(...),
+    body: CartAddItemRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """添加商品到购物车"""
-    product_id: int = body.get("product_id")
-    sku_id: Optional[int] = body.get("sku_id")
-    quantity: int = body.get("quantity", 1)
-
-    if not product_id or quantity < 1:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": 40001, "message": "参数错误：product_id 和 quantity 必填且 quantity >= 1"},
-        )
+    product_id = body.product_id
+    sku_id = body.sku_id
+    quantity = body.quantity
 
     # 校验商品存在且在售
     product = await db.execute(
@@ -303,20 +298,14 @@ async def delete_cart_item(
 
 @router.post("/checkout", summary="购物车结算")
 async def checkout(
-    body: Dict[str, Any] = Body(...),
+    body: CartCheckoutRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """购物车结算：生成预订单"""
-    item_ids: List[int] = body.get("item_ids", [])
-    address_id: Optional[int] = body.get("address_id")
-    remark: Optional[str] = body.get("remark")
-
-    if not item_ids:
-        raise HTTPException(
-            status_code=400,
-            detail={"code": 40001, "message": "请选择要结算的商品"},
-        )
+    item_ids = body.item_ids
+    address_id = body.address_id
+    remark = body.remark
 
     # 获取购物车
     cart = await _get_or_create_cart(db, user.id)

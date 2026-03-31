@@ -174,6 +174,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Top, Bottom, ShoppingCart, Money, UserFilled, WarningFilled } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getRealtimeData, getTrends, getSalesRanking, getMemberStats, getFinanceSummary, getCategoryRevenue } from '@/api/dashboard'
@@ -192,6 +193,7 @@ const rankSort = ref<'sales_count' | 'sales_amount'>('sales_count')
 const rankingList = ref<SalesRankingItem[]>([])
 const memberStats = ref<Partial<MemberStats>>({})
 const financeSummary = ref<Partial<FinanceSummary>>({})
+const loadErrors = ref<Record<string, boolean>>({})
 
 const trendChartRef = ref<HTMLElement>()
 const pieChartRef = ref<HTMLElement>()
@@ -246,11 +248,11 @@ async function fetchRealtime() {
   try {
     const res = await getRealtimeData()
     realtimeData.value = res.data
+    loadErrors.value.realtime = false
   } catch {
-    realtimeData.value = {
-      today_orders: 42, today_income: 1268000, current_visitors: 18, stock_alerts: 3,
-      yesterday_orders: 38, yesterday_income: 1120000, orders_trend: 'up', income_trend: 'up',
-    }
+    realtimeData.value = {}
+    loadErrors.value.realtime = true
+    ElMessage.error('实时数据加载失败，请稍后重试')
   }
 }
 
@@ -258,17 +260,11 @@ async function fetchTrends() {
   try {
     const res = await getTrends({ days: trendDays.value })
     renderTrendChart(res.data)
+    loadErrors.value.trends = false
   } catch {
-    const days = trendDays.value
-    const dates = Array.from({ length: days }, (_, i) => {
-      const d = new Date(); d.setDate(d.getDate() - days + i + 1)
-      return `${d.getMonth() + 1}/${d.getDate()}`
-    })
-    renderTrendChart({
-      dates,
-      orders: dates.map(() => Math.floor(Math.random() * 50 + 20)),
-      income: dates.map(() => Math.floor(Math.random() * 200000 + 80000)),
-    })
+    renderTrendChart({ dates: [], orders: [], income: [] })
+    loadErrors.value.trends = true
+    ElMessage.error('趋势数据加载失败，请稍后重试')
   }
 }
 
@@ -276,14 +272,11 @@ async function fetchRanking() {
   try {
     const res = await getSalesRanking({ sort_by: rankSort.value })
     rankingList.value = res.data
+    loadErrors.value.ranking = false
   } catch {
-    rankingList.value = [
-      { product_id: 1, product_name: '林间帐篷营位A', category: 'campsite', sales_count: 128, sales_amount: 3840000, cover_image: '' },
-      { product_id: 2, product_name: '湖畔木屋B', category: 'campsite', sales_count: 96, sales_amount: 5760000, cover_image: '' },
-      { product_id: 3, product_name: '亲子露营活动', category: 'activity', sales_count: 84, sales_amount: 2520000, cover_image: '' },
-      { product_id: 4, product_name: '烧烤套餐', category: 'meal', sales_count: 72, sales_amount: 864000, cover_image: '' },
-      { product_id: 5, product_name: '帐篷租赁(双人)', category: 'equipment_rental', sales_count: 56, sales_amount: 560000, cover_image: '' },
-    ]
+    rankingList.value = []
+    loadErrors.value.ranking = true
+    ElMessage.error('销售排行加载失败，请稍后重试')
   }
 }
 
@@ -291,11 +284,11 @@ async function fetchMemberStats() {
   try {
     const res = await getMemberStats()
     memberStats.value = res.data
+    loadErrors.value.members = false
   } catch {
-    memberStats.value = {
-      total_members: 1286, annual_members: 128, times_card_holders: 45, active_members: 380,
-      new_today: 8, new_this_week: 42, new_this_month: 156,
-    }
+    memberStats.value = {}
+    loadErrors.value.members = true
+    ElMessage.error('会员数据加载失败，请稍后重试')
   }
 }
 
@@ -303,11 +296,11 @@ async function fetchFinanceSummary() {
   try {
     const res = await getFinanceSummary()
     financeSummary.value = res.data
+    loadErrors.value.finance = false
   } catch {
-    financeSummary.value = {
-      pending_amount: 2850000, withdrawable_amount: 18600000, deposit_amount: 3200000,
-      month_income: 6800000, last_month_income: 5200000, mom_rate: 30.8, yoy_rate: 0,
-    }
+    financeSummary.value = {}
+    loadErrors.value.finance = true
+    ElMessage.error('财务数据加载失败，请稍后重试')
   }
 }
 
@@ -315,15 +308,11 @@ async function fetchCategoryRevenue() {
   try {
     const res = await getCategoryRevenue()
     renderPieChart(res.data)
+    loadErrors.value.category = false
   } catch {
-    renderPieChart([
-      { category: 'campsite', category_name: '营位', revenue: 4200000, percentage: 45, order_count: 280 },
-      { category: 'activity', category_name: '活动', revenue: 1800000, percentage: 20, order_count: 120 },
-      { category: 'meal', category_name: '餐饮', revenue: 1200000, percentage: 13, order_count: 400 },
-      { category: 'equipment_rental', category_name: '装备租赁', revenue: 800000, percentage: 9, order_count: 160 },
-      { category: 'shop_item', category_name: '小商店', revenue: 600000, percentage: 7, order_count: 350 },
-      { category: 'peripheral', category_name: '周边商品', revenue: 500000, percentage: 6, order_count: 85 },
-    ])
+    renderPieChart([])
+    loadErrors.value.category = true
+    ElMessage.error('品类收入加载失败，请稍后重试')
   }
 }
 

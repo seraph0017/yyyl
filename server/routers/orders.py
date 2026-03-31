@@ -18,7 +18,7 @@ B端 /api/v1/admin/orders：
 - PUT /{id}/shipping — 更新物流
 """
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -232,6 +232,7 @@ async def admin_list_orders(
     site_id = get_site_id(request)
     orders, total = await order_service.list_orders(
         db,
+        site_id=site_id,
         user_id=params.user_id,
         order_status=params.status,
         order_type=params.order_type,
@@ -242,8 +243,6 @@ async def admin_list_orders(
         page=pagination.page,
         page_size=pagination.page_size,
     )
-    # 按 site_id 过滤本营地订单
-    orders = [o for o in orders if o.site_id == site_id]
     items = [OrderResponse.model_validate(o) for o in orders]
     return PaginatedResponse.create(
         items=items,
@@ -257,10 +256,16 @@ async def admin_list_orders(
 async def approve_refund(
     order_id: int,
     body: RefundApproveRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端审批退款：通过则发起退款并释放库存，拒绝则恢复已支付状态"""
+    # 校验订单属于当前营地
+    site_id = get_site_id(request)
+    order_check = await order_service.get_order_detail(db, order_id)
+    if order_check.site_id != site_id:
+        raise HTTPException(status_code=404, detail={"code": 40401, "message": "订单不存在"})
     order = await order_service.approve_refund(
         db, order_id,
         approved=body.approved,
@@ -276,10 +281,16 @@ async def approve_refund(
 async def update_shipping(
     order_id: int,
     body: ShippingUpdateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """管理端更新订单物流信息"""
+    # 校验订单属于当前营地
+    site_id = get_site_id(request)
+    order_check = await order_service.get_order_detail(db, order_id)
+    if order_check.site_id != site_id:
+        raise HTTPException(status_code=404, detail={"code": 40401, "message": "订单不存在"})
     order = await order_service.update_shipping(
         db, order_id,
         shipping_no=body.shipping_no,
