@@ -264,6 +264,34 @@ async def save_draft(
     )
 
 
+@router.post("/admin/cms/pages/{page_id}/reset", summary="重置页面为默认")
+async def reset_page(
+    page_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """
+    重置页面：清空草稿 + 取消发布版本。
+    小程序端将自动降级到默认硬编码首页。
+    仅 super_admin 可执行。
+    """
+    if not admin.role or admin.role.role_code != "super_admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "CMS_PUBLISH_PERMISSION_DENIED", "message": "仅超级管理员可重置页面"},
+        )
+
+    site_id = get_site_id(request)
+    page_obj = await cms_service.reset_page(
+        db, site_id=site_id, page_id=page_id,
+    )
+    return ResponseModel.success(
+        data=CmsPageDetail.model_validate(page_obj).model_dump(),
+        message="页面已重置为默认",
+    )
+
+
 @router.post("/admin/cms/pages/{page_id}/publish", summary="发布页面")
 async def publish_page(
     page_id: int,

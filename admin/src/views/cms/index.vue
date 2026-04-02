@@ -64,13 +64,25 @@
           {{ row.draft_updated_at ? formatTime(row.draft_updated_at) : '-' }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="320" fixed="right">
         <template #default="{ row }">
           <el-button type="primary" link size="small" @click="goEditor(row.id)">
             <el-icon><Edit /></el-icon>编辑
           </el-button>
+          <el-button type="success" link size="small" @click="showLinkDialog(row)">
+            <el-icon><Link /></el-icon>链接
+          </el-button>
           <el-button type="warning" link size="small" @click="openSettingDialog(row)">
             <el-icon><Setting /></el-icon>设置
+          </el-button>
+          <el-button
+            v-if="row.current_version_id || row.draft_config"
+            type="info"
+            link
+            size="small"
+            @click="handleReset(row)"
+          >
+            <el-icon><RefreshLeft /></el-icon>重置
           </el-button>
           <el-button
             v-if="row.page_type === 'custom'"
@@ -154,15 +166,58 @@
         <el-button type="primary" :loading="saving" @click="handleUpdateSetting">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 链接弹窗 -->
+    <el-dialog v-model="linkDialogVisible" title="页面链接" width="560px" aria-label="页面链接">
+      <div class="link-info" v-if="linkTarget">
+        <el-descriptions :column="1" border>
+          <el-descriptions-item label="页面标识">
+            <el-tag size="small">{{ linkTarget.page_code }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="小程序页面路径">
+            <div class="link-row">
+              <code class="link-path">{{ miniappPath }}</code>
+              <el-button type="primary" size="small" @click="copyText(miniappPath)">
+                <el-icon><CopyDocument /></el-icon>复制
+              </el-button>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="C端 API 地址">
+            <div class="link-row">
+              <code class="link-path">{{ cEndApiUrl }}</code>
+              <el-button type="primary" size="small" @click="copyText(cEndApiUrl)">
+                <el-icon><CopyDocument /></el-icon>复制
+              </el-button>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="状态">
+            <el-tag :type="linkTarget.current_version_id ? 'success' : 'warning'" size="small">
+              {{ linkTarget.current_version_id ? '已发布 — 小程序可访问' : '未发布 — 小程序将显示默认页面' }}
+            </el-tag>
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-alert
+          v-if="linkTarget.page_code === 'home'"
+          type="info"
+          :closable="false"
+          style="margin-top: 12px"
+        >
+          <template #title>
+            <strong>首页说明：</strong>小程序首页自动读取 page_code 为 <code>home</code> 的配置。
+            发布后小程序刷新即可看到变化。未发布时显示默认硬编码首页。
+          </template>
+        </el-alert>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Edit, Setting, Delete } from '@element-plus/icons-vue'
+import { Search, Plus, Edit, Setting, Delete, Link, RefreshLeft, CopyDocument } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { getCmsPages, createCmsPage, updateCmsPage, deleteCmsPage } from '@/api/cms'
+import { getCmsPages, createCmsPage, updateCmsPage, deleteCmsPage, resetCmsPage } from '@/api/cms'
 import type { CmsPage } from '@/types/cms'
 import dayjs from 'dayjs'
 
@@ -305,6 +360,56 @@ async function handleUpdateSetting() {
   }
 }
 
+// ---- 链接弹窗 ----
+const linkDialogVisible = ref(false)
+const linkTarget = ref<CmsPage | null>(null)
+
+const miniappPath = computed(() => {
+  if (!linkTarget.value) return ''
+  const code = linkTarget.value.page_code
+  if (code === 'home') return '/pages/index/index'
+  return `/pages/cms-page/index?page_code=${code}`
+})
+
+const cEndApiUrl = computed(() => {
+  if (!linkTarget.value) return ''
+  return `/api/v1/cms/pages/${linkTarget.value.page_code}`
+})
+
+function showLinkDialog(page: CmsPage) {
+  linkTarget.value = page
+  linkDialogVisible.value = true
+}
+
+function copyText(text: string) {
+  navigator.clipboard.writeText(text).then(() => {
+    ElMessage.success('已复制到剪贴板')
+  }).catch(() => {
+    ElMessage.error('复制失败，请手动复制')
+  })
+}
+
+// ---- 重置为默认 ----
+async function handleReset(page: CmsPage) {
+  try {
+    await ElMessageBox.confirm(
+      `确定将「${page.title}」重置为默认？\n\n这会清空草稿配置并取消当前发布版本，小程序端将显示默认硬编码首页。`,
+      '重置确认',
+      {
+        type: 'warning',
+        confirmButtonText: '确定重置',
+        cancelButtonText: '取消',
+        confirmButtonClass: 'el-button--danger',
+      }
+    )
+    await resetCmsPage(page.id)
+    ElMessage.success('页面已重置为默认')
+    fetchList()
+  } catch {
+    // 取消或接口错误
+  }
+}
+
 // ---- 删除 ----
 async function handleDelete(page: CmsPage) {
   try {
@@ -347,5 +452,21 @@ onMounted(() => {
   display: flex;
   justify-content: flex-end;
   margin-top: 16px;
+}
+
+.link-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-path {
+  flex: 1;
+  padding: 4px 8px;
+  background: var(--el-fill-color-lighter, #f5f7fa);
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 13px;
+  word-break: break-all;
 }
 </style>

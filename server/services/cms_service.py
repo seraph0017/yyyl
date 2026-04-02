@@ -416,6 +416,39 @@ async def save_draft(
     return page
 
 
+# ---- B端：重置页面（清空草稿 + 取消发布版本） ----
+
+async def reset_page(
+    db: AsyncSession, *, site_id: int, page_id: int,
+) -> CmsPage:
+    """重置页面：清空草稿配置并取消当前发布版本，使小程序回退到默认首页"""
+    result = await db.execute(
+        select(CmsPage).where(
+            CmsPage.id == page_id,
+            CmsPage.site_id == site_id,
+            CmsPage.is_deleted.is_(False),
+        )
+    )
+    page = result.scalar_one_or_none()
+    if not page:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CMS_PAGE_NOT_FOUND", "message": "页面不存在"},
+        )
+
+    page.draft_config = None
+    page.draft_updated_at = None
+    page.current_version_id = None
+    await db.flush()
+    await db.refresh(page)
+
+    # 清除 C端缓存
+    redis = get_redis()
+    await redis.delete(f"cms:page:{site_id}:{page.page_code}")
+
+    return page
+
+
 # ---- B端：发布（含操作日志） ----
 
 async def publish_page(

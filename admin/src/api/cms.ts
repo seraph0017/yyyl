@@ -35,6 +35,12 @@ export function saveCmsDraft(id: number, data: { config: CmsConfig; draft_update
   return put<{ data: CmsPage }>(`/admin/cms/pages/${id}/draft`, data)
 }
 
+// ==================== 重置 ====================
+
+export function resetCmsPage(id: number) {
+  return post(`/admin/cms/pages/${id}/reset`)
+}
+
 // ==================== 发布/回滚 ====================
 
 export function publishCmsPage(id: number, data?: { remark?: string }) {
