@@ -28,10 +28,10 @@
             class="canvas-component"
             :class="{ 'is-selected': element.id === selectedId }"
             :style="{
-              marginTop: element.style.margin_top + 'px',
-              marginBottom: element.style.margin_bottom + 'px',
-              borderRadius: (element.style.border_radius || 0) + 'px',
-              background: element.style.background || 'transparent',
+              marginTop: (element.style?.margin_top || 0) + 'px',
+              marginBottom: (element.style?.margin_bottom || 0) + 'px',
+              borderRadius: (element.style?.border_radius || 0) + 'px',
+              background: element.style?.background || 'transparent',
             }"
             @click.stop="emit('select', element.id)"
           >
