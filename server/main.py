@@ -20,6 +20,10 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
 from config import settings
 from database import engine
 from redis_client import close_redis, init_redis
@@ -79,6 +83,11 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 
 
 app.add_middleware(RequestIDMiddleware)
+
+# ---- 频率限制（slowapi） ----
+limiter = Limiter(key_func=get_remote_address, storage_uri=settings.REDIS_URL)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # ---- 全局异常处理 ----
@@ -146,6 +155,7 @@ from routers import (
     camp_maps,
     campsites,
     cart,
+    cms,
     content,
     expenses,
     finance,
@@ -180,3 +190,4 @@ app.include_router(seckill.router)
 app.include_router(camp_maps.router)
 app.include_router(expenses.router)
 app.include_router(performance.router)
+app.include_router(cms.router)

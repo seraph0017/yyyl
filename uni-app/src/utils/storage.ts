@@ -84,4 +84,5 @@ export const STORAGE_KEYS = {
   SEARCH_HISTORY: 'search_history',
   CART_BADGE: 'cart_badge_count',
   LAST_LOCATION: 'last_location',
+  CMS_PAGE_PREFIX: 'cms_page_config:',
 } as const

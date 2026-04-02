@@ -3,7 +3,8 @@
     {
       "path": "pages/index/index",
       "style": {
-        "navigationBarTitleText": "一月一露"
+        "navigationBarTitleText": "一月一露",
+        "enablePullDownRefresh": true
       }
     },
     {
@@ -103,6 +104,13 @@
       "path": "pages/customer-service/index",
       "style": {
         "navigationBarTitleText": "帮助与客服"
+      }
+    },
+    {
+      "path": "pages/cms-page/index",
+      "style": {
+        "navigationBarTitleText": "活动",
+        "enablePullDownRefresh": true
       }
     }
   ],

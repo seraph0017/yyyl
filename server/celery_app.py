@@ -22,6 +22,7 @@ celery_app = Celery(
         "tasks.notification",
         "tasks.stats",
         "tasks.cleanup",
+        "tasks.cms",
     ],
 )
 

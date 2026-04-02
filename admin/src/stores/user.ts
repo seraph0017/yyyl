@@ -87,7 +87,7 @@ export const useUserStore = defineStore('user', () => {
       userInfo.value = null
       isVerified.value = false
       clearToken()
-      router.push('/login')
+      router.push('/landing')
     }
   }
 

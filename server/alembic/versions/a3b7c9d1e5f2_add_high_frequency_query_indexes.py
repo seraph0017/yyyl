@@ -45,9 +45,8 @@ INDEXES: list[tuple[str, str, list[str]]] = [
     #          camp_map/mini_game (idx_cm_site_status, idx_mg_site_status), expense (idx_er_site, idx_et_site),
     #          performance (idx_pc_site, idx_pr_site), inventory (idx_inv_site_date).
     ("idx_user_site", "user", ["site_id"]),
-    ("idx_points_record_site", "points_record", ["site_id"]),
+    # points_record 和 deposit_record 没有 site_id 列，跳过
     ("idx_finance_account_site", "finance_account", ["site_id"]),
-    ("idx_deposit_record_site", "deposit_record", ["site_id"]),
     ("idx_bundle_item_site", "bundle_item", ["site_id"]),
 
     # ── status single-column ──

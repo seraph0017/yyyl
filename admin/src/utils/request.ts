@@ -113,7 +113,7 @@ service.interceptors.response.use(
             cancelButtonText: '取消',
             type: 'warning',
           }).then(() => {
-            router.push('/login')
+            router.push('/landing')
           })
           return Promise.reject(error)
         }

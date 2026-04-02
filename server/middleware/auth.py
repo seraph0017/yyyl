@@ -84,9 +84,22 @@ async def get_current_user(
     if user_id is None:
         raise credentials_exception
 
+    # admin token 的 sub 格式为 "admin:{id}"，不应进入用户认证流程
+    if isinstance(user_id, str) and user_id.startswith("admin:"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40102, "message": "管理员Token不能用于C端接口，请使用用户Token"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     # 查询用户
+    try:
+        uid = int(user_id)
+    except (ValueError, TypeError):
+        raise credentials_exception
+
     result = await db.execute(
-        select(User).where(User.id == int(user_id), User.is_deleted.is_(False))
+        select(User).where(User.id == uid, User.is_deleted.is_(False))
     )
     user = result.scalar_one_or_none()
 
@@ -146,6 +159,10 @@ async def get_optional_user(
 
         user_id = payload.get("sub")
         if user_id is None:
+            return None
+
+        # admin token 不解析为用户
+        if isinstance(user_id, str) and user_id.startswith("admin:"):
             return None
 
         result = await db.execute(

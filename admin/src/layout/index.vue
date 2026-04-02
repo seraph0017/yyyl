@@ -43,7 +43,7 @@
 
       <!-- 侧边栏底部版本号 -->
       <div class="sidebar-footer" v-if="!appStore.sidebarCollapsed">
-        <span class="sidebar-footer__version">v1.5</span>
+        <span class="sidebar-footer__version">v1.6</span>
       </div>
     </el-aside>
 
@@ -116,7 +116,7 @@ import {
   DataAnalysis, Calendar, Goods, List, User,
   Money, TrendCharts, ChatLineSquare, Document,
   Bell, UserFilled, Setting, Notebook, Place,
-  Connection, MapLocation, Aim, Timer, Wallet, DataLine, Trophy,
+  Connection, MapLocation, Aim, Timer, Wallet, DataLine, Trophy, Brush,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
@@ -166,6 +166,7 @@ const menuItems = computed(() => {
         { path: '/faq', title: 'FAQ管理' },
         { path: '/pages', title: '页面编辑' },
         { path: '/notifications', title: '消息管理' },
+        { path: '/cms', title: '页面装修' },
       ],
     },
     {

@@ -1,7 +1,7 @@
 """
 某露营地 — Celery Beat 定时任务配置
 
-23 个定时任务，按业务分类：
+24 个定时任务，按业务分类：
 - 开票/库存类 (2)
 - 订单类 (2)
 - 会员类 (5)
@@ -9,6 +9,7 @@
 - 数据统计类 (5)
 - 通知类 (3)
 - 清理类 (4)
+- CMS类 (1)
 """
 
 from celery.schedules import crontab
@@ -141,5 +142,12 @@ beat_schedule = {
         "task": "tasks.inventory.task_inventory_consistency_check",
         "schedule": crontab(minute="*/10"),
         "options": {"queue": "inventory"},
+    },
+
+    # ===== CMS类 =====
+    "cms-cleanup-versions": {
+        "task": "cms.cleanup_old_versions",
+        "schedule": crontab(hour=3, minute=0),  # 每天凌晨3点
+        "options": {"queue": "cleanup"},
     },
 }

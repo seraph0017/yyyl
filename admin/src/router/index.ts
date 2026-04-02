@@ -11,6 +11,12 @@ NProgress.configure({ showSpinner: false })
 // 公共路由
 const publicRoutes: RouteRecordRaw[] = [
   {
+    path: '/landing',
+    name: 'Landing',
+    component: () => import('@/views/landing/index.vue'),
+    meta: { title: '一月一露', public: true },
+  },
+  {
     path: '/login',
     name: 'Login',
     component: () => import('@/views/login/index.vue'),
@@ -208,6 +214,19 @@ const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/performance/index.vue'),
         meta: { title: '绩效管理', icon: 'Trophy', roles: ['admin', 'super_admin'] },
       },
+      // ===== v1.6 新增路由 =====
+      {
+        path: 'cms',
+        name: 'CmsPages',
+        component: () => import('@/views/cms/index.vue'),
+        meta: { title: '页面装修', icon: 'Brush', roles: ['admin', 'super_admin'] },
+      },
+      {
+        path: 'cms/:id/editor',
+        name: 'CmsEditor',
+        component: () => import('@/views/cms/editor.vue'),
+        meta: { title: '装修编辑器', hidden: true, activeMenu: '/cms', roles: ['admin', 'super_admin'] },
+      },
     ],
   },
 ]
@@ -225,16 +244,22 @@ router.beforeEach(async (to, _from, next) => {
   const token = getToken()
 
   if (to.meta.public) {
-    // 公共页面，已登录则跳Dashboard
-    if (token && to.path === '/login') {
-      next('/dashboard')
+    // 公共页面
+    if (token) {
+      // 已登录用户访问公共页 → 跳 Dashboard
+      if (to.path === '/login' || to.path === '/landing') {
+        next('/dashboard')
+      } else {
+        next()
+      }
     } else {
       next()
     }
   } else {
-    // 需要登录
+    // 需要登录的页面
     if (!token) {
-      next(`/login?redirect=${to.path}`)
+      // ★ v1.6改造：未登录跳 /landing（原来跳 /login），保留原始目标路径
+      next(`/landing?redirect=${encodeURIComponent(to.fullPath)}`)
     } else {
       const userStore = useUserStore()
 
@@ -242,7 +267,7 @@ router.beforeEach(async (to, _from, next) => {
       if (!userStore.isVerified) {
         const isValid = await userStore.verifyAndRefreshUser()
         if (!isValid) {
-          next(`/login?redirect=${to.path}`)
+          next(`/landing?redirect=${encodeURIComponent(to.fullPath)}`)
           return
         }
       }

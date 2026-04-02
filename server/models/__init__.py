@@ -107,4 +107,12 @@ from models.performance import (  # noqa: F401
     PerformanceRecord,
 )
 
-# 所有模型总计: 4 + 11 + 3 + 5 + 9 + 3 + 7 + 5 + 1 + 3 + 2 + 3 = 56 张表
+# CMS模块 (4张表) - v1.6新增
+from models.cms import (  # noqa: F401
+    CmsAsset,
+    CmsComponent,
+    CmsPage,
+    CmsPageVersion,
+)
+
+# 所有模型总计: 4 + 11 + 3 + 5 + 9 + 3 + 7 + 5 + 1 + 3 + 2 + 3 + 4 = 60 张表
