@@ -32,9 +32,18 @@
 
     <!-- 链接 -->
     <el-form-item label="点击链接">
-      <el-button link type="primary" @click="linkVisible = true">
-        {{ localProps.link?.title || '设置链接' }}
-      </el-button>
+      <div class="link-display" @click="linkVisible = true">
+        <template v-if="localProps.link && localProps.link.type !== 'none'">
+          <el-tag size="small" type="success">{{ linkTypeLabel(localProps.link.type) }}</el-tag>
+          <span class="link-display__text">{{ localProps.link.title || localProps.link.target || '已设置' }}</span>
+          <el-button link type="danger" size="small" @click.stop="clearLink">
+            <el-icon><Close /></el-icon>
+          </el-button>
+        </template>
+        <el-button v-else link type="primary">
+          <el-icon><Link /></el-icon>设置链接
+        </el-button>
+      </div>
     </el-form-item>
 
     <!-- 标题颜色 -->
@@ -54,7 +63,7 @@
 
 <script setup lang="ts">
 import { reactive, watch, ref } from 'vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Link, Close } from '@element-plus/icons-vue'
 import type { ImageTextPropsConfig, CmsAsset } from '@/types/cms'
 import AssetLibrary from '../AssetLibrary.vue'
 import LinkPicker from '../LinkPicker.vue'
@@ -90,6 +99,20 @@ function onAssetSelect(assets: CmsAsset[]) {
   }
   assetVisible.value = false
 }
+
+const linkTypeMap: Record<string, string> = {
+  product: '商品', page: '页面', category: '分类',
+  activity: '活动页', h5: 'H5链接', miniprogram: '小程序', none: '无',
+}
+
+function linkTypeLabel(type: string) {
+  return linkTypeMap[type] || type
+}
+
+function clearLink() {
+  localProps.link = { type: 'none', target: '', title: '' }
+  emitChange()
+}
 </script>
 
 <style lang="scss" scoped>
@@ -120,6 +143,30 @@ function onAssetSelect(assets: CmsAsset[]) {
     gap: 4px;
     color: #c0c4cc;
     font-size: 12px;
+  }
+}
+
+.link-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--el-fill-color-lighter, #f5f7fa);
+  }
+
+  &__text {
+    flex: 1;
+    font-size: 12px;
+    color: var(--el-text-color-regular);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

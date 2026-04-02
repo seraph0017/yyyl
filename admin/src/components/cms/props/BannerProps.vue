@@ -17,9 +17,15 @@
               <el-icon v-else :size="24"><Plus /></el-icon>
             </div>
             <div class="img-actions">
-              <el-button link size="small" @click="openLinkPicker(index)">
-                {{ element.link?.title || '设置链接' }}
-              </el-button>
+              <div class="link-display" @click="openLinkPicker(index)">
+                <template v-if="element.link && element.link.type !== 'none'">
+                  <el-tag size="small" type="success">{{ linkTypeLabel(element.link.type) }}</el-tag>
+                  <span class="link-text">{{ element.link.title || element.link.target || '已设置' }}</span>
+                </template>
+                <span v-else class="link-placeholder">
+                  <el-icon><Link /></el-icon>设置链接
+                </span>
+              </div>
               <el-button link type="danger" size="small" @click="removeImage(index)">
                 <el-icon><Delete /></el-icon>
               </el-button>
@@ -76,7 +82,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
 import draggable from 'vuedraggable'
-import { Plus, Delete } from '@element-plus/icons-vue'
+import { Plus, Delete, Link } from '@element-plus/icons-vue'
 import type { BannerPropsConfig, LinkConfig, CmsAsset } from '@/types/cms'
 import AssetLibrary from '../AssetLibrary.vue'
 import LinkPicker from '../LinkPicker.vue'
@@ -167,6 +173,15 @@ function onLinkChange(link: LinkConfig) {
     emitChange()
   }
 }
+
+const linkTypeMap: Record<string, string> = {
+  product: '商品', page: '页面', category: '分类',
+  activity: '活动页', h5: 'H5链接', miniprogram: '小程序', none: '无',
+}
+
+function linkTypeLabel(type: string) {
+  return linkTypeMap[type] || type
+}
 </script>
 
 <style lang="scss" scoped>
@@ -221,6 +236,35 @@ function onLinkChange(link: LinkConfig) {
   gap: 2px;
   flex: 1;
   min-width: 0;
+}
+
+.link-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+
+  &:hover {
+    background: var(--el-fill-color-lighter, #f0f2f5);
+  }
+}
+
+.link-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--el-text-color-regular);
+}
+
+.link-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--el-color-primary);
 }
 
 .unit-text {
