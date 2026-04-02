@@ -70,7 +70,7 @@ async def wx_login(code: str, db: AsyncSession, site_id: int = 1) -> Dict[str, A
         logger.info(f"[认证] 新用户注册: user_id={user.id}, openid={openid[:8]}...")
 
     # 3. 更新最后登录时间
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.utcnow()
 
     # 4. 生成 token
     token_data = {"sub": str(user.id), "role": user.role}
@@ -211,7 +211,7 @@ async def admin_login(username: str, password: str, db: AsyncSession) -> Dict[st
         )
 
     # 更新最后登录时间
-    admin.last_login_at = datetime.now(timezone.utc)
+    admin.last_login_at = datetime.utcnow()
 
     # 获取角色和权限信息
     role_code = admin.role.role_code if admin.role else None
