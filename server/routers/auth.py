@@ -11,8 +11,9 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
-from middleware.auth import get_current_user
+from middleware.auth import get_current_admin, get_current_user
 from middleware.site import get_site_id
+from models.admin import AdminUser
 from models.user import User
 from schemas.auth import (
     AdminLoginRequest,
@@ -104,3 +105,27 @@ async def get_me(
     """获取当前登录用户的基本信息"""
     user_info = UserInfo.model_validate(user)
     return ResponseModel.success(data=user_info)
+
+
+@router.get("/admin-me", summary="当前管理员信息")
+async def get_admin_me(
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """管理后台专用：获取当前管理员信息"""
+    role_data = None
+    if admin.role:
+        role_data = {
+            "id": admin.role.id,
+            "role_name": admin.role.role_name,
+            "role_code": admin.role.role_code,
+            "description": admin.role.description,
+        }
+    return ResponseModel.success(data={
+        "id": admin.id,
+        "username": admin.username,
+        "real_name": admin.real_name,
+        "phone": admin.phone,
+        "role": role_data,
+        "status": admin.status,
+        "last_login_at": admin.last_login_at.isoformat() if admin.last_login_at else None,
+    })

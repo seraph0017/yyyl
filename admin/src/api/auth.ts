@@ -14,5 +14,5 @@ export function logout() {
 }
 
 export function getMe() {
-  return get<{ data: AdminUserInfo }>('/auth/me')
+  return get<{ data: AdminUserInfo }>('/auth/admin-me')
 }
