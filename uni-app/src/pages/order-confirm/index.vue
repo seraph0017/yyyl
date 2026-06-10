@@ -142,7 +142,8 @@ onLoad((options) => {
 
 async function loadData() {
   try {
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) return
 
     // 加载商品信息（如果是直接购买）
     if (productId.value) {

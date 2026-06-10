@@ -112,7 +112,8 @@ onLoad((options) => {
 
 async function loadData() {
   try {
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) return
     const [annualData, timesData, pointsData] = await Promise.all([
       get<IAnnualCard | null>('/members/annual-card').catch(() => null),
       get<ITimesCard[]>('/members/times-cards').catch(() => []),

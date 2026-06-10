@@ -111,7 +111,12 @@ onLoad((options) => {
 
 async function loadOrder(id: string) {
   try {
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) {
+      order.value = null
+      loading.value = false
+      return
+    }
     const o = await get<IOrder>(`/orders/${id}`)
     order.value = o
     statusText.value = getOrderStatusText(o.status)

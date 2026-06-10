@@ -177,7 +177,12 @@ function onTabChange(index: number) {
 async function loadOrders() {
   loading.value = true
   try {
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) {
+      orders.value = []
+      hasMore.value = false
+      return
+    }
     const tabKey = tabs.value[activeTab.value].key
     const params: Record<string, string | number | boolean | undefined> = {
       page: page.value,

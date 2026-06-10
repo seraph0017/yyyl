@@ -122,19 +122,16 @@ export function logout(): void {
 }
 
 /**
- * 确保已登录，未登录则尝试静默登录
+ * 确保已登录。
+ * 小程序启动和 tab 页面不做静默登录，避免开发者工具中 wx.login 超时影响浏览。
  */
 export async function ensureLogin(): Promise<boolean> {
   if (checkLoginStatus()) {
     return true
   }
 
-  try {
-    await wxLogin()
-    return true
-  } catch {
-    return false
-  }
+  uni.showToast({ title: '请先登录', icon: 'none' })
+  return false
 }
 
 /**

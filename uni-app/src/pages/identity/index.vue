@@ -223,7 +223,11 @@ onShow(() => {
 async function loadIdentities() {
   try {
     loading.value = true
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) {
+      identities.value = []
+      return
+    }
     const data = await get<IIdentity[]>('/users/identities')
     identities.value = data || []
   } catch {

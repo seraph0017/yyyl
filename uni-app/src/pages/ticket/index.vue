@@ -53,7 +53,12 @@ onUnmounted(() => {
 
 async function loadTickets(orderId: string) {
   try {
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) {
+      tickets.value = []
+      loading.value = false
+      return
+    }
     const list = await get<ITicket[]>(`/orders/${orderId}/tickets`)
     tickets.value = list || []
     loading.value = false

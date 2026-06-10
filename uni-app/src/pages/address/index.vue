@@ -35,7 +35,8 @@ onLoad((options) => {
 
 async function loadAddresses() {
   try {
-    await ensureLogin()
+    const loggedIn = await ensureLogin()
+    if (!loggedIn) return
     const data = await get<IAddress[]>('/users/addresses')
     addresses.value = data || []
   } catch {
