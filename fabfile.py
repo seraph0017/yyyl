@@ -34,6 +34,7 @@
     YYYL_REPO_URL, YYYL_SRC_DIR, YYYL_BUILD_DIR
     YYYL_REGISTRY, YYYL_NAMESPACE
     YYYL_ENV_FILE, YYYL_NGINX_CONF
+    YYYL_PODMAN_RUN_ARGS
 """
 
 from __future__ import annotations
@@ -60,8 +61,9 @@ TARGETS = {
         "registry": "",
         "namespace": "",
         "repo_url": "",
-        "nginx_conf": "/www/server/nginx/conf/nginx.conf",
+        "nginx_conf": "/www/server/panel/vhost/nginx/ttt.conf",
         "env_file": "/opt/yyyl/server/.env",
+        "podman_run_args": "",
         "health_path": "/health",
         "blue_port": 8001,
         "green_port": 8002,
@@ -116,6 +118,7 @@ def _config(target: str | None = None) -> dict[str, object]:
         "repo_url": "YYYL_REPO_URL",
         "nginx_conf": "YYYL_NGINX_CONF",
         "env_file": "YYYL_ENV_FILE",
+        "podman_run_args": "YYYL_PODMAN_RUN_ARGS",
         "health_path": "YYYL_HEALTH_PATH",
         "blue_port": "YYYL_BLUE_PORT",
         "green_port": "YYYL_GREEN_PORT",
@@ -422,6 +425,8 @@ def deploy(ctx, target="prod", tag="", skip_pull=False):
         f"MEM={_q(str(cfg['memory']))}",
         f"CPUS={_q(str(cfg['cpus']))}",
     ]
+    if cfg.get("podman_run_args"):
+        env_parts.append(f"PODMAN_RUN_ARGS={_q(str(cfg['podman_run_args']))}")
     if not (cfg.get("registry") and cfg.get("namespace")) or skip_pull:
         env_parts.append("SKIP_PULL=1")
     deploy_cmd = (

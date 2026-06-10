@@ -37,6 +37,18 @@ fab build --tag=v0.1.0
 fab deploy --tag=v0.1.0
 ```
 
+如果 PostgreSQL/Redis 仍运行在 Docker 容器内且没有绑定宿主机端口，先确认容器 IP：
+
+```bash
+docker inspect -f '{{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' postgresql redis
+```
+
+再把解析传给 Podman API 容器：
+
+```bash
+YYYL_PODMAN_RUN_ARGS="--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>" fab deploy --tag=v0.1.0
+```
+
 如果配置了镜像仓库：
 
 ```bash

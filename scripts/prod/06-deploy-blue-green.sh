@@ -27,6 +27,7 @@ GREEN_PORT="${GREEN_PORT:-8002}"
 MEM="${MEM:-1g}"
 CPUS="${CPUS:-1}"
 GRACE_SECONDS="${GRACE_SECONDS:-20}"
+PODMAN_RUN_ARGS="${PODMAN_RUN_ARGS:-}"
 
 if [ -n "${IMAGE:-}" ]; then
   :
@@ -71,6 +72,7 @@ podman rm -f "yyyl-api-$NEXT" 2>/dev/null || true
 log "启动 yyyl-api-$NEXT"
 podman run -d --name "yyyl-api-$NEXT" \
   --restart=unless-stopped \
+  $PODMAN_RUN_ARGS \
   -p "127.0.0.1:$NEXT_PORT:$CONTAINER_PORT" \
   -v "$LOG_DIR:/app/logs:Z" \
   -v "$DATA_DIR:/data:Z" \
