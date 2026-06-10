@@ -19,6 +19,13 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # 初始迁移基于当前 Base 元数据建表，空库初始化时可能已包含 CMS 表。
+    # 这里保持幂等，避免线上 bootstrap 重复建表失败。
+    existing_tables = set(sa.inspect(op.get_bind()).get_table_names())
+    cms_tables = {'cms_component', 'cms_page', 'cms_asset', 'cms_page_version'}
+    if cms_tables.issubset(existing_tables):
+        return
+
     # CMS 组件注册表
     op.create_table('cms_component',
     sa.Column('site_id', sa.BigInteger(), server_default='1', nullable=False, comment='营地ID'),
