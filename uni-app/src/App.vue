@@ -2,7 +2,7 @@
 import { onLaunch, onError } from '@dcloudio/uni-app'
 import { currentSite } from '@/config/sites'
 import { useUserStore } from '@/store/user'
-import { checkLoginStatus, wxLogin } from '@/utils/auth'
+import { checkLoginStatus } from '@/utils/auth'
 
 onLaunch(() => {
   console.log(`[${currentSite.name}] 小程序启动 site_id=${currentSite.id}`)
@@ -12,11 +12,6 @@ onLaunch(() => {
   // 恢复登录状态
   if (checkLoginStatus()) {
     userStore.restoreFromStorage()
-  } else {
-    // 尝试静默登录
-    wxLogin().catch(() => {
-      console.log('静默登录失败，等待用户手动登录')
-    })
   }
 })
 
