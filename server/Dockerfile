@@ -6,8 +6,12 @@
 # ---------- 基础镜像 ----------
 FROM python:3.11-slim AS base
 
+ARG APT_MIRROR=https://mirrors.cloud.tencent.com/debian
+ARG APT_SECURITY_MIRROR=https://mirrors.cloud.tencent.com/debian-security
+
 # 系统依赖（asyncpg 需要 libpq）
-RUN apt-get update && \
+RUN sed -i "s|http://deb.debian.org/debian|${APT_MIRROR}|g; s|http://deb.debian.org/debian-security|${APT_SECURITY_MIRROR}|g" /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         libpq5 \
         curl \
@@ -21,6 +25,8 @@ WORKDIR /app
 # ---------- 依赖安装层（利用 Docker 缓存） ----------
 FROM base AS deps
 
+ARG PIP_INDEX_URL=https://mirrors.cloud.tencent.com/pypi/simple
+
 # 构建依赖（编译 asyncpg、hiredis 等 C 扩展）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -29,7 +35,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --index-url ${PIP_INDEX_URL} --prefix=/install -r requirements.txt
 
 # ---------- 生产镜像 ----------
 FROM base AS production
