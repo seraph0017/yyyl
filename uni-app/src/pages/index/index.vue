@@ -97,6 +97,7 @@ import type { CmsPageConfig } from '@/types/cms'
 import { currentSite } from '@/config/sites'
 
 const site = currentSite
+const enableCms = import.meta.env.VITE_ENABLE_CMS === 'true'
 
 type RenderMode = 'loading' | 'cms' | 'default'
 
@@ -140,6 +141,12 @@ async function loadPageConfig() {
       console.warn('[首页] 预览模式加载失败，降级到默认首页')
       renderMode.value = 'default'
     }
+    return
+  }
+
+  // 未启用 CMS 时直接使用内置首页，避免生产空配置阶段产生 404 请求
+  if (!enableCms) {
+    renderMode.value = 'default'
     return
   }
 
