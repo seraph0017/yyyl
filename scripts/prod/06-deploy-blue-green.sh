@@ -21,11 +21,13 @@ DATA_DIR="${DATA_DIR:-$APP_DIR/data}"
 IMAGES_DIR="${IMAGES_DIR:-$APP_DIR/server/images}"
 NGINX_CONF="${NGINX_CONF:-/www/server/nginx/conf/nginx.conf}"
 HEALTH_PATH="${HEALTH_PATH:-/health}"
+NETWORK_MODE="${NETWORK_MODE:-bridge}"
 CONTAINER_PORT="${CONTAINER_PORT:-8000}"
 BLUE_PORT="${BLUE_PORT:-8001}"
 GREEN_PORT="${GREEN_PORT:-8002}"
 MEM="${MEM:-1g}"
 CPUS="${CPUS:-1}"
+WORKERS="${WORKERS:-4}"
 GRACE_SECONDS="${GRACE_SECONDS:-20}"
 PODMAN_RUN_ARGS="${PODMAN_RUN_ARGS:-}"
 
@@ -69,11 +71,23 @@ fi
 log "清理可能残留的 yyyl-api-$NEXT"
 podman rm -f "yyyl-api-$NEXT" 2>/dev/null || true
 
+PORT_ARGS=(-p "127.0.0.1:$NEXT_PORT:$CONTAINER_PORT")
+HEALTH_ARGS=()
+APP_COMMAND=()
+if [ "$NETWORK_MODE" = "host" ]; then
+  PORT_ARGS=(--network=host)
+  HEALTH_ARGS=(--health-cmd "curl -f http://127.0.0.1:$NEXT_PORT$HEALTH_PATH || exit 1")
+  APP_COMMAND=(uvicorn main:app --host 0.0.0.0 --port "$NEXT_PORT" --workers "$WORKERS" --loop uvloop --http httptools --no-access-log)
+elif [ "$NETWORK_MODE" != "bridge" ]; then
+  PORT_ARGS=(--network "$NETWORK_MODE" -p "127.0.0.1:$NEXT_PORT:$CONTAINER_PORT")
+fi
+
 log "启动 yyyl-api-$NEXT"
 podman run -d --name "yyyl-api-$NEXT" \
   --restart=unless-stopped \
   $PODMAN_RUN_ARGS \
-  -p "127.0.0.1:$NEXT_PORT:$CONTAINER_PORT" \
+  "${PORT_ARGS[@]}" \
+  "${HEALTH_ARGS[@]}" \
   -v "$LOG_DIR:/app/logs:Z" \
   -v "$DATA_DIR:/data:Z" \
   -v "$IMAGES_DIR:/app/images:ro,Z" \
@@ -85,7 +99,7 @@ podman run -d --name "yyyl-api-$NEXT" \
   --log-opt max-size=100m --log-opt max-file=5 \
   --memory="$MEM" --memory-swap="$MEM" \
   --cpus="$CPUS" \
-  "$IMAGE"
+  "$IMAGE" "${APP_COMMAND[@]}"
 
 log "等待 yyyl-api-$NEXT 健康, 最多 60 秒"
 for i in $(seq 1 60); do

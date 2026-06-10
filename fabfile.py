@@ -34,6 +34,7 @@
     YYYL_REPO_URL, YYYL_SRC_DIR, YYYL_BUILD_DIR
     YYYL_REGISTRY, YYYL_NAMESPACE
     YYYL_ENV_FILE, YYYL_NGINX_CONF
+    YYYL_NETWORK_MODE
     YYYL_PODMAN_RUN_ARGS
 """
 
@@ -63,6 +64,7 @@ TARGETS = {
         "repo_url": "",
         "nginx_conf": "/www/server/panel/vhost/nginx/ttt.conf",
         "env_file": "/opt/yyyl/server/.env",
+        "network_mode": "bridge",
         "podman_run_args": "",
         "health_path": "/health",
         "blue_port": 8001,
@@ -118,6 +120,7 @@ def _config(target: str | None = None) -> dict[str, object]:
         "repo_url": "YYYL_REPO_URL",
         "nginx_conf": "YYYL_NGINX_CONF",
         "env_file": "YYYL_ENV_FILE",
+        "network_mode": "YYYL_NETWORK_MODE",
         "podman_run_args": "YYYL_PODMAN_RUN_ARGS",
         "health_path": "YYYL_HEALTH_PATH",
         "blue_port": "YYYL_BLUE_PORT",
@@ -419,6 +422,7 @@ def deploy(ctx, target="prod", tag="", skip_pull=False):
         f"ENV_FILE={_q(str(cfg['env_file']))}",
         f"NGINX_CONF={_q(str(cfg['nginx_conf']))}",
         f"HEALTH_PATH={_q(str(cfg['health_path']))}",
+        f"NETWORK_MODE={_q(str(cfg['network_mode']))}",
         f"BLUE_PORT={int(cfg['blue_port'])}",
         f"GREEN_PORT={int(cfg['green_port'])}",
         f"CONTAINER_PORT={int(cfg['container_port'])}",

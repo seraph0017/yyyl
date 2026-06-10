@@ -97,8 +97,8 @@ fab build-api --tag=v0.1.0
 fab deploy --tag=v0.1.0
 
 # If PostgreSQL/Redis still run as Docker containers without host port binding,
-# pass Docker bridge name resolution into the Podman API container.
-YYYL_PODMAN_RUN_ARGS="--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>" fab deploy --tag=v0.1.0
+# use host networking and pass Docker bridge name resolution into the Podman API container.
+YYYL_NETWORK_MODE=host YYYL_PODMAN_RUN_ARGS="--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>" fab deploy --tag=v0.1.0
 
 # Full release: build, optional push, deploy, health check
 fab release --tag=v0.1.0
@@ -122,7 +122,7 @@ Production deployment standard:
 - API 蓝绿发布由 `scripts/prod/06-deploy-blue-green.sh` 执行，端口默认 `8001/8002`，容器名默认 `yyyl-api-blue` / `yyyl-api-green`。
 - Nginx 线上配置必须包含 `upstream yyyl_api_backend`，发布脚本只会替换该 upstream 内的 `127.0.0.1:<port>`，避免误改其他配置。
 - 当前线上宝塔 Nginx 站点配置路径为 `/www/server/panel/vhost/nginx/ttt.conf`。
-- 过渡期如数据库和 Redis 仍在 Docker 网络内，使用 `YYYL_PODMAN_RUN_ARGS` 注入 `--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>`。
+- 过渡期如数据库和 Redis 仍在 Docker 网络内，使用 `YYYL_NETWORK_MODE=host`，并通过 `YYYL_PODMAN_RUN_ARGS` 注入 `--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>`。
 - 如使用镜像仓库，设置 `YYYL_REGISTRY` 和 `YYYL_NAMESPACE` 后再运行 `fab push-image` 或 `fab release`。
 
 ## Architecture

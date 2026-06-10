@@ -43,10 +43,10 @@ fab deploy --tag=v0.1.0
 docker inspect -f '{{.Name}} {{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' postgresql redis
 ```
 
-再把解析传给 Podman API 容器：
+再把 API 容器切到 host network，并把解析传给 Podman API 容器：
 
 ```bash
-YYYL_PODMAN_RUN_ARGS="--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>" fab deploy --tag=v0.1.0
+YYYL_NETWORK_MODE=host YYYL_PODMAN_RUN_ARGS="--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>" fab deploy --tag=v0.1.0
 ```
 
 如果配置了镜像仓库：
