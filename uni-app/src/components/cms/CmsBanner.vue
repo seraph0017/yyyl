@@ -45,7 +45,7 @@
       <!-- number 数字模式 -->
       <template v-else-if="indicatorStyle === 'number'">
         <view class="cms-banner__number">
-          <text>{{ currentIndex + 1 }}/{{ data.images.length }}</text>
+          <text class="cms-banner__number-text">{{ currentIndex + 1 }}/{{ data.images.length }}</text>
         </view>
       </template>
     </view>
@@ -166,11 +166,11 @@ function onImageError(idx: number) {
     padding: 4rpx 16rpx;
     background: rgba(42, 37, 32, 0.4);
     border-radius: var(--radius-round);
+  }
 
-    text {
-      font-size: var(--font-size-xs);
-      color: var(--color-text-white);
-    }
+  &__number-text {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-white);
   }
 }
 </style>

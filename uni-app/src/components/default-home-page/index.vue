@@ -16,7 +16,10 @@
         <swiper-item v-for="item in banners" :key="item.id" class="banner-swiper-item">
           <view
             class="banner-card"
-            :class="{ 'banner-card--active': swiperCurrent === banners.indexOf(item) }"
+            :class="{
+              'banner-card--active': swiperCurrent === banners.indexOf(item),
+              'banner-card--empty': !item.image,
+            }"
             @tap="onBannerTap(item.id)"
           >
             <image
@@ -29,7 +32,7 @@
             <view class="banner-card__content" v-if="!item.image">
               <text class="banner-card__title">{{ item.title }}</text>
               <view class="banner-card__action">
-                <text>了解详情</text>
+                <text class="banner-card__action-text">了解详情</text>
                 <text class="banner-card__arrow">→</text>
               </view>
             </view>
@@ -59,7 +62,7 @@
           @tap="onCategoryTap(item.key)"
         >
           <view class="category-item__icon" :style="{ background: item.bg }">
-            <text>{{ item.icon }}</text>
+            <text class="category-item__emoji">{{ item.icon }}</text>
           </view>
           <text class="category-item__name">{{ item.name }}</text>
         </view>
@@ -76,7 +79,7 @@
       <view class="section-header">
         <text class="section-heading">精选推荐</text>
         <view class="section-header__more" @tap="onViewMore">
-          <text>查看更多</text>
+          <text class="section-header__more-text">查看更多</text>
           <text class="section-header__arrow">›</text>
         </view>
       </view>
@@ -341,13 +344,13 @@ defineExpose({ refresh })
     backdrop-filter: blur(10px);
     border: 1rpx solid rgba(255, 255, 255, 0.2);
     border-radius: var(--radius-round);
+  }
 
-    text {
-      font-size: var(--font-size-xs);
-      color: rgba(255, 255, 255, 0.9);
-      font-weight: 500;
-      letter-spacing: 1rpx;
-    }
+  &__action-text {
+    font-size: var(--font-size-xs);
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 500;
+    letter-spacing: 1rpx;
   }
 
   &__arrow {
@@ -355,8 +358,7 @@ defineExpose({ refresh })
   }
 }
 
-/* 没有图片时的渐变背景 */
-.banner-card:not(:has(.banner-card__image)) {
+.banner-card--empty {
   background: linear-gradient(135deg, #2d4a3e, #3d6b5a);
 }
 
@@ -398,16 +400,16 @@ defineExpose({ refresh })
     display: flex;
     align-items: center;
     gap: 4rpx;
+  }
 
-    text {
-      font-size: var(--font-size-sm);
-      color: var(--color-text-placeholder);
-      letter-spacing: 1rpx;
-    }
+  &__more-text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-placeholder);
+    letter-spacing: 1rpx;
+  }
 
-    &:active text {
-      color: var(--color-primary);
-    }
+  &__more:active &__more-text {
+    color: var(--color-primary);
   }
 
   &__arrow {
@@ -442,10 +444,10 @@ defineExpose({ refresh })
     margin-bottom: 12rpx;
     box-shadow: var(--shadow-sm);
     border: 1rpx solid rgba(255, 255, 255, 0.6);
+  }
 
-    text {
-      font-size: 44rpx;
-    }
+  &__emoji {
+    font-size: 44rpx;
   }
 
   &__name {

@@ -30,6 +30,76 @@ onError((err) => {
 
 /* ========== 一月一露 · 野奢设计系统 ========== */
 page {
+  /* 主色 — 深苔绿，沉稳而有高级感 */
+  --color-primary: #2d4a3e;
+  --color-primary-dark: #1e3a2f;
+  --color-primary-light: #3d6b5a;
+  --color-primary-lighter: #6b9b8a;
+  --color-primary-bg: rgba(45, 74, 62, 0.06);
+
+  /* 点缀色 — 暖铜金，传递野奢调性 */
+  --color-accent: #c8a872;
+  --color-accent-light: #dbc49e;
+  --color-accent-bg: rgba(200, 168, 114, 0.08);
+
+  /* 背景色 — 暖沙调，如同阳光下的麻布帐篷 */
+  --color-bg: #faf6f0;
+  --color-bg-white: #ffffff;
+  --color-bg-card: #ffffff;
+  --color-bg-light: #f3ede4;
+  --color-bg-grey: #f5f3ef;
+  --color-bg-warm: #f8f2e8;
+
+  /* 文字色 — 深炭色系，层次分明 */
+  --color-text: #2a2520;
+  --color-text-secondary: #7a746c;
+  --color-text-placeholder: #b5aea4;
+  --color-text-white: #fffefa;
+
+  /* 功能色 — 自然提取色 */
+  --color-orange: #d4804a;
+  --color-red: #c45c4a;
+  --color-yellow: #d4a535;
+  --color-blue: #4a8ba8;
+  --color-green: #5a9e6f;
+
+  /* 字体 — 优雅间距感 */
+  --font-family: 'PingFang SC', -apple-system, 'Helvetica Neue', Helvetica, sans-serif;
+  --font-size-xs: 20rpx;
+  --font-size-sm: 24rpx;
+  --font-size-base: 28rpx;
+  --font-size-md: 30rpx;
+  --font-size-lg: 32rpx;
+  --font-size-xl: 36rpx;
+  --font-size-xxl: 40rpx;
+  --font-size-title: 48rpx;
+  --font-size-hero: 56rpx;
+
+  /* 间距 — 呼吸感 */
+  --spacing-xs: 8rpx;
+  --spacing-sm: 12rpx;
+  --spacing-md: 20rpx;
+  --spacing-lg: 28rpx;
+  --spacing-xl: 40rpx;
+  --spacing-xxl: 56rpx;
+
+  /* 圆角 — 柔润 */
+  --radius-sm: 10rpx;
+  --radius-md: 16rpx;
+  --radius-lg: 24rpx;
+  --radius-xl: 32rpx;
+  --radius-round: 999rpx;
+
+  /* 阴影 — 柔和自然 */
+  --shadow-sm: 0 2rpx 12rpx rgba(42, 37, 32, 0.04);
+  --shadow-md: 0 6rpx 24rpx rgba(42, 37, 32, 0.06);
+  --shadow-lg: 0 12rpx 48rpx rgba(42, 37, 32, 0.08);
+  --shadow-glow: 0 4rpx 20rpx rgba(200, 168, 114, 0.15);
+
+  /* 过渡 */
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --transition-base: all 0.35s var(--ease-out-expo);
+
   font-family: var(--font-family);
   font-size: var(--font-size-base);
   color: var(--color-text);

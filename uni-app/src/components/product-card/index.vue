@@ -10,7 +10,7 @@
         lazy-load
       />
       <view class="product-card__placeholder" v-else>
-        <text>{{ categoryIcon }}</text>
+        <text class="product-card__placeholder-icon">{{ categoryIcon }}</text>
       </view>
       <!-- 标签 -->
       <view class="product-card__tags" v-if="product.tags && product.tags.length > 0">
@@ -110,7 +110,10 @@ function onTap() {
     display: flex;
     justify-content: center;
     align-items: center;
-    text { font-size: 64rpx; }
+  }
+
+  .product-card__placeholder-icon {
+    font-size: 64rpx;
   }
 
   .product-card__info {
@@ -177,7 +180,10 @@ function onTap() {
     display: flex;
     justify-content: center;
     align-items: center;
-    text { font-size: 56rpx; }
+  }
+
+  .product-card__placeholder-icon {
+    font-size: 56rpx;
   }
 
   .product-card__info {

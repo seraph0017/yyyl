@@ -31,12 +31,6 @@ defineProps<Props>()
     color: var(--color-text);
     line-height: 1.8;
     letter-spacing: 0.5rpx;
-
-    // 全局图片样式（通过外层 class 控制）
-    image {
-      max-width: 100% !important;
-      border-radius: var(--radius-md);
-    }
   }
 }
 </style>
