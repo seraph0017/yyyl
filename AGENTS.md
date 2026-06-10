@@ -1,0 +1,246 @@
+# AGENTS.md
+
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+
+## Project Overview
+
+一月一露 (yyyl) — A multi-campsite outdoor camping operations platform. Full-stack: uni-app mini-program (C-end) + Vue3 admin dashboard (B-end) + FastAPI backend. Supports multiple campsites (西郊林场 site_id=1, 大聋谷 site_id=2) with data isolation via `X-Site-Id` header.
+
+## Python Environment
+
+- 本机已存在 conda 环境 `yyyl`，路径：`/Users/nathan/miniconda3/envs/yyyl`。
+- 后端开发、迁移、Celery、脚本和 Python 验证命令默认使用该环境：`conda activate yyyl`。
+- 该环境当前 Python 版本为 `3.11.13`，与后端 Python 3.11 要求一致。
+- 不要在 `base` 环境里安装本项目后端依赖；如需补依赖，先激活 `yyyl` 后再执行。
+
+## Development Commands
+
+### Backend (server/)
+```bash
+cd server && conda activate yyyl
+
+# Dev server (hot reload)
+uvicorn main:app --reload --port 8000
+
+# Database migrations
+alembic revision --autogenerate -m "description"
+alembic upgrade head
+alembic downgrade -1
+
+# Seed data (first time only)
+python seed_admin.py        # default: admin / admin123456
+python seed_products.py     # sample products with SKUs
+
+# Celery worker + beat (separate terminals)
+celery -A celery_app worker --loglevel=info
+celery -A celery_app beat --loglevel=info
+```
+
+### Admin Dashboard (admin/)
+```bash
+cd admin
+npm install
+npm run dev       # http://localhost:3000, proxies /api → localhost:8000
+npm run build     # vue-tsc + vite build
+```
+
+### uni-app Mini Program (uni-app/)
+```bash
+cd uni-app
+npm install --force   # --force required for @dcloudio dependency tree
+
+# Dev (WeChat mini-program)
+npm run dev:wx:xijiao
+npm run dev:wx:dalonggu
+
+# Dev (H5)
+npm run dev:h5:xijiao
+
+# Production build
+npm run build:wx:xijiao
+npm run build:wx:dalonggu
+
+# Type check
+npm run type-check
+```
+
+Build output: `dist/build/mp-weixin/` → import into WeChat DevTools.
+
+### Infrastructure
+```bash
+# PostgreSQL + Redis via Docker
+docker run -d --name yyyl-postgres -e POSTGRES_DB=yyyl -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:15
+docker run -d --name yyyl-redis -p 6379:6379 redis:7-alpine
+
+# Local full stack via Docker Compose
+docker-compose up -d --build
+```
+
+### Production Operations (Fabric + Podman)
+```bash
+# Install local ops dependency
+pip install -r scripts/ops/requirements.txt
+
+# Inspect target config and server prerequisites
+fab info
+fab preflight
+fab check
+
+# One-time production server bootstrap: installs podman/nginx basics and uploads scripts/prod
+fab bootstrap-system
+
+# Build Podman images on the server
+fab build --tag=v0.1.0
+fab build-api --tag=v0.1.0
+
+# Deploy FastAPI API with Podman blue-green containers: yyyl-api-blue / yyyl-api-green
+fab deploy --tag=v0.1.0
+
+# Full release: build, optional push, deploy, health check
+fab release --tag=v0.1.0
+
+# Roll back to the other existing blue/green container
+fab rollback
+
+# Operations and troubleshooting
+fab status
+fab podman-ps
+fab logs --name=yyyl-api-blue --tail=200
+fab logs --name=yyyl-api-green --tail=200
+fab health
+fab nginx-test
+fab login-history
+fab ssh-logs --tail=200
+```
+
+Production deployment standard:
+- 线上服务运行方式优先使用 Podman，不使用 conda 直接运行 FastAPI。
+- API 蓝绿发布由 `scripts/prod/06-deploy-blue-green.sh` 执行，端口默认 `8001/8002`，容器名默认 `yyyl-api-blue` / `yyyl-api-green`。
+- Nginx 线上配置必须包含 `upstream yyyl_api_backend`，发布脚本只会替换该 upstream 内的 `127.0.0.1:<port>`，避免误改其他配置。
+- 如使用镜像仓库，设置 `YYYL_REGISTRY` 和 `YYYL_NAMESPACE` 后再运行 `fab push-image` 或 `fab release`。
+
+## Architecture
+
+### Three-Tier Structure
+- **uni-app/** — C-end cross-platform mini-program (Vue3 + TS + Pinia + SCSS). Same codebase, different campsites via `VITE_SITE_CODE` env var at build time.
+- **admin/** — B-end management dashboard (Vue3 + TS + Element Plus + Pinia + ECharts). Path alias `@` → `src/`.
+- **server/** — FastAPI backend (Python 3.11 + SQLAlchemy 2.0 async + PostgreSQL + Redis + Celery).
+
+### Multi-Campsite Isolation
+- Frontend: `VITE_SITE_CODE` selects campsite brand/theme at build time. Config in `uni-app/src/config/sites.ts`.
+- Backend: Every API filters by `site_id` extracted from `X-Site-Id` request header (`middleware/site.py`). Default is 1 (西郊林场).
+- Adding a new campsite: add to `sites.ts`, create `.env.{code}`, add build scripts to `package.json`, allow new site_id in `middleware/site.py`.
+
+### Backend Layers (server/)
+- **models/** — SQLAlchemy models (56+ tables). All inherit from `models/base.py` which provides `id`, `created_at`, `updated_at`, `is_deleted` (soft delete).
+- **schemas/** — Pydantic v2 request/response models.
+- **routers/** — 19 API route modules, all prefixed `/api/v1/`. Registered in `main.py`.
+- **services/** — Business logic layer (14 services).
+- **tasks/** — Celery async tasks (25 scheduled tasks). Config in `celery_config.py`, app instance in `celery_app.py`.
+- **middleware/** — `auth.py` (JWT auth), `site.py` (campsite isolation).
+- **config.py** — pydantic-settings singleton loading from `.env`.
+- **database.py** — Async SQLAlchemy engine + session factory + `get_db()` dependency.
+
+### Admin Dashboard Layers (admin/src/)
+- **api/** — 15 API modules (axios-based).
+- **views/** — 24 page views.
+- **router/** — Vue Router config with permission guards.
+- **stores/** — Pinia state management.
+- **styles/** — SCSS theme system with CSS variables (`--color-primary`, `--color-accent`, etc.). Element Plus theme override via `styles/element.scss`.
+- Auto-import configured: Vue/VueRouter/Pinia APIs and Element Plus components are auto-imported (unplugin).
+
+### uni-app Layers (uni-app/src/)
+- **pages/** — 17 main pages (Vue3 SFC).
+- **pages-sub/** — Subpackage pages (campsite map, games).
+- **components/** — Shared components.
+- **config/** — Campsite brand config (`sites.ts`).
+- **store/** — Pinia stores.
+- **utils/request.ts** — HTTP client, reads `VITE_API_BASE_URL`.
+
+## Key Conventions
+
+- **Language**: All code comments, commit messages, PRD, and docs are in Chinese.
+- **Soft delete**: All models use `is_deleted` flag, never hard delete.
+- **Async everywhere**: Backend uses async SQLAlchemy (`asyncpg`), async Redis. DB session via `get_db()` FastAPI dependency with auto commit/rollback.
+- **API docs**: Available at `/docs` (Swagger) and `/redoc` in development mode only (disabled when `DEBUG=false`).
+- **Environment config**: Backend reads from `server/.env` via pydantic-settings. Template at `server/.env.example`.
+- **Static files**: Product images served from `server/images/` mounted at `/images`.
+
+## Design Systems
+
+- **Mini-program**: "野奢" (Organic Luxury Outdoor) — wabi-sabi aesthetics. Colors: deep moss green `#2d4a3e` + warm copper gold `#c8a872` + warm sand `#faf6f0`.
+- **Admin dashboard**: "深邃极光" (Northern Lights Dashboard) — dark forest sidebar + aurora gradients + glassmorphism cards. Action buttons: 32px circular icon buttons with 11 color variants and hover glow effects (`action-btn--edit`, `action-btn--delete`, etc.).
+
+## 需求→PRD→开发工作流
+
+所有新功能开发遵循以下标准流程：
+
+### 1. 需求提交
+- 用户将新需求文档放入 `needs/{日期}/` 目录（如 `needs/0331/new-need.md`）
+- 需求文档为自然语言描述，无格式要求
+
+### 2. PRD 撰写（产品 Agent）
+- **产品 Agent** 基于 `needs/` 中的新需求，结合现有 PRD 基线，撰写增量 PRD 文档
+- PRD 输出到 `prd/` 目录，命名格式：`yyyl_prd_v{版本号}_increment.md`
+- PRD 包含：变更总览、功能描述、用户故事、业务规则、数据模型变更、API 变更、前端变更、异常处理、验收标准、数据库索引设计、兼容性分析
+
+### 3. 架构师评审（架构师 Agent）
+- **架构师 Agent** 对 PRD 进行严格评审，维度包括：数据模型完备性、API 设计合理性、前端架构可行性、安全性、业务规则严密性、系统兼容性
+- 评审输出：逐维度评分（1-10）+ 加权总分 + 必须修补的问题（CRITICAL/HIGH）+ 改进建议（MEDIUM）
+
+### 4. 迭代修订
+- 产品 Agent 根据架构师反馈修订 PRD
+- 架构师 Agent 进行复审确认
+- **反复迭代直到架构师评审评分 ≥ 8.5 且结论为 APPROVED**
+
+### 5. 开发文档拆分与评审
+- PRD 达到 APPROVED 状态后，由**架构师 Agent** 将 PRD 拆分为三端独立开发文档
+- 输出到 `docs/` 目录，命名格式：
+  - `docs/v{版本}_server_dev.md` — 后端开发文档（数据模型变更、API 接口定义、业务逻辑、Celery 任务、中间件变更）
+  - `docs/v{版本}_admin_dev.md` — 管理后台开发文档（页面/组件设计、路由变更、API 调用清单、状态管理、样式规范）
+  - `docs/v{版本}_miniapp_dev.md` — 小程序开发文档（页面/组件设计、pages.json 变更、API 调用清单、类型定义、样式规范）
+- 每份文档须包含：概述与开发范围、文件清单（新增/修改的文件路径）、详细技术方案（含代码示例）、与其他端的接口约定、不在本端范围的内容说明
+
+### 6. 端开发 Agent 评审
+- 三个端的**开发 Agent** 并行 review 各自的开发文档
+- 评审维度与权重：
+
+| 维度 | 权重 | 检查项 |
+|------|------|--------|
+| API 接口完整性 | 25% | PRD 中定义的接口是否全部覆盖、参数/响应字段是否完整 |
+| 数据模型可执行性 | 20% | 字段类型合理、索引设计正确、与现有模型兼容 |
+| 技术方案兼容性 | 25% | 是否与现有代码模式一致、依赖是否已存在、文件路径是否正确 |
+| 业务规则严密性 | 15% | PRD 中的业务规则是否被完整翻译为技术实现 |
+| 可开发性 | 15% | 技术方案是否足够清晰、能否直接根据文档编码 |
+
+- 评审输出：逐维度评分（1-10）+ 加权总分 + CRITICAL/HIGH 问题列表 + MEDIUM 建议
+- 评审报告输出到 `docs/v{版本}_{端}_review.md`
+
+### 7. 迭代修订（开发文档）
+- 架构师 Agent 根据三端开发 Agent 的反馈修改对应开发文档
+- 端开发 Agent 进行复审确认
+- **反复迭代直到三端评审评分均 ≥ 8.5 且结论为 APPROVED**
+
+### 8. 进入开发
+- 三端开发文档全部达到 APPROVED 状态后，方可进入开发阶段
+- 开发遵循现有的 TDD + Code Review 工作流
+- 各端 Agent 根据对应的开发文档独立开发，可并行进行
+
+### PRD 版本历史
+| 版本 | 日期 | 状态 | 说明 |
+|------|------|------|------|
+| v1.4 | 2026-03-11 | ✅ 正式基线 | 初始 PRD，全功能定义 |
+| v1.5 | 2026-03-15 | ✅ 架构师 APPROVED (9.0+) | 增量：搭配售卖、秒杀完善、前端增强、退款增强、工作系统 |
+| v1.6 | 2026-03-31 | ✅ 架构师 APPROVED (8.8) | 增量：小程序可视化装修系统、企业宣传首页 |
+
+### 开发文档版本历史
+| 版本 | 日期 | 端 | 状态 | 说明 |
+|------|------|-----|------|------|
+| v1.6 | 2026-04-01 | miniapp | ✅ APPROVED (8.875) | 小程序端 CMS 渲染引擎 |
+| v1.6 | 2026-04-01 | server | ✅ APPROVED (8.5+) | 后端 API + 数据模型 + Redis + Celery |
+| v1.6 | 2026-04-01 | admin | ✅ APPROVED (8.5+) | 管理后台画板编辑器 + 企业宣传首页 |
+
+### 开发实施版本历史
+| 版本 | 日期 | 状态 | 说明 |
+|------|------|------|------|
+| v1.6 | 2026-04-02 | ✅ 开发完成 | CMS 可视化装修系统 + 企业宣传首页，三端全栈实现 + UI/UX 优化 |
