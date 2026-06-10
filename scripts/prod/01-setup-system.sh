@@ -24,7 +24,8 @@ fi
 log "使用包管理器: $PM"
 
 if [ "$PM" = "dnf" ] || [ "$PM" = "yum" ]; then
-  "$PM" install -y podman nginx git curl jq htop vim tmux logrotate util-linux
+  "$PM" install -y podman git curl jq htop vim tmux logrotate util-linux
+  "$PM" install -y nginx 2>/dev/null || log "系统源未安装 nginx，保留现有 Nginx/宝塔 Nginx"
 else
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -y
@@ -34,7 +35,7 @@ fi
 
 log "版本信息:"
 podman --version
-nginx -v 2>&1 | head -1
+nginx -v 2>&1 | head -1 || log "nginx 命令不在 PATH 中，后续请确认线上 Nginx 路径"
 
 log "创建目录: $APP_DIR"
 mkdir -p "$APP_DIR"/{logs/api,data,backup,scripts,config}
