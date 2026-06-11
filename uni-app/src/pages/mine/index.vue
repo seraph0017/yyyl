@@ -35,7 +35,7 @@
       </view>
 
       <!-- 未登录状态 -->
-      <view class="user-header__content user-header__content--guest" v-else>
+      <view class="user-header__content user-header__content--guest" :style="guestHeaderStyle" v-else>
         <view class="user-login">
           <view class="user-avatar user-avatar--guest">
             <text class="user-avatar__placeholder">🏕️</text>
@@ -166,6 +166,7 @@ interface IOrderMenuItem {
 }
 
 const userStore = useUserStore()
+const guestHeaderStyle = ref<Record<string, string>>({})
 
 const iconBgs = [
   'linear-gradient(135deg, #f8f0dc, #f2e4c4)',
@@ -191,6 +192,7 @@ const menuItems = ref<IMenuItem[]>([
 ])
 
 onShow(() => {
+  updateGuestHeaderLayout()
   refreshLoginState()
 })
 
@@ -214,6 +216,26 @@ async function refreshLoginState() {
       // 静默失败
     }
   }
+}
+
+function updateGuestHeaderLayout() {
+  // #ifdef MP-WEIXIN
+  try {
+    const menuButton = uni.getMenuButtonBoundingClientRect()
+    const systemInfo = uni.getSystemInfoSync()
+    const statusBarHeight = systemInfo.statusBarHeight || 0
+    const windowWidth = systemInfo.windowWidth || 0
+
+    if (menuButton?.bottom && menuButton?.left && windowWidth) {
+      guestHeaderStyle.value = {
+        paddingTop: `${Math.max(menuButton.bottom + 12, statusBarHeight + 54)}px`,
+        paddingRight: `${Math.max(windowWidth - menuButton.left + 12, 96)}px`,
+      }
+    }
+  } catch {
+    guestHeaderStyle.value = {}
+  }
+  // #endif
 }
 
 async function onLogin() {
@@ -314,7 +336,8 @@ function onStaffEntry() {
   }
 
   &__content--guest {
-    padding-bottom: 64rpx;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 88rpx);
+    padding-bottom: 48rpx;
   }
 }
 
@@ -421,6 +444,7 @@ function onStaffEntry() {
 .user-login {
   display: flex;
   align-items: center;
+  min-height: 112rpx;
 
   &__content {
     flex: 1;
@@ -447,6 +471,7 @@ function onStaffEntry() {
     display: inline-flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
     height: 68rpx;
     padding: 0 36rpx;
     background: linear-gradient(135deg, var(--color-accent), #b8944e);
@@ -564,7 +589,7 @@ function onStaffEntry() {
   padding: 20rpx 36rpx 0;
 
   &--no-order {
-    margin-top: -24rpx;
+    margin-top: -8rpx;
   }
 }
 
