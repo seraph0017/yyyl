@@ -300,7 +300,7 @@ function onRefund(id: number) {
           page.value = 1
           loadOrders()
         } catch {
-          uni.showToast({ title: '退款申请失败', icon: 'error' })
+          // 具体失败原因由请求层透传后端 message，例如超过退票时间。
         }
       }
     },

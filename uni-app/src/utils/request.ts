@@ -203,7 +203,8 @@ export function request<T = unknown>(options: RequestOptions): Promise<T> {
         }
 
         if (statusCode >= 400) {
-          const errMsg = responseData?.message || `请求失败(${statusCode})`
+          const detail = (responseData as { detail?: { message?: string } })?.detail
+          const errMsg = detail?.message || responseData?.message || `请求失败(${statusCode})`
           if (showError) {
             uni.showToast({ title: errMsg, icon: 'none', duration: 2500 })
           }
