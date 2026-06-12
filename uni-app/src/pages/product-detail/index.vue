@@ -1452,6 +1452,7 @@ function onGoBack() {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
   animation: fadeIn 0.3s var(--ease-out-expo);
   box-shadow: 0 24rpx 64rpx rgba(42, 37, 32, 0.15);
 }
@@ -1490,8 +1491,10 @@ function onGoBack() {
 }
 
 .disclaimer-content {
+  width: 100%;
   padding: 32rpx 36rpx;
   max-height: 50vh;
+  box-sizing: border-box;
 }
 
 .disclaimer-line {
