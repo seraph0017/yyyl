@@ -236,7 +236,9 @@
           <text class="disclaimer-close" @tap="onCloseDisclaimer">✕</text>
         </view>
         <scroll-view class="disclaimer-content" scroll-y>
-          <text>{{ disclaimerText }}</text>
+          <view class="disclaimer-line" v-for="(line, index) in disclaimerLines" :key="`${index}-${line}`">
+            <text class="disclaimer-line__text">{{ line }}</text>
+          </view>
         </scroll-view>
         <view class="disclaimer-footer">
           <view class="disclaimer-agree-btn" @tap="onAgreeDisclaimer">
@@ -254,7 +256,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import { get, resolveImageUrl } from '@/utils/request'
 import { brandConfig } from '@/config/sites'
@@ -290,8 +292,9 @@ const checkInDate = ref<string | null>(null)   // 入住日期
 const checkOutDate = ref<string | null>(null)  // 离店日期
 const calendarDays = ref<ICalendarDay[]>([])
 const currentMonth = ref('')
-const calendarYear = ref(2026)
-const calendarMonth = ref(3)
+const todayAtLoad = new Date()
+const calendarYear = ref(todayAtLoad.getFullYear())
+const calendarMonth = ref(todayAtLoad.getMonth() + 1)
 const totalPrice = ref(0)
 const quantity = ref(1)
 const showCalendar = ref(false)
@@ -301,15 +304,30 @@ const disclaimerAgreed = ref(false)
 const loading = ref(true)
 const isFavorite = ref(false)
 const notStarted = ref(false)
+const disclaimerLines = computed(() => disclaimerText.value.split('\n').filter(line => line.trim()))
 
 /** 最大连续预定天数限制（PRD 3.2.1: MAX_CONSECUTIVE = 5，即最多住5晚） */
 const MAX_BOOKING_NIGHTS = 5
 
 /** 格式化日期为短格式 (M月D日 周X) */
 function formatDateShort(dateStr: string): string {
-  const d = new Date(dateStr)
+  const d = parseLocalDate(dateStr)
   const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
   return `${d.getMonth() + 1}月${d.getDate()}日 ${weekDays[d.getDay()]}`
+}
+
+function parseLocalDate(dateStr: string): Date {
+  const [year, month, day] = dateStr.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function getTodayInfo() {
+  const today = new Date()
+  return {
+    year: today.getFullYear(),
+    month: today.getMonth() + 1,
+    dateStr: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
+  }
 }
 
 onLoad((options) => {
@@ -374,7 +392,7 @@ async function loadProduct(id: number) {
       deposit_amount: detail.ext_rental?.deposit_amount || 0,
     }
 
-    disclaimerText.value = '免责声明\n\n1. 参与者确认已充分了解户外露营活动的风险性，自愿参加本次露营活动。\n2. 参与者应遵守营地管理规定，爱护公共设施，保持环境整洁。\n3. 参与者对自身及随行人员的安全负有责任。\n4. 如遇极端天气或不可抗力因素，营地有权调整或取消活动。\n5. 参与者应妥善管理个人财物，营地对个人财物遗失不承担赔偿责任。\n6. 未成年人须在监护人陪同下参加露营活动。\n7. 禁止在非指定区域使用明火，违规产生的一切后果由参与者自行承担。'
+    disclaimerText.value = '1. 参与者确认已充分了解户外露营活动的风险性，自愿参加本次露营活动。\n2. 参与者应遵守营地管理规定，爱护公共设施，保持环境整洁。\n3. 参与者对自身及随行人员的安全负有责任。\n4. 如遇极端天气或不可抗力因素，营地有权调整或取消活动。\n5. 参与者应妥善管理个人财物，营地对个人财物遗失不承担赔偿责任。\n6. 未成年人须在监护人陪同下参加露营活动。\n7. 禁止在非指定区域使用明火，违规产生的一切后果由参与者自行承担。'
 
     product.value = p
     notStarted.value = !!p.ticket_start_time && new Date(p.ticket_start_time).getTime() > Date.now()
@@ -392,8 +410,7 @@ async function loadProduct(id: number) {
 function generateCalendar() {
   const year = calendarYear.value
   const month = calendarMonth.value
-  const today = new Date()
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const { dateStr: todayStr } = getTodayInfo()
 
   const firstDay = new Date(year, month - 1, 1)
   const lastDay = new Date(year, month, 0)
@@ -473,6 +490,12 @@ function onSwiperChange(e: any) {
 
 /** 打开/关闭日历 */
 function onOpenCalendar() {
+  if (!checkInDate.value) {
+    const { year, month } = getTodayInfo()
+    calendarYear.value = year
+    calendarMonth.value = month
+    generateCalendar()
+  }
   showCalendar.value = true
 }
 
@@ -551,8 +574,8 @@ function onSelectDate(item: ICalendarDay) {
 
 /** 计算两个日期之间的天数 */
 function daysBetween(startStr: string, endStr: string): number {
-  const start = new Date(startStr)
-  const end = new Date(endStr)
+  const start = parseLocalDate(startStr)
+  const end = parseLocalDate(endStr)
   return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
 }
 
@@ -561,8 +584,8 @@ function fillDateRange() {
   const dates: string[] = []
   if (!checkInDate.value || !checkOutDate.value) return
 
-  const start = new Date(checkInDate.value)
-  const end = new Date(checkOutDate.value)
+  const start = parseLocalDate(checkInDate.value)
+  const end = parseLocalDate(checkOutDate.value)
 
   const cursor = new Date(start)
   while (cursor < end) {
@@ -1469,12 +1492,26 @@ function onGoBack() {
 .disclaimer-content {
   padding: 32rpx 36rpx;
   max-height: 50vh;
+}
 
-  text {
+.disclaimer-line {
+  display: block;
+  width: 100%;
+  margin-bottom: 20rpx;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+
+  &__text {
+    display: block;
+    width: 100%;
     font-size: var(--font-size-base);
     color: var(--color-text-secondary);
-    line-height: 2;
-    white-space: pre-wrap;
+    line-height: 1.9;
+    white-space: normal;
+    word-break: break-all;
+    overflow-wrap: break-word;
     letter-spacing: 0.5rpx;
   }
 }

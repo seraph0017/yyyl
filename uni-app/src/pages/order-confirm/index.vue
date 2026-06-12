@@ -271,7 +271,7 @@ async function onSubmitOrder() {
 .page-confirm {
   min-height: 100vh;
   background-color: var(--color-bg);
-  padding: 16rpx 24rpx 160rpx;
+  padding: 32rpx 24rpx 160rpx;
 }
 
 .section {
