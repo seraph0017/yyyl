@@ -171,7 +171,8 @@ async def mock_pay_order(
     order = await order_service.mock_pay_order(
         db, order_id, user.id, success=body.success,
     )
-    result = OrderResponse.model_validate(order)
+    order_detail = await order_service.get_order_detail(db, order.id, user_id=user.id)
+    result = OrderResponse.model_validate(order_detail)
     return ResponseModel.success(data=result, message="模拟支付完成")
 
 

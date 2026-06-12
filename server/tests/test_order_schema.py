@@ -1,6 +1,6 @@
 import unittest
 
-from schemas.order import OrderCreateRequest
+from schemas.order import MockPayRequest, OrderCreateRequest
 
 
 class OrderCreateRequestTest(unittest.TestCase):
@@ -31,6 +31,16 @@ class OrderCreateRequestTest(unittest.TestCase):
         )
 
         self.assertFalse(request.disclaimer_signed)
+
+    def test_mock_pay_accepts_legacy_action_fail(self):
+        request = MockPayRequest.model_validate({"action": "fail"})
+
+        self.assertFalse(request.success)
+
+    def test_mock_pay_accepts_legacy_action_success(self):
+        request = MockPayRequest.model_validate({"action": "success"})
+
+        self.assertTrue(request.success)
 
 
 if __name__ == "__main__":

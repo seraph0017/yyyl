@@ -259,6 +259,23 @@ class MockPayRequest(BaseModel):
 
     success: bool = Field(default=True, description="模拟成功或失败")
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_action(cls, data: Any) -> Any:
+        """兼容旧小程序模拟支付参数: action=success/fail。"""
+        if not isinstance(data, dict) or "success" in data:
+            return data
+        action = data.get("action")
+        if action == "success":
+            normalized = data.copy()
+            normalized["success"] = True
+            return normalized
+        if action == "fail":
+            normalized = data.copy()
+            normalized["success"] = False
+            return normalized
+        return data
+
 
 class PaymentCallbackData(BaseModel):
     """微信支付回调数据（简化）"""
