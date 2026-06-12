@@ -142,7 +142,8 @@ async def apply_refund(
         reason=body.reason,
         order_item_ids=body.order_item_ids,
     )
-    result = OrderResponse.model_validate(order)
+    order_detail = await order_service.get_order_detail(db, order.id, user_id=user.id)
+    result = OrderResponse.model_validate(order_detail)
     return ResponseModel.success(data=result, message="退票申请已提交")
 
 
