@@ -15,7 +15,7 @@ DateType = _dt.date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ---- 订单创建 ----
@@ -49,6 +49,34 @@ class OrderCreateRequest(BaseModel):
     remark: Optional[str] = Field(default=None, max_length=200, description="备注")
     payment_method: str = Field(default="wechat_pay", description="支付方式: wechat_pay/mock_pay")
     times_card_id: Optional[int] = Field(default=None, description="使用的次数卡ID")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_direct_order_payload(cls, data: Any) -> Any:
+        """兼容旧小程序直购下单结构: product_id/dates/quantity。"""
+        if not isinstance(data, dict) or "items" in data:
+            return data
+
+        if "product_id" not in data or "dates" not in data:
+            return data
+
+        item: dict[str, Any] = {
+            "product_id": data["product_id"],
+            "sku_id": data.get("sku_id"),
+            "quantity": data.get("quantity", 1),
+            "dates": data["dates"],
+            "time_slot": data.get("time_slot"),
+        }
+        identity_ids = data.get("identity_ids")
+        if identity_ids is None and data.get("identity_id") is not None:
+            identity_ids = [data["identity_id"]]
+        if identity_ids is not None:
+            item["identity_ids"] = identity_ids
+
+        normalized = data.copy()
+        normalized["items"] = [item]
+        normalized.setdefault("disclaimer_signed", True)
+        return normalized
 
     @field_validator("payment_method")
     @classmethod

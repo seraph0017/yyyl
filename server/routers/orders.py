@@ -68,7 +68,8 @@ async def create_order(
         payment_method=body.payment_method,
         times_card_id=body.times_card_id,
     )
-    result = OrderResponse.model_validate(order)
+    order_detail = await order_service.get_order_detail(db, order.id, user_id=user.id)
+    result = OrderResponse.model_validate(order_detail)
     return ResponseModel.success(data=result, message="订单创建成功")
 
 

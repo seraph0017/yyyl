@@ -129,6 +129,7 @@ const totalPrice = ref(0)
 const discountAmount = ref(0)
 const actualPrice = ref(0)
 const submitting = ref(false)
+const disclaimerSigned = ref(false)
 
 onLoad((options) => {
   productId.value = Number(options?.product_id || 0)
@@ -136,6 +137,7 @@ onLoad((options) => {
   quantity.value = Number(options?.quantity || 1)
   from.value = options?.from || 'direct'
   cartItemIds.value = options?.cart_item_ids ? options.cart_item_ids.split(',') : []
+  disclaimerSigned.value = options?.disclaimer_signed === '1' || options?.disclaimer_signed === 'true'
 
   loadData()
 })
@@ -242,11 +244,15 @@ async function onSubmitOrder() {
       orderData.from = 'cart'
       orderData.cart_item_ids = cartItemIds.value.map(Number)
     } else {
-      orderData.product_id = productId.value
-      orderData.dates = dates.value
-      orderData.quantity = quantity.value
+      const item: Record<string, unknown> = {
+        product_id: productId.value,
+        dates: dates.value,
+        quantity: quantity.value,
+      }
+      if (selectedIdentity.value) item.identity_ids = [selectedIdentity.value.id]
+      orderData.items = [item]
     }
-    if (selectedIdentity.value) orderData.identity_id = selectedIdentity.value.id
+    orderData.disclaimer_signed = disclaimerSigned.value
     if (address.value) orderData.address_id = address.value.id
 
     const result = await post<{ id: number; order_no: string; actual_amount: number }>('/orders', orderData)

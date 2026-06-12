@@ -661,7 +661,7 @@ function onBook() {
   }
 
   uni.navigateTo({
-    url: `/pages/order-confirm/index?product_id=${p.id}&dates=${selectedDates.value.join(',')}&quantity=${quantity.value}`,
+    url: `/pages/order-confirm/index?product_id=${p.id}&dates=${selectedDates.value.join(',')}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
   })
 }
 
