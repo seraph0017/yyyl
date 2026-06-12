@@ -685,11 +685,13 @@ npm run type-check
 ### 当前线上信息
 
 - 线上域名：`https://www.yyylcamp.com/`
+- 管理后台入口：`https://www.yyylcamp.com/`（未登录默认进入 `/landing`）
+- 登录页直达：`https://www.yyylcamp.com/login`
 - 线上 API 健康检查：`https://www.yyylcamp.com/health`
 - 线上 API 前缀：`https://www.yyylcamp.com/api/v1`
 - 后台测试账号：`admin` / `admin123456`
 
-> 注意：截至 2026-06-12，线上 Nginx 根目录仍是旧静态页，不是管理后台构建产物；`/login` 也未配置 SPA history fallback。管理后台正式对外前，需要先部署 `admin/dist` 到站点目录，并将 Nginx `location /` 调整为 `try_files $uri $uri/ /index.html`。
+> 注意：截至 2026-06-12，线上 Nginx 根目录已部署 `admin/dist` 管理后台构建产物，`location /` 已配置 `try_files $uri $uri/ /index.html` 支持 SPA history 路由。旧静态页已备份在服务器 `/www/server/nginx/html.bak.20260612113831`。
 
 ### 微信审核测试数据
 
