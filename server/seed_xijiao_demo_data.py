@@ -1,12 +1,15 @@
 """
 西郊林场演示数据脚本。
 
-用于线上或本地补齐 C 端小程序展示数据。脚本按 site_id=1 和商品名称做
-upsert，可重复执行，不清空任何表。
+用于线上或本地补齐 C 端小程序审核展示数据。脚本按 site_id=1 和商品名称做
+upsert，可重复执行，不清空任何表，不创建订单、票券或支付流水。
 
 用法:
     cd server
     python seed_xijiao_demo_data.py
+
+建议同时执行:
+    python seed_admin.py
 """
 
 from __future__ import annotations
@@ -38,12 +41,21 @@ from seed_products import HOME_BANNERS, HOME_NOTICE, PRICING_RULES, PRODUCTS, SK
 
 SITE_ID = 1
 INVENTORY_DAYS = 45
+TEST_ADMIN_USERNAME = "admin"
+TEST_ADMIN_PASSWORD = "admin123456"
 
 
 def _json_value(value: Any) -> Any:
     if isinstance(value, str):
-        return json.loads(value)
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return value
     return value
+
+
+def _calculate_available(total: int, sold: int, locked: int) -> int:
+    return max(total - sold - locked, 0)
 
 
 def _normal_product_data(data: dict[str, Any]) -> dict[str, Any]:
@@ -163,7 +175,11 @@ async def upsert_inventory(session, product_id: int, product_name: str) -> int:
             )
         else:
             inventory.total = max(inventory.total, total)
-            inventory.available = max(inventory.available, total - inventory.sold - inventory.locked)
+            inventory.available = _calculate_available(
+                inventory.total,
+                inventory.sold,
+                inventory.locked,
+            )
             inventory.status = "open"
         count += 1
     return count
@@ -250,6 +266,11 @@ async def seed() -> None:
             print(f"库存: {inventory_count} 条")
             print("页面配置: home_banner, home_notice")
             print(f"优惠规则: {discount_count} 条")
+            print("\n审核使用说明:")
+            print("- 小程序可浏览首页、商品列表、商品详情并创建待支付订单")
+            print("- 本脚本不会生成订单/票券/支付流水，避免污染线上经营数据")
+            print("- 如需后台审核账号，请执行: python seed_admin.py")
+            print(f"- 默认后台账号: {TEST_ADMIN_USERNAME} / {TEST_ADMIN_PASSWORD}")
         except Exception:
             await session.rollback()
             raise

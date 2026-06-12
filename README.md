@@ -289,6 +289,7 @@ npm run dev
 **启动成功后**：
 - 管理后台：http://localhost:3000
 - API 请求自动代理到 http://localhost:8000（已在 vite.config.ts 中配置）
+- 本地默认管理员账号：`admin` / `admin123456`
 
 #### 其他命令
 
@@ -680,6 +681,29 @@ npm run type-check
 ---
 
 ## 🐳 Docker & K8s 部署
+
+### 当前线上信息
+
+- 线上域名：`https://www.yyylcamp.com/`
+- 线上 API 健康检查：`https://www.yyylcamp.com/health`
+- 线上 API 前缀：`https://www.yyylcamp.com/api/v1`
+- 后台测试账号：`admin` / `admin123456`
+
+> 注意：截至 2026-06-12，线上 Nginx 根目录仍是旧静态页，不是管理后台构建产物；`/login` 也未配置 SPA history fallback。管理后台正式对外前，需要先部署 `admin/dist` 到站点目录，并将 Nginx `location /` 调整为 `try_files $uri $uri/ /index.html`。
+
+### 微信审核测试数据
+
+线上最小审核数据使用 `site_id=1`（西郊林场），用于让审核人员浏览首页、商品列表、商品详情并创建待支付订单。该数据不包含订单、票券或支付流水，避免污染线上经营报表。
+
+在能访问线上数据库配置的后端环境中执行：
+
+```bash
+cd server
+python seed_admin.py
+python seed_xijiao_demo_data.py
+```
+
+执行后会补齐 18 件商品、16 个 SKU、18 条定价规则、未来 45 天营位库存、首页 Banner/公告和 3 条优惠规则。详细说明见 `docs/wechat_review_seed_data.md`。
 
 ### 部署策略分层
 
