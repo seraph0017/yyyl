@@ -180,7 +180,7 @@ const orderMenuItems = ref<IOrderMenuItem[]>([
   { key: 'pending_payment', icon: '💰', name: '待支付' },
   { key: 'paid', icon: '📋', name: '待使用' },
   { key: 'completed', icon: '✅', name: '已完成' },
-  { key: 'refunding', icon: '🔄', name: '售后' },
+  { key: 'refund_pending', icon: '🔄', name: '售后' },
 ])
 
 const menuItems = ref<IMenuItem[]>([
@@ -276,6 +276,7 @@ function onOrderMenuTap(tabKey: string) {
     uni.showToast({ title: '请先登录', icon: 'none' })
     return
   }
+  uni.setStorageSync('order_tab', tabKey)
   uni.switchTab({ url: '/pages/order/index' })
 }
 
@@ -332,12 +333,12 @@ function onStaffEntry() {
     position: relative;
     z-index: 1;
     padding: 32rpx 36rpx 56rpx;
-    padding-top: calc(env(safe-area-inset-top, 0px) + 32rpx);
+    padding-top: calc(env(safe-area-inset-top, 0px) + 72rpx);
   }
 
   &__content--guest {
-    padding-top: calc(env(safe-area-inset-top, 0px) + 88rpx);
-    padding-bottom: 48rpx;
+    padding-top: calc(env(safe-area-inset-top, 0px) + 112rpx);
+    padding-bottom: 56rpx;
   }
 }
 

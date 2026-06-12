@@ -84,8 +84,9 @@ export function getOrderStatusText(status: OrderStatus): string {
     verified: '使用中',
     completed: '已完成',
     cancelled: '已取消',
-    refunding: '退款中',
+    refund_pending: '退款中',
     refunded: '已退款',
+    partial_refunded: '部分退款',
   }
   return map[status] || status
 }
@@ -100,8 +101,9 @@ export function getOrderStatusColor(status: OrderStatus): string {
     verified: '#2196F3',
     completed: '#999999',
     cancelled: '#999999',
-    refunding: '#FFC107',
+    refund_pending: '#FFC107',
     refunded: '#E53935',
+    partial_refunded: '#FF9800',
   }
   return map[status] || '#999999'
 }

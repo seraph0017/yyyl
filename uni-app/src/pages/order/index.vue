@@ -132,11 +132,23 @@ import { get, post } from '@/utils/request'
 import { ensureLogin } from '@/utils/auth'
 import { getOrderStatusText, getOrderStatusColor, formatDate } from '@/utils/util'
 import EmptyState from '@/components/empty-state/index.vue'
-import type { IOrder, OrderStatus, IPaginationResult } from '@/types'
+import type { IOrder, OrderStatus } from '@/types'
 
 interface IOrderTab {
   key: string
   name: string
+}
+
+interface IOrderPaginationResult {
+  list?: IOrder[]
+  items?: IOrder[]
+  pagination?: {
+    page: number
+    page_size: number
+    total: number
+    total_pages: number
+  }
+  total_pages?: number
 }
 
 // ---- 响应式数据 ----
@@ -145,7 +157,7 @@ const tabs = ref<IOrderTab[]>([
   { key: 'pending_payment', name: '待支付' },
   { key: 'paid', name: '待使用' },
   { key: 'completed', name: '已完成' },
-  { key: 'refunding', name: '售后' },
+  { key: 'refund_pending', name: '售后' },
 ])
 const activeTab = ref(0)
 const orders = ref<IOrder[]>([])
@@ -155,6 +167,7 @@ const hasMore = ref(true)
 
 // ---- 生命周期 ----
 onShow(() => {
+  applyPendingTab()
   loadOrders()
 })
 
@@ -191,13 +204,15 @@ async function loadOrders() {
     if (tabKey !== 'all') {
       params.status = tabKey
     }
-    const data = await get<IPaginationResult<IOrder>>('/orders', params)
+    const data = await get<IOrderPaginationResult>('/orders', params)
+    const pageItems = data.list || data.items || []
+    const totalPages = data.pagination?.total_pages || data.total_pages || 0
     if (page.value === 1) {
-      orders.value = data.items || []
+      orders.value = pageItems
     } else {
-      orders.value = [...orders.value, ...(data.items || [])]
+      orders.value = [...orders.value, ...pageItems]
     }
-    hasMore.value = page.value < data.total_pages
+    hasMore.value = page.value < totalPages
   } catch {
     if (page.value === 1) orders.value = []
   } finally {
@@ -208,6 +223,20 @@ async function loadOrders() {
 async function loadMore() {
   page.value += 1
   await loadOrders()
+}
+
+function applyPendingTab() {
+  const pendingTab = uni.getStorageSync('order_tab') as string
+  if (!pendingTab) return
+
+  uni.removeStorageSync('order_tab')
+  const index = tabs.value.findIndex(tab => tab.key === pendingTab)
+  if (index >= 0 && index !== activeTab.value) {
+    activeTab.value = index
+    page.value = 1
+    hasMore.value = true
+    orders.value = []
+  }
 }
 
 // ---- 格式化工具 ----

@@ -106,8 +106,9 @@ export type OrderStatus =
   | 'verified'
   | 'completed'
   | 'cancelled'
-  | 'refunding'
+  | 'refund_pending'
   | 'refunded'
+  | 'partial_refunded'
 
 /** 订单 */
 export interface IOrder {
