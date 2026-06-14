@@ -7,6 +7,42 @@ from schemas.order import RefundRequest
 
 
 class OrderRouteTest(unittest.IsolatedAsyncioTestCase):
+    async def test_create_order_reloads_order_detail_before_serializing(self):
+        db = object()
+        user = SimpleNamespace(id=7)
+        created_order = SimpleNamespace(id=12)
+        order_detail = SimpleNamespace(id=12, items=[])
+        body = SimpleNamespace(
+            items=[SimpleNamespace(model_dump=lambda: {"product_id": 1})],
+            disclaimer_signed=True,
+            disclaimer_template_id=None,
+            address_id=None,
+            remark=None,
+            payment_method="wechat_pay",
+            times_card_id=None,
+        )
+
+        with (
+            patch.object(orders.order_service, "create_order", AsyncMock(return_value=created_order)) as create_order,
+            patch.object(orders.order_service, "get_order_detail", AsyncMock(return_value=order_detail)) as get_order_detail,
+            patch.object(orders.OrderResponse, "model_validate", return_value={"id": 12}) as model_validate,
+        ):
+            await orders.create_order(body, db=db, user=user)
+
+        create_order.assert_awaited_once_with(
+            db,
+            user,
+            [{"product_id": 1}],
+            disclaimer_signed=True,
+            disclaimer_template_id=None,
+            address_id=None,
+            remark=None,
+            payment_method="wechat_pay",
+            times_card_id=None,
+        )
+        get_order_detail.assert_awaited_once_with(db, 12, user_id=7)
+        model_validate.assert_called_once_with(order_detail)
+
     async def test_apply_refund_reloads_order_detail_before_serializing(self):
         db = object()
         user = SimpleNamespace(id=7)
