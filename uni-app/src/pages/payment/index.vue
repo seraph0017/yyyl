@@ -1,5 +1,5 @@
 <template>
-  <!-- 支付页（模拟支付） -->
+  <!-- 支付页 -->
   <view class="page-payment">
     <view class="payment-card card">
       <!-- 金额 -->
@@ -19,7 +19,7 @@
         </view>
         <view class="payment-info__row">
           <text class="payment-info__label">支付方式</text>
-          <text class="payment-info__value">模拟支付</text>
+          <text class="payment-info__value">微信支付</text>
         </view>
         <view class="payment-info__row">
           <text class="payment-info__label">支付倒计时</text>
@@ -27,22 +27,18 @@
         </view>
       </view>
 
-      <!-- 模拟支付提示 -->
+      <!-- 支付提示 -->
       <view class="payment-mock-tip">
-        <text class="payment-mock-tip__icon">ℹ️</text>
-        <text class="payment-mock-tip__text">当前为模拟支付模式，请选择支付结果进行测试</text>
+        <text class="payment-mock-tip__icon">🔒</text>
+        <text class="payment-mock-tip__text">将打开微信支付收银台，支付结果以微信通知为准</text>
       </view>
     </view>
 
     <!-- 操作按钮 -->
     <view class="payment-actions">
-      <view :class="['payment-btn', 'payment-btn--success', paying ? 'btn-disabled' : '']" @tap="onPaySuccess">
-        <text class="payment-btn__icon">✅</text>
-        <text>模拟支付成功</text>
-      </view>
-      <view :class="['payment-btn', 'payment-btn--fail', paying ? 'btn-disabled' : '']" @tap="onPayFail">
-        <text class="payment-btn__icon">❌</text>
-        <text>模拟支付失败</text>
+      <view :class="['payment-btn', 'payment-btn--success', paying ? 'btn-disabled' : '']" @tap="onWechatPay">
+        <text class="payment-btn__icon">💳</text>
+        <text>{{ paying ? '正在拉起支付' : '微信支付' }}</text>
       </view>
       <view class="payment-btn payment-btn--cancel" @tap="onCancel">
         <text>取消支付</text>
@@ -70,46 +66,68 @@ onLoad((options) => {
   expiredAt.value = new Date(Date.now() + 30 * 60 * 1000).toISOString()
 })
 
-/** 模拟支付成功 */
-async function onPaySuccess() {
+interface WechatPayParams {
+  appId?: string
+  timeStamp: string
+  nonceStr: string
+  package: string
+  signType: string
+  paySign: string
+}
+
+/** 微信支付 */
+async function onWechatPay() {
   if (paying.value) return
   paying.value = true
 
-  uni.showLoading({ title: '支付处理中...' })
+  uni.showLoading({ title: '拉起支付...' })
 
   try {
-    await post(`/orders/${orderId.value}/mock-pay`, { action: 'success' })
+    if (!orderId.value) {
+      throw new Error('缺少订单信息')
+    }
+
+    const payParams = await post<WechatPayParams>(
+      `/orders/${orderId.value}/pay`,
+      { payment_method: 'wechat_pay' },
+      { showError: false },
+    )
     uni.hideLoading()
+
+    await requestWechatPayment(payParams)
+
     uni.redirectTo({
       url: `/pages/payment-result/index?status=success&order_id=${orderId.value}`,
     })
-  } catch {
+  } catch (err) {
     uni.hideLoading()
-    uni.showToast({ title: '支付请求失败', icon: 'error' })
+    const errMsg = err instanceof Error ? err.message : ''
+    const message = isPaymentCancel(errMsg)
+      ? '已取消支付'
+      : errMsg || '支付请求失败，请稍后重试'
+    uni.showToast({ title: message, icon: 'none' })
   } finally {
     paying.value = false
   }
 }
 
-/** 模拟支付失败 */
-async function onPayFail() {
-  if (paying.value) return
-  paying.value = true
-
-  uni.showLoading({ title: '支付处理中...' })
-
-  try {
-    await post(`/orders/${orderId.value}/mock-pay`, { action: 'fail' })
-    uni.hideLoading()
-    uni.redirectTo({
-      url: `/pages/payment-result/index?status=fail&order_id=${orderId.value}`,
+function requestWechatPayment(params: WechatPayParams): Promise<void> {
+  return new Promise((resolve, reject) => {
+    uni.requestPayment({
+      provider: 'wxpay',
+      timeStamp: params.timeStamp,
+      nonceStr: params.nonceStr,
+      package: params.package,
+      signType: params.signType,
+      paySign: params.paySign,
+      success: () => resolve(),
+      fail: (err) => reject(new Error(err.errMsg || 'requestPayment failed')),
     })
-  } catch {
-    uni.hideLoading()
-    uni.showToast({ title: '支付请求失败', icon: 'error' })
-  } finally {
-    paying.value = false
-  }
+  })
+}
+
+function isPaymentCancel(message: string): boolean {
+  return message.includes('cancel') || message.includes('取消')
 }
 
 /** 取消支付 */

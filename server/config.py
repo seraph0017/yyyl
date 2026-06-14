@@ -57,9 +57,14 @@ class Settings(BaseSettings):
     # ---- 微信支付配置 ----
     WECHAT_MCH_ID: str = ""
     WECHAT_API_KEY: str = ""
+    WECHAT_API_V3_KEY: str = ""
+    WECHAT_MCH_SERIAL_NO: str = ""
     WECHAT_CERT_PATH: str = ""
     WECHAT_KEY_PATH: str = ""
+    WECHAT_PLATFORM_PUBLIC_KEY_PATH: str = ""
+    WECHAT_PLATFORM_PUBLIC_KEY_ID: str = ""
     WECHAT_NOTIFY_URL: str = ""
+    WECHAT_REFUND_NOTIFY_URL: str = ""
 
     # ---- 抖音小程序配置（预留） ----
     DOUYIN_APPS: str = '{}'

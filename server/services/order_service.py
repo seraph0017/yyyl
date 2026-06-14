@@ -27,7 +27,7 @@ from models.order import Order, OrderItem, Ticket
 from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product
 from models.user import User
 from redis_client import get_redis
-from services import inventory_service
+from services import inventory_service, wechat_pay_service
 from utils.helpers import generate_order_no, generate_qr_token, generate_ticket_code
 
 logger = logging.getLogger(__name__)
@@ -406,20 +406,27 @@ async def approve_refund(
         )
 
     if approved:
-        order.status = "refunded"
-        order.payment_status = "refunded"
+        if order.payment_method == "wechat_pay":
+            await wechat_pay_service.create_refund(
+                order,
+                refund_amount=order.actual_amount,
+                reason=order.remark,
+                site_id=order.site_id,
+            )
+            order.status = "refund_pending"
+        else:
+            order.status = "refunded"
+            order.payment_status = "refunded"
 
-        # 释放库存
-        for item in order.items:
-            item.refund_status = "refunded"
-            if item.date:
-                # 退款：已售 → 可用
-                await _refund_inventory(
-                    db, item.product_id, item.date, item.quantity,
-                    order.id, item.sku_id, item.time_slot,
-                )
-
-        # TODO: 调用微信退款接口
+            # 释放库存
+            for item in order.items:
+                item.refund_status = "refunded"
+                if item.date:
+                    # 退款：已售 → 可用
+                    await _refund_inventory(
+                        db, item.product_id, item.date, item.quantity,
+                        order.id, item.sku_id, item.time_slot,
+                    )
     else:
         order.status = "paid"  # 驳回，恢复已支付状态
         order.remark = f"退款被拒绝: {reject_reason}" if reject_reason else order.remark
@@ -466,21 +473,12 @@ async def mock_pay_order(
         )
 
     if success:
-        order.status = "paid"
-        order.payment_status = "paid"
-        order.payment_time = datetime.now(timezone.utc)
-        order.payment_no = f"MOCK_{order.order_no}"
-
-        # 确认售出（锁定→已售）
-        for item in order.items:
-            if item.date:
-                await inventory_service.confirm_sell(
-                    db, item.product_id, item.date, item.quantity,
-                    order.id, item.sku_id, item.time_slot,
-                )
-
-        # 生成电子票
-        await _generate_tickets(db, order)
+        await mark_order_paid(
+            db,
+            order,
+            payment_no=f"MOCK_{order.order_no}",
+            payment_method="mock_pay",
+        )
     else:
         order.status = "cancelled"
         order.remark = "模拟支付失败"
@@ -532,15 +530,104 @@ async def initiate_payment(
             detail={"code": 40904, "message": "支付超时"},
         )
 
-    # TODO: 调用微信支付统一下单接口
-    return {
-        "appId": "",
-        "timeStamp": str(int(datetime.now(timezone.utc).timestamp())),
-        "nonceStr": generate_qr_token()[:16],
-        "package": f"prepay_id=mock_{order.order_no}",
-        "signType": "RSA",
-        "paySign": "mock_sign",
-    }
+    payment_params = await wechat_pay_service.create_jsapi_prepay(order, site_id=order.site_id)
+    order.payment_method = payment_method
+    await db.flush()
+    return payment_params
+
+
+async def mark_order_paid(
+    db: AsyncSession,
+    order: Order,
+    payment_no: str,
+    payment_method: str = "wechat_pay",
+) -> Order:
+    """将订单标记为已支付，确认库存并生成电子票。"""
+    if order.payment_status == "paid":
+        return order
+
+    order.status = "paid"
+    order.payment_status = "paid"
+    order.payment_time = datetime.now(timezone.utc)
+    order.payment_no = payment_no
+    order.payment_method = payment_method
+
+    for item in order.items:
+        if item.date:
+            await inventory_service.confirm_sell(
+                db, item.product_id, item.date, item.quantity,
+                order.id, item.sku_id, item.time_slot,
+            )
+
+    await _generate_tickets(db, order)
+    await db.flush()
+    return order
+
+
+async def handle_wechat_payment_notification(
+    db: AsyncSession,
+    transaction: Dict[str, Any],
+) -> Optional[Order]:
+    """处理微信支付成功通知。"""
+    out_trade_no = transaction.get("out_trade_no")
+    transaction_id = transaction.get("transaction_id")
+    trade_state = transaction.get("trade_state")
+    if not out_trade_no or trade_state != "SUCCESS":
+        return None
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.order_no == out_trade_no, Order.is_deleted.is_(False))
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        return None
+
+    return await mark_order_paid(
+        db,
+        order,
+        payment_no=transaction_id or f"WX_{out_trade_no}",
+        payment_method="wechat_pay",
+    )
+
+
+async def handle_wechat_refund_notification(
+    db: AsyncSession,
+    refund: Dict[str, Any],
+) -> Optional[Order]:
+    """处理微信退款通知。"""
+    out_trade_no = refund.get("out_trade_no")
+    if not out_trade_no:
+        return None
+
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items))
+        .where(Order.order_no == out_trade_no, Order.is_deleted.is_(False))
+    )
+    order = result.scalar_one_or_none()
+    if order is None:
+        return None
+
+    refund_status = refund.get("refund_status") or refund.get("status")
+    if refund_status == "SUCCESS":
+        order.status = "refunded"
+        order.payment_status = "refunded"
+        order.refunded_amount = order.actual_amount
+        for item in order.items:
+            item.refund_status = "refunded"
+            if item.date:
+                await _refund_inventory(
+                    db, item.product_id, item.date, item.quantity,
+                    order.id, item.sku_id, item.time_slot,
+                )
+    elif refund_status in {"ABNORMAL", "CLOSED"}:
+        order.status = "paid"
+        order.payment_status = "paid"
+
+    await db.flush()
+    return order
 
 
 async def seckill_order(
@@ -782,7 +869,7 @@ async def _get_user_order(db: AsyncSession, order_id: int, user_id: int) -> Orde
     """获取用户的订单（带权限校验）"""
     result = await db.execute(
         select(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.user))
         .where(
             Order.id == order_id,
             Order.user_id == user_id,

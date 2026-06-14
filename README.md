@@ -418,12 +418,16 @@ JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440  # Token有效期（分钟）
 # ---- 微信小程序配置（多营地 JSON 格式）----
 WECHAT_APPS=[{"site_id":1,"app_id":"your_xijiao_appid","app_secret":"your_xijiao_secret"},{"site_id":2,"app_id":"your_dalonggu_appid","app_secret":"your_dalonggu_secret"}]
 
-# ---- 微信支付配置（预留） ----
+# ---- 微信支付配置 ----
 WECHAT_MCH_ID=your_mch_id
-WECHAT_API_KEY=your_api_key
+WECHAT_API_V3_KEY=your_32_byte_api_v3_key
+WECHAT_MCH_SERIAL_NO=your_merchant_api_cert_serial_no
 WECHAT_CERT_PATH=/path/to/apiclient_cert.pem
 WECHAT_KEY_PATH=/path/to/apiclient_key.pem
-WECHAT_NOTIFY_URL=https://your-domain.com/api/v1/payment/notify
+WECHAT_PLATFORM_PUBLIC_KEY_PATH=/path/to/pub_key.pem
+WECHAT_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_xxx
+WECHAT_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/notify
+WECHAT_REFUND_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/refund-notify
 
 # ---- AES加密配置 ----
 AES_ENCRYPTION_KEY=your-32-byte-aes-key-here    # ⚠️ 生产环境必须修改！

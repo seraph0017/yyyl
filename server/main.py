@@ -162,6 +162,7 @@ from routers import (
     members,
     notifications,
     orders,
+    payments,
     performance,
     products,
     reports,
@@ -184,6 +185,7 @@ app.include_router(campsites.router)
 app.include_router(content.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
+app.include_router(payments.router)
 app.include_router(bundles.router)
 app.include_router(weather.router)
 app.include_router(seckill.router)
