@@ -13,6 +13,15 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 - 该环境当前 Python 版本为 `3.11.13`，与后端 Python 3.11 要求一致。
 - 不要在 `base` 环境里安装本项目后端依赖；如需补依赖，先激活 `yyyl` 后再执行。
 
+## Current State Handoff
+
+- `CURRENT.md` 是本仓库的实时交接快照，进入项目时先读它，再结合 `git status --short` 判断当前状态。
+- `CURRENT.md` 应保留足够上下文：当前重点、下一步、最近修复、生产部署状态、重要路径、验证命令、脏工作区提醒。
+- 不要把 `CURRENT.md` 压缩成只有分支/status 输出，除非用户明确要求短状态文件。
+- 不要在 `CURRENT.md` 写入密钥、token、密码、私钥、证书内容、带凭据的 DSN 或后台管理员密码。
+- 更新项目状态后运行 `scripts/update-current.sh`。Codex 在结束一个改动过项目状态的用户请求前，应手动运行该脚本。
+- Claude Code hook 已配置在 `.claude/settings.local.json`，会在工具使用后和停止时执行 `scripts/update-current.sh`；如果 hook 失败，手动执行。
+
 ## Development Commands
 
 ### Backend (server/)

@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 一月一露 (yyyl) — A multi-campsite outdoor camping operations platform. Full-stack: uni-app mini-program (C-end) + Vue3 admin dashboard (B-end) + FastAPI backend. Supports multiple campsites (西郊林场 site_id=1, 大聋谷 site_id=2) with data isolation via `X-Site-Id` header.
 
+## Current State Handoff
+
+- `CURRENT.md` is the canonical live handoff snapshot for this repository. Read it first when entering the project, then check `git status --short`.
+- Keep `CURRENT.md` operational but not overly terse. It should preserve current focus, next steps, recent fixes, production deployment state, important paths, verification commands, and dirty-worktree warnings.
+- Do not collapse `CURRENT.md` to only branch/status output unless the user explicitly asks for a short status file.
+- Do not store secrets, tokens, passwords, private keys, certificate contents, DSNs with credentials, or admin credentials in `CURRENT.md`.
+- A Claude Code project hook is configured in `.claude/settings.local.json` to run `scripts/update-current.sh` after tool use and at turn stop.
+- If the hook does not run, run `scripts/update-current.sh` manually before ending the turn whenever project state changed.
+
 ## Development Commands
 
 ### Backend (server/)
