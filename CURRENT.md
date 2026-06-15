@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-15 09:57:29 CST
+Last updated: 2026-06-15 10:22:34 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -89,24 +89,17 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `/Users/nathan/Projects/yyyl`
 - branch: `main`
 - upstream: `origin/main`
-- head: `0156e83 docs: add current handoff workflow`
-- uncommitted changes: `16`
+- head: `178b78d docs: refresh architecture and payment operations`
+- uncommitted changes: `9`
 - status sample:
 
 ```text
- M CURRENT.md
  M README.md
- M scripts/prod/06-deploy-blue-green.sh
- M scripts/prod/README.md
- M scripts/update-current.sh
- M server/services/order_service.py
 ?? admin/CODEBASE_PATTERNS.md
-?? docs/project_overview.md
 ?? docs/superpowers/
 ?? findings.md
 ?? output/
 ?? progress.md
-?? server/tests/test_order_service.py
 ?? task_plan.md
 ?? tmp/
 ?? uni-app/src/pages/index/components/

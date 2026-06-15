@@ -1,196 +1,138 @@
-# 🏕️ 一月一露 — 多营地综合运营平台
+# 一月一露
 
-> uni-app 跨平台小程序 + Web管理后台 + 后端API 全栈项目 · PRD v1.5
+> 多营地户外露营综合运营平台：uni-app 小程序 + Vue3 管理后台 + FastAPI 后端
 
-一月一露是一个户外露营品牌的数字化运营平台，支持**多营地独立运营**（西郊林场 / 大聋谷），同一套代码通过构建时配置生成不同营地的小程序。为露营爱好者提供营位预定、装备租赁、户外活动报名、商品购买等一站式服务，同时为运营方提供完整的后台管理能力。
+一月一露（yyyl）面向户外露营品牌的数字化经营场景，覆盖营位预订、装备租赁、活动报名、商品购买、会员权益、电子票、验票、退款、财务和运营报表。项目支持多营地独立运营，同一套代码可按营地配置构建不同小程序，并通过后端 `site_id` 做全链路数据隔离。
 
-**v1.5 新增功能**：搭配组合套餐、营地地图与互动游戏、天气服务集成、内部报销/绩效管理、秒杀预填加速。
+## 项目状态
 
-**v1.6 UI/UX 全面升级**：小程序采用「野奢」（Organic Luxury Outdoor）设计系统 — 侘寂美学 + 户外奢华风格；管理后台采用「深邃极光」（Northern Lights Dashboard）设计系统 — 暗森林侧边栏 + 极光渐变 + 玻璃拟态卡片；全量表格操作按钮统一为圆形图标按钮 + 光晕动效；新增出行人管理页面完全重设计、日历范围选择等。
+| 项目 | 当前状态 |
+|------|----------|
+| 生产域名 | `https://www.yyylcamp.com` |
+| 线上 API | Podman 蓝绿容器运行，Nginx 反向代理 |
+| 微信支付 | 代码链路已接入真实微信支付；当前商户侧收款能力受限，真实支付返回 `NO_AUTH` |
+| 测试价格 | 商品、SKU、日期定价均已临时调整为 `0.01` 元，便于支付链路测试 |
+| 多营地 | 西郊林场 `site_id=1`、大聋谷 `site_id=2` |
+| 项目文档 | 见 [docs/project_overview.md](docs/project_overview.md) 与 [docs/architecture.md](docs/architecture.md) |
 
-**当前生产状态**：真实微信支付已接入生产，但当前商户侧收款能力受限，真实支付会返回 `NO_AUTH`。测试阶段商品、SKU、日期定价已统一降至 `0.01` 元，便于验证完整订单链路。
+## 快速导航
 
-**v1.7 安全加固与代码规范化**：后端启动时自动检测不安全密钥并在生产环境阻止启动；全局异常处理与请求追踪；购物车接口改用 Pydantic Schema 强类型校验；管理后台路由守卫增加服务端 Token 验证；Dashboard 移除硬编码 Mock 回退数据；小程序切换正式微信 AppID；新增高频查询数据库索引。
+- [系统架构](#系统架构)
+- [目录结构](#目录结构)
+- [本地启动](#本地启动)
+- [常用命令](#常用命令)
+- [环境变量](#环境变量)
+- [业务模块](#业务模块)
+- [设计系统](#设计系统)
+- [部署说明](#部署说明)
+- [项目文档](#项目文档)
 
----
+## 系统架构
 
-## 📐 系统架构
-
+```text
+┌──────────────────────────────────────────────────────────────┐
+│ C 端：uni-app 小程序 / H5                                      │
+│ Vue3 + TypeScript + Pinia + SCSS                              │
+│ VITE_SITE_CODE = xijiao / dalonggu                            │
+└──────────────────────────────┬───────────────────────────────┘
+                               │
+┌──────────────────────────────▼───────────────────────────────┐
+│ B 端：Vue3 管理后台                                             │
+│ Element Plus + Pinia + ECharts + Vite                         │
+└──────────────────────────────┬───────────────────────────────┘
+                               │ HTTP / WebSocket
+                               │ X-Site-Id 营地隔离
+┌──────────────────────────────▼───────────────────────────────┐
+│ FastAPI 后端                                                   │
+│ Routers + Services + Schemas + SQLAlchemy Async                │
+└───────────────┬─────────────────────────────┬────────────────┘
+                │                             │
+        ┌───────▼────────┐            ┌───────▼────────┐
+        │ PostgreSQL 15  │            │ Redis 7        │
+        │ 主数据 / 事务   │            │ 缓存 / 队列     │
+        └────────────────┘            └───────┬────────┘
+                                              │
+                                      ┌───────▼────────┐
+                                      │ Celery Worker  │
+                                      │ 定时任务 / 异步 │
+                                      └────────────────┘
 ```
-┌─────────────────────────────────────────────┐
-│        uni-app 跨平台小程序 (C端)              │
-│      Vue3 + TypeScript + Pinia + SCSS        │
-│                                              │
-│  ┌──────────────┐    ┌──────────────┐        │
-│  │ 🌲 西郊林场   │    │  ⛺ 大聋谷    │  ...   │
-│  │  site_id=1   │    │  site_id=2   │        │
-│  │  绿色主题     │    │  蓝色主题     │        │
-│  └──────────────┘    └──────────────┘        │
-│     微信小程序 / H5 / 抖音小程序                │
-└────────────┬────────────────────────────────┘
-             │
-             │  ┌────────────────────┐
-             │  │  Web管理后台 (B端)   │
-             │  │ Vue3 + Element Plus │
-             │  └────────┬───────────┘
-             │           │
-             └─────┬─────┘
-                   │  HTTP / WebSocket
-                   │  X-Site-Id 请求头（营地隔离）
-             ┌─────▼─────┐
-             │   Nginx    │
-             │ 反向代理    │
-             └─────┬─────┘
-                   │
-             ┌─────▼─────┐
-             │  FastAPI   │    ┌──────────┐
-             │  Python    │◄───┤  Celery  │
-             │  Uvicorn   │    │  Worker   │
-             └──┬─────┬──┘    └──────────┘
-                │     │
-         ┌──────▼┐   ┌▼──────┐
-         │ Postgres│   │ Redis │
-         │  数据库  │   │ 缓存   │
-         └────────┘   └───────┘
-```
 
-### 多营地架构
+### 多营地隔离
 
-| 营地 | site_id | 小程序代号 | 主题色 |
-|------|---------|-----------|--------|
-| 一月一露·西郊林场 | 1 | `xijiao` | 🌲 森林绿 `#2E7D32` |
-| 一月一露·大聋谷 | 2 | `dalonggu` | ⛺ 深蓝 `#1565C0` |
+| 营地 | site_id | 构建代号 | 说明 |
+|------|---------|----------|------|
+| 一月一露·西郊林场 | `1` | `xijiao` | 当前线上审核与测试主站点 |
+| 一月一露·大聋谷 | `2` | `dalonggu` | 同代码库独立品牌配置 |
 
-- **前端**：同一套代码，通过 `VITE_SITE_CODE` 环境变量在构建时切换品牌名、主题色、Slogan 等
-- **后端**：所有 API 通过 `X-Site-Id` 请求头实现数据隔离，每个营地看到各自的商品、订单、用户、报表数据
+- 小程序：通过 `VITE_SITE_CODE` 在构建时选择营地品牌、主题色、文案和 API 配置。
+- 后端：通过 `X-Site-Id` 请求头解析当前营地，所有核心查询按 `site_id` 过滤。
+- 新增营地：更新 `uni-app/src/config/sites.ts`、新增 `.env.{code}`、补构建脚本，并在后端中间件允许新的 `site_id`。
 
-### 架构速览
+## 目录结构
 
-- `uni-app/`：小程序与员工端，负责前台购票、支付、订单、电子票。
-- `admin/`：管理后台，负责商品、库存、订单、财务、会员和报表。
-- `server/`：FastAPI 后端，负责业务编排、数据库、Redis、Celery、微信支付与通知。
-- `docs/project_overview.md`：给新开发者和 Agent 的轻量导览。
-
----
-
-## 📁 项目结构
-
-```
+```text
 yyyl/
-├── uni-app/                # 跨平台小程序前端（C端 + 员工验票端）
-│   ├── src/
-│   │   ├── pages/          # 17个主页面（Vue3 SFC）
-│   │   ├── pages-sub/      # 分包页面（营地地图、互动游戏）
-│   │   ├── components/     # 通用组件（天气卡片、搭配选择器、秒杀预填等）
-│   │   ├── config/         # 营地配置（多营地品牌/主题/Slogan）
-│   │   ├── stores/         # Pinia 状态管理
-│   │   ├── types/          # TypeScript 类型定义
-│   │   ├── utils/          # 工具函数（请求、认证、存储）
-│   │   ├── static/         # 静态资源（TabBar图标等）
-│   │   ├── App.vue         # 应用入口
-│   │   └── pages.json      # 页面路由 + 分包配置
-│   ├── dist/               # 构建产物
-│   ├── vite.config.ts      # Vite 配置 + uni-app 插件
-│   └── package.json        # Node.js 依赖
+├── uni-app/                 # C 端小程序 / H5 / 员工验票端
+│   ├── src/pages/           # 首页、分类、购物车、订单、支付、电子票等
+│   ├── src/pages-sub/       # 分包：营地地图、互动游戏等
+│   ├── src/components/      # 业务组件与通用组件
+│   ├── src/config/          # 多营地品牌配置
+│   ├── src/stores/          # Pinia 状态
+│   └── src/utils/           # 请求、认证、存储等工具
 │
-├── server/               # 后端服务（FastAPI）
-│   ├── models/           # SQLAlchemy 数据模型（56张表）
-│   ├── schemas/          # Pydantic 请求/响应模型
-│   ├── routers/          # API 路由（19个模块，150+ 条API）
-│   ├── services/         # 业务逻辑层（14个服务）
-│   ├── tasks/            # Celery 异步任务（25个定时任务）
-│   ├── middleware/       # 中间件
-│   ├── utils/            # 工具函数（加密、认证、微信SDK等）
-│   ├── images/           # 商品图片（21张AI生成 + 静态文件服务）
-│   ├── alembic/          # 数据库迁移
-│   ├── main.py           # 应用入口
-│   ├── config.py         # 配置管理
-│   ├── database.py       # 数据库连接
-│   ├── redis_client.py   # Redis 连接
-│   ├── celery_app.py     # Celery 实例初始化
-│   ├── celery_config.py  # Celery Beat 定时任务调度
-│   ├── seed_admin.py     # 管理员种子数据脚本
-│   ├── seed_products.py  # 商品种子数据脚本（18件商品+SKU+库存+定价）
-│   └── requirements.txt  # Python 依赖
+├── admin/                   # B 端管理后台
+│   ├── src/api/             # Axios API 模块
+│   ├── src/views/           # 商品、订单、会员、财务、报表、系统设置等页面
+│   ├── src/router/          # 路由与权限守卫
+│   ├── src/stores/          # Pinia 状态
+│   └── src/styles/          # SCSS 主题与 Element Plus 覆盖
 │
-├── admin/                # Web管理后台前端（B端）
-│   ├── src/
-│   │   ├── api/          # 15个API模块
-│   │   ├── views/        # 24个页面视图（含搭配组合、营地地图、秒杀监控等）
-│   │   ├── stores/       # Pinia 状态管理
-│   │   ├── router/       # 路由配置 + 权限守卫
-│   │   ├── layout/       # 主布局
-│   │   ├── config/       # 品牌配置
-│   │   ├── types/        # TypeScript 类型定义
-│   │   ├── utils/        # 工具函数
-│   │   └── styles/       # 主题样式（SCSS）
-│   ├── vite.config.ts    # Vite 配置
-│   └── package.json      # Node.js 依赖
+├── server/                  # FastAPI 后端
+│   ├── models/              # SQLAlchemy 模型
+│   ├── schemas/             # Pydantic v2 请求 / 响应模型
+│   ├── routers/             # API 路由
+│   ├── services/            # 业务服务层
+│   ├── tasks/               # Celery 任务
+│   ├── middleware/          # 认证、多营地隔离等中间件
+│   ├── alembic/             # 数据库迁移
+│   └── images/              # 商品与 Banner 静态图片
 │
-├── nginx/                # Nginx 网关配置
-│   ├── nginx.conf        # 反向代理 + 多级限流（秒杀/登录/普通API）
-│   └── Dockerfile        # Nginx 镜像
-│
-├── k8s/                  # K8s 部署清单（腾讯云 TKE）
-│   ├── namespace.yaml    # 命名空间
-│   ├── configmap.yaml    # 非敏感配置
-│   ├── secret.yaml       # 敏感配置模板（⚠️ 不提交真实值）
-│   ├── api-deployment.yaml   # FastAPI Deployment + Service
-│   ├── api-hpa.yaml      # 自动水平扩缩容（秒杀扩容 2→8 Pod）
-│   ├── worker-deployment.yaml # Celery Worker
-│   ├── beat-deployment.yaml   # Celery Beat（单副本）
-│   ├── admin-deployment.yaml  # 管理后台 + Service
-│   └── ingress.yaml      # Ingress（SSL + 限流）
-│
-├── docker-compose.yml    # Docker Compose 部署配置
-│
-├── docs/                 # 项目文档
-│   ├── architecture.md   # 技术架构设计文档 v1.2
-│   ├── test_report.md    # 测试与合规报告
-│   └── test_cases.md     # 完整测试用例（203条）
-│
-├── prd/                  # 产品文档
-│   ├── yyyl_prd.md           # 产品需求文档 v1.4（基线版）
-│   └── yyyl_prd_v1.5_increment.md  # PRD v1.5 增量需求
-│
-└── needs/                # 原始需求资料
+├── scripts/                 # 运维、发布、状态更新脚本
+├── scripts/prod/            # 生产 Podman 蓝绿发布脚本
+├── docs/                    # 架构、测试、开发与运维文档
+├── prd/                     # 产品需求文档
+├── needs/                   # 原始需求资料
+├── nginx/                   # Nginx 配置
+├── k8s/                     # TKE / Kubernetes 部署清单
+└── docker-compose.yml       # 本地或集成环境编排
 ```
 
----
+## 本地启动
 
-## 🛠️ 环境要求
+### 环境要求
 
-| 工具 | 版本要求 | 用途 |
-|------|---------|------|
-| **Node.js** | >= 18.x | uni-app 构建 + Web管理后台构建 |
-| **npm** | >= 9.x | Node.js 包管理 |
-| **Python** | >= 3.11 | 后端运行时 |
-| **pip** | >= 23.x | Python 包管理 |
-| **PostgreSQL** | >= 15.x | 主数据库 |
-| **Redis** | >= 7.x | 缓存 / 消息队列 / 会话 |
-| **微信开发者工具** | 最新稳定版 | 小程序导入构建产物、预览调试 |
+| 工具 | 建议版本 | 用途 |
+|------|----------|------|
+| Node.js | 18+ | 小程序与管理后台构建 |
+| npm | 9+ | Node 包管理 |
+| Python | 3.11 | 后端运行时 |
+| PostgreSQL | 15+ | 主数据库 |
+| Redis | 7+ | 缓存、队列、会话 |
+| 微信开发者工具 | 最新稳定版 | 小程序预览和调试 |
 
----
-
-## 🚀 快速开始
-
-### 1. 克隆项目
+本机后端开发推荐使用已有 conda 环境：
 
 ```bash
-git clone <repo-url> yyyl
-cd yyyl
+conda activate yyyl
 ```
 
-### 2. 启动基础设施（PostgreSQL + Redis）
-
-如果你本地没有安装 PostgreSQL 和 Redis，推荐使用 Docker：
+### 1. 启动 PostgreSQL 和 Redis
 
 ```bash
-# 使用 Docker 启动 PostgreSQL 和 Redis
 docker run -d --name yyyl-postgres \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=yyyl \
+  -e POSTGRES_PASSWORD=postgres \
   -p 5432:5432 \
   postgres:15
 
@@ -199,235 +141,131 @@ docker run -d --name yyyl-redis \
   redis:7-alpine
 ```
 
-或者使用 docker-compose（如已有对应服务可跳过）：
+也可以使用本机服务：
 
 ```bash
-# 也可以手动安装：
-# macOS:
 brew install postgresql@15 redis
 brew services start postgresql@15
 brew services start redis
 createdb yyyl
 ```
 
----
-
-### 3. 后端服务（FastAPI）
+### 2. 启动后端
 
 ```bash
 cd server
-
-# 创建 Python 虚拟环境
-python3 -m venv venv
-source venv/bin/activate    # macOS/Linux
-# venv\Scripts\activate     # Windows
-
-# 安装依赖
+conda activate yyyl
 pip install -r requirements.txt
-
-# 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，填入实际配置（见下方环境变量说明）
-
-# 数据库迁移
 alembic upgrade head
-
-# 初始化管理员账号（首次运行时执行）
 python seed_admin.py
-
-# 初始化商品种子数据（可选，提供示例商品）
 python seed_products.py
-
-# 启动开发服务器
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --port 8000
 ```
 
-**启动成功后**：
-- API 文档（Swagger UI）：http://localhost:8000/docs
-- API 文档（ReDoc）：http://localhost:8000/redoc
-- 健康检查：http://localhost:8000/health
-- **默认管理员账号**：`admin` / `admin123456`（⚠️ 生产环境必须修改！）
+启动后：
 
-#### 后端 Python 依赖清单
+| 地址 | 说明 |
+|------|------|
+| `http://localhost:8000/docs` | Swagger API 文档 |
+| `http://localhost:8000/redoc` | ReDoc API 文档 |
+| `http://localhost:8000/health` | 健康检查 |
 
-| 包名 | 版本 | 用途 |
-|------|------|------|
-| fastapi | 0.115.0 | Web 框架 |
-| uvicorn[standard] | 0.30.0 | ASGI 服务器 |
-| sqlalchemy[asyncio] | 2.0.35 | ORM + 异步数据库 |
-| asyncpg | 0.30.0 | PostgreSQL 异步驱动 |
-| alembic | 1.14.0 | 数据库迁移 |
-| pydantic | 2.10.0 | 数据验证 |
-| pydantic-settings | 2.6.0 | 配置管理 |
-| redis[hiredis] | 5.2.0 | Redis 客户端 |
-| python-jose[cryptography] | 3.3.0 | JWT Token |
-| bcrypt | 4.2.0 | 密码哈希 |
-| httpx | 0.27.0 | HTTP 客户端（调微信API） |
-| python-multipart | 0.0.12 | 文件上传 |
-| celery[redis] | 5.4.0 | 异步任务队列 |
-| bleach | 6.2.0 | HTML 清洗（XSS 防护） |
-| cryptography | 43.0.0 | AES 加密（敏感数据） |
-| python-dotenv | 1.0.1 | 环境变量加载 |
+本地默认管理员：`admin` / `admin123456`。生产环境必须修改默认账号和密钥。
 
-#### 商品图片资源
-
-`server/images/` 目录下共 **21 张** AI 生成的高质量商品图片（1024×1024），涵盖：
-
-- 🏕️ **营位** ×6：阳光营位、草坪、林间、湖景、亲子、山顶观星
-- 🎪 **活动营位** ×2：春日花海、星空音乐节
-- 🎒 **装备租赁** ×3：帐篷、天幕、桌椅套装
-- 🛶 **活动体验** ×3：皮划艇、射箭、亲子手作
-- 🛒 **营地商店** ×3：柴火、饮料、泡面
-- 👕 **周边** ×1：品牌T恤
-- 🖼️ **Banner** ×3：春日露营季、星空音乐节、新品装备
-
----
-
-### 4. Web 管理后台（Vue3）
+### 3. 启动管理后台
 
 ```bash
 cd admin
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-**启动成功后**：
-- 管理后台：http://localhost:3000
-- API 请求自动代理到 http://localhost:8000（已在 vite.config.ts 中配置）
-- 本地默认管理员账号：`admin` / `admin123456`
+- 本地地址：`http://localhost:3000`
+- `/api` 默认代理到 `http://localhost:8000`
 
-#### 其他命令
-
-```bash
-# 生产构建
-npm run build
-
-# 预览构建产物
-npm run preview
-```
-
-#### 管理后台核心依赖
-
-| 包名 | 用途 |
-|------|------|
-| vue 3.5 | 前端框架 |
-| element-plus 2.13 | UI 组件库 |
-| vue-router 4.6 | 路由管理 |
-| pinia 3.0 | 状态管理 |
-| axios 1.13 | HTTP 请求 |
-| echarts 6.0 | 数据可视化图表 |
-| dayjs 1.11 | 日期处理 |
-| @vueuse/core 14 | Vue 组合式工具集 |
-| dompurify 3.3 | XSS 防护 |
-| nprogress 0.2 | 页面加载进度条 |
-| sass 1.98 | CSS 预处理器 |
-| unplugin-auto-import | Element Plus 自动导入 |
-| unplugin-vue-components | 组件自动注册 |
-
----
-
-### 5. uni-app 小程序（跨平台）
+### 4. 启动小程序
 
 ```bash
 cd uni-app
-
-# 安装依赖（npm >= 11 需要加 --force，@dcloudio 依赖树存在兼容性问题）
 npm install --force
 
-# ---- 开发模式（HMR 热更新）----
-# 微信小程序 - 西郊林场
+# 西郊林场
 npm run dev:wx:xijiao
 
-# 微信小程序 - 大聋谷
+# 大聋谷
 npm run dev:wx:dalonggu
 
-# H5 网页版
+# H5
 npm run dev:h5:xijiao
+```
 
-# ---- 生产构建 ----
-# 微信小程序 - 西郊林场
+微信小程序构建产物在 `uni-app/dist/dev/mp-weixin/` 或 `uni-app/dist/build/mp-weixin/`，导入微信开发者工具即可。
+
+## 常用命令
+
+### 后端
+
+```bash
+cd server
+conda activate yyyl
+
+uvicorn main:app --reload --port 8000
+alembic revision --autogenerate -m "描述信息"
+alembic upgrade head
+alembic downgrade -1
+celery -A celery_app worker --loglevel=info
+celery -A celery_app beat --loglevel=info
+```
+
+### 管理后台
+
+```bash
+cd admin
+npm run dev
+npm run build
+npm run preview
+```
+
+### 小程序
+
+```bash
+cd uni-app
+npm run dev:wx:xijiao
+npm run dev:wx:dalonggu
 npm run build:wx:xijiao
-
-# 微信小程序 - 大聋谷
 npm run build:wx:dalonggu
-
-# TypeScript 类型检查
 npm run type-check
 ```
 
-**构建产物**：
-- 微信小程序：`dist/build/mp-weixin/` → 导入微信开发者工具即可预览
-- H5 网页版：`dist/build/h5/`
-
-#### 小程序技术栈
-
-| 技术 | 说明 |
-|------|------|
-| **uni-app** | 跨平台框架（Vue3 模式） |
-| **Vue 3** | 组合式 API (Composition API) |
-| **TypeScript** | 主开发语言 + 严格模式 |
-| **Pinia** | 状态管理 |
-| **SCSS** | 样式预处理 |
-| **Vite** | 构建工具 |
-
-#### 支持平台
-
-| 平台 | 构建命令 | 状态 |
-|------|---------|------|
-| 微信小程序 | `npm run build:wx:{营地}` | ✅ 已验证 |
-| H5 网页版 | `npm run build:h5:{营地}` | ✅ 已配置 |
-| 抖音小程序 | `npm run build:tt:{营地}` | 📌 已预留 |
-
-#### 营地配置
-
-在 `uni-app/src/config/sites.ts` 中定义各营地的品牌信息：
-
-```typescript
-// 构建时通过 VITE_SITE_CODE 环境变量选择营地
-// .env.xijiao → VITE_SITE_CODE=xijiao
-// .env.dalonggu → VITE_SITE_CODE=dalonggu
-```
-
-API 地址在 `uni-app/src/utils/request.ts` 中通过环境变量配置：
-
-```typescript
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1'
-```
-
-> ⚠️ 微信开发者工具中需关闭「不校验合法域名」选项才能请求 localhost。
-
----
-
-## ⚙️ 环境变量配置
-
-后端环境变量在 `server/.env` 中配置，模板文件为 `server/.env.example`：
+### 回归验证
 
 ```bash
-# ---- 应用配置 ----
-APP_NAME=某露营地
-APP_ENV=development          # development | production
-DEBUG=true                   # 生产环境设为 false
+cd server
+/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest \
+  tests/test_order_routes.py \
+  tests/test_wechat_pay_service.py \
+  tests/test_payment_routes.py \
+  tests/test_order_schema.py \
+  tests/test_order_service.py -v
+```
 
-# ---- 数据库配置 ----
-DATABASE_URL=postgresql+asyncpg://postgres:your_password@localhost:5432/yyyl
-DATABASE_POOL_SIZE=20        # 连接池大小
-DATABASE_MAX_OVERFLOW=10     # 最大溢出连接数
+## 环境变量
 
-# ---- Redis配置 ----
+后端模板位于 `server/.env.example`，本地开发复制为 `server/.env` 后填写。
+
+```bash
+APP_ENV=development
+DEBUG=true
+
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/yyyl
 REDIS_URL=redis://localhost:6379/0
 
-# ---- JWT配置 ----
-JWT_SECRET_KEY=your-jwt-secret-key    # ⚠️ 生产环境必须修改！
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES=1440  # Token有效期（分钟）
+JWT_SECRET_KEY=change-me
+AES_ENCRYPTION_KEY=change-me-32-byte-key
 
-# ---- 微信小程序配置（多营地 JSON 格式）----
 WECHAT_APPS=[{"site_id":1,"app_id":"your_xijiao_appid","app_secret":"your_xijiao_secret"},{"site_id":2,"app_id":"your_dalonggu_appid","app_secret":"your_dalonggu_secret"}]
 
-# ---- 微信支付配置 ----
 WECHAT_MCH_ID=your_mch_id
 WECHAT_API_V3_KEY=your_32_byte_api_v3_key
 WECHAT_MCH_SERIAL_NO=your_merchant_api_cert_serial_no
@@ -438,282 +276,117 @@ WECHAT_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_xxx
 WECHAT_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/notify
 WECHAT_REFUND_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/refund-notify
 
-# ---- AES加密配置 ----
-AES_ENCRYPTION_KEY=your-32-byte-aes-key-here    # ⚠️ 生产环境必须修改！
-
-# ---- CORS配置 ----
 CORS_ORIGINS=["http://localhost:3000","http://localhost:8080"]
 ```
 
----
+注意：
 
-## 🧪 开发常用命令速查
+- 不要提交真实密钥、证书、APIv3 Key、私钥或带凭据的 DSN。
+- 生产环境 `DEBUG=false`，且 JWT/AES 密钥不能使用默认值。
+- 微信支付证书生产路径为 `/opt/yyyl/secure/wechat-pay`，由 Podman 容器只读挂载。
 
-### 后端
+## 业务模块
 
-```bash
-cd server
-source venv/bin/activate
+### 小程序端
 
-# 启动开发服务器（热重载）
-uvicorn main:app --reload --port 8000
-
-# 创建数据库迁移
-alembic revision --autogenerate -m "描述信息"
-
-# 执行迁移
-alembic upgrade head
-
-# 回滚迁移
-alembic downgrade -1
-
-# 启动 Celery Worker（异步任务）
-celery -A celery_app worker --loglevel=info
-
-# 启动 Celery Beat（定时任务）
-celery -A celery_app beat --loglevel=info
-```
+| 页面 | 路径 | 说明 |
+|------|------|------|
+| 首页 | `pages/index` | Banner、推荐商品、分类入口 |
+| 分类 | `pages/category` | 商品分类、搜索、筛选 |
+| 商品详情 | `pages/product-detail` | 图文、SKU、日期、库存 |
+| 订单确认 | `pages/order-confirm` | 出行人、价格、提交订单 |
+| 支付 | `pages/payment` | 后端下单获取微信支付参数，调用 `uni.requestPayment()` |
+| 订单 | `pages/order` / `pages/order-detail` | 订单列表、详情、退款 |
+| 电子票 | `pages/ticket` | 二维码票券、验票状态 |
+| 会员 | `pages/member` | 年卡、次数卡、积分 |
+| 我的 | `pages/mine` | 个人中心、地址、身份信息 |
+| 员工验票 | `pages/staff` | 员工扫码核销 |
 
 ### 管理后台
 
-```bash
-cd admin
+| 模块 | 说明 |
+|------|------|
+| Dashboard | 销售、订单、会员、财务、趋势图 |
+| 商品与营位 | 商品、SKU、库存、日期定价、营地日历 |
+| 订单与退款 | 订单查询、详情、退款审批 |
+| 会员与权益 | 会员、年卡、次数卡、积分 |
+| 财务与报表 | 交易流水、提现、销售报表、导出 |
+| 内容运营 | FAQ、页面配置、公告、消息模板 |
+| 营地玩法 | 搭配套餐、营地地图、游戏、秒杀监控 |
+| 内部管理 | 员工、权限、报销、绩效、操作日志、系统设置 |
 
-# 开发模式
-npm run dev
-
-# 构建
-npm run build
-
-# 预览构建产物
-npm run preview
-```
-
-### uni-app 小程序
-
-```bash
-cd uni-app
-
-# 开发模式（微信小程序 - 西郊林场）
-npm run dev:wx:xijiao
-
-# 开发模式（微信小程序 - 大聋谷）
-npm run dev:wx:dalonggu
-
-# 生产构建
-npm run build:wx:xijiao
-npm run build:wx:dalonggu
-
-# TypeScript 类型检查
-npm run type-check
-```
-
----
-
-## 🔌 API 模块概览
-
-后端共 **19个路由模块**，**150+ 条 API**：
+### 后端 API
 
 | 模块 | 前缀 | 说明 |
 |------|------|------|
-| `auth` | `/api/v1/auth` | 认证（微信登录、手机号登录、管理员登录、Token刷新） |
-| `products` | `/api/v1/products` | 商品管理（CRUD、上下架、价格日历） |
-| `campsites` | `/api/v1/admin/campsites` | 营位管理（CRUD、库存批量开放、定价规则、统计） |
-| `orders` | `/api/v1/orders` | 订单管理（下单、支付、退票、验票） |
-| `cart` | `/api/v1/cart` | 购物车（添加、更新、删除、结算拆单） |
-| `members` | `/api/v1/members` | 会员管理（年卡、次数卡、积分） |
-| `users` | `/api/v1/users` | 用户信息管理 |
-| `tickets` | `/api/v1/tickets` | 电子票（生成、扫码验票） |
-| `finance` | `/api/v1/finance` | 财务管理（账户、交易、提现） |
-| `admin` | `/api/v1/admin` | 管理后台专用（Dashboard、员工、日志、设置、日历等） |
-| `content` | `/api/v1/content` | 内容管理（FAQ、页面配置、免责声明） |
-| `notifications` | `/api/v1/notifications` | 消息通知管理 |
-| `reports` | `/api/v1/admin/reports` | 数据报表（销售/用户/商品报表、导出） |
-| `bundles` | `/api/v1/admin/bundles` | 🆕 搭配组合套餐管理（CRUD、自动推荐） |
-| `camp_maps` | `/api/v1/admin/camp-maps` | 🆕 营地地图管理（地图/区域CRUD、互动热区） |
-| `seckill` | `/api/v1/admin/seckill` | 🆕 秒杀监控（实时数据、预填配置） |
-| `weather` | `/api/v1/weather` | 🆕 天气服务（当前天气、未来预报） |
-| `expenses` | `/api/v1/admin/expenses` | 🆕 报销管理（申请、审批、统计） |
-| `performance` | `/api/v1/admin/performance` | 🆕 绩效管理（配置、评分、记录） |
+| Auth | `/api/v1/auth` | 登录、Token、微信身份 |
+| Products | `/api/v1/products` | 商品、SKU、价格、库存 |
+| Orders | `/api/v1/orders` | 下单、支付、退款、订单详情 |
+| Payments | `/api/v1/payments` | 微信支付通知、退款通知 |
+| Cart | `/api/v1/cart` | 购物车、结算 |
+| Tickets | `/api/v1/tickets` | 电子票、扫码验票 |
+| Members | `/api/v1/members` | 会员、权益、积分 |
+| Admin | `/api/v1/admin` | 管理后台聚合接口 |
+| Reports | `/api/v1/admin/reports` | 销售、用户、商品报表 |
+| Content | `/api/v1/content` | FAQ、页面配置、免责声明 |
 
----
+## 设计系统
 
-## 📱 小程序页面一览（uni-app）
+### 小程序：野奢 Organic Luxury Outdoor
 
-| 页面 | 路径 | 说明 | API 状态 |
-|------|------|------|---------|
-| 首页 | `pages/index` | Banner + 推荐商品 + 分类入口 | ✅ 已接入 |
-| 分类 | `pages/category` | 商品分类浏览 + 搜索 | ✅ 已接入 |
-| 购物车 | `pages/cart` | 商品管理 + 结算 | ✅ 已接入 |
-| 订单列表 | `pages/order` | 全部/待付款/待使用/已完成 | ✅ 已接入 |
-| 我的 | `pages/mine` | 个人中心 + 功能入口 | ✅ 已接入 |
-| 商品详情 | `pages/product-detail` | 图文介绍 + SKU选择 + 日历 | ✅ 已接入 |
-| 订单确认 | `pages/order-confirm` | 出行人填写 + 支付 | ✅ 已接入 |
-| 支付 | `pages/payment` | 微信支付（真实支付；测试价 `0.01` 元） | ✅ 已接入 |
-| 支付结果 | `pages/payment-result` | 支付成功/失败展示 | 纯展示 |
-| 订单详情 | `pages/order-detail` | 订单信息 + 退票操作 | ✅ 已接入 |
-| 电子票 | `pages/ticket` | 二维码展示 + QR刷新 | ✅ 已接入 |
-| 会员中心 | `pages/member` | 年卡/次数卡/积分 | ✅ 已接入 |
-| 个人信息 | `pages/profile` | 头像/昵称修改 | ✅ 已接入 |
-| 身份管理 | `pages/identity` | 出行人身份信息（AES加密） | ✅ 已接入 |
-| 地址管理 | `pages/address` | 收货地址 CRUD | ✅ 已接入 |
-| 员工验票 | `pages/staff` | 扫码验票（员工端） | ✅ 已接入 |
-| 客服 | `pages/customer-service` | FAQ + 在线客服 | ✅ 已接入 |
+| 元素 | 设计方向 |
+|------|----------|
+| 色彩 | 深苔绿 `#2d4a3e`、暖铜金 `#c8a872`、暖沙背景 `#faf6f0` |
+| 视觉 | 侘寂美学、户外奢华、自然材质感 |
+| 组件 | 磨砂导航、渐变标题线、日期范围选择、底部弹层表单 |
+| 体验 | 商品浏览、营位选择、出行人填写、支付和电子票链路尽量短 |
 
----
+### 管理后台：深邃极光 Northern Lights Dashboard
 
-## 🖥️ 管理后台页面一览
+| 元素 | 设计方向 |
+|------|----------|
+| 色彩 | 森林绿 `#3d8b5e`、铜金 `#c8a872`、暗森林侧边栏 `#141e1a` |
+| 视觉 | 极光渐变、玻璃拟态卡片、工作台式信息密度 |
+| 操作 | 32px 圆形图标按钮，按编辑、查看、库存、上下架、审批、删除区分颜色 |
+| 主题 | CSS 变量集中管理，Element Plus 主题覆盖在 `admin/src/styles/` |
 
-| 页面 | 说明 |
-|------|------|
-| 登录 | 账号密码登录 + 微信扫码预留 |
-| Dashboard | 实时数据卡片 + 趋势图 + 销售排行 + 品类分布 + 会员数据 + 财务概览 |
-| 营地日历 | 按月查看所有营位库存/价格/状态矩阵（月份导航 + 今天标记 + 周末区分） |
-| 营位管理 | 营位列表（统计概览 + 属性筛选 + 7天库存概况）+ 新增/编辑 |
-| 商品管理 | 商品列表 + 新增/编辑（CRUD/上下架/定价） |
-| 订单管理 | 订单列表 + 详情 + 退款审批 |
-| 会员管理 | 会员列表/详情/积分调整 |
-| 年卡管理 | 年卡配置 + 积分兑换活动 |
-| 次数卡管理 | 次数卡配置 + 激活码批量生成 |
-| 财务管理 | 概览卡片 + 交易流水 |
-| 数据统计 | 销售报表（ECharts 图表）+ 用户分析 + 商品排行 + 导出 |
-| FAQ管理 | 分类 + 条目 CRUD |
-| 页面编辑 | JSON 配置编辑器 |
-| 消息管理 | 模板开关 + 发送记录 + 统计 |
-| 员工管理 | CRUD + 角色分配 |
-| 系统设置 | 基本/退票规则/客服/免责声明 |
-| 操作日志 | 查询 + 详情（变更前后值） |
-| 🆕 搭配组合管理 | 搭配套餐CRUD、搭配商品配置、折扣规则 |
-| 🆕 营地地图管理 | 地图上传/编辑、区域划分、互动热区配置 |
-| 🆕 游戏管理 | 互动小游戏CRUD、WebView链接配置 |
-| 🆕 秒杀监控 | 秒杀实时数据大屏、预填信息配置、库存监控 |
-| 🆕 报销管理 | 报销类型配置、申请审批、月度统计图表 |
-| 🆕 绩效管理 | 绩效方案配置、评分录入、员工绩效记录 |
+## 部署说明
 
----
+### 本地集成
 
-## 🔐 安全机制
+```bash
+docker-compose up -d --build
+docker-compose ps
+docker-compose logs -f api
+docker-compose down
+```
 
-- **认证**：JWT 双 Token（Access 2h + Refresh 7d）
-- **密码**：bcrypt 哈希存储
-- **敏感数据**：AES-256-CBC 加密（身份证号等）
-- **XSS 防护**：bleach HTML 清洗 + DOMPurify（前端）
-- **CSRF 防护**：X-Request-Token 请求头校验
-- **SQL 注入**：SQLAlchemy ORM 参数化查询
-- **CORS**：白名单域名控制
-- **权限控制**：基于角色的访问控制（super_admin / admin / operator / viewer）
-- **🆕 启动安全检测**：生产环境启动时自动校验 JWT/AES 密钥是否为默认值，不安全则阻止启动
-- **🆕 全局异常处理**：未捕获异常返回安全错误信息，隐藏内部堆栈，同时记录完整日志
-- **🆕 请求追踪**：每个请求自动分配 request_id，贯穿日志链路便于排查
-- **🆕 前端 Token 验证**：管理后台页面刷新后通过服务端验证 Token 有效性，而非仅依赖本地缓存
-- **🆕 接口参数强校验**：购物车等接口使用 Pydantic Schema 替代裸 Dict，自动校验类型和边界
+### 生产 Podman 蓝绿部署
 
----
+生产 API 优先使用 Podman 蓝绿容器，不使用 conda 直接运行 FastAPI。详细命令见 [scripts/prod/README.md](scripts/prod/README.md)。
 
-## 🎨 UI/UX 设计系统
+```bash
+pip install -r scripts/ops/requirements.txt
 
-### 小程序 — 「野奢」(Organic Luxury Outdoor)
+fab info
+fab preflight
+fab build --tag=v0.1.0
+fab deploy --tag=v0.1.0
+fab health
+fab rollback
+```
 
-以侘寂美学 + 户外奢华为核心理念，打造沉浸式的露营预订体验：
+当前线上关键点：
 
-| 元素 | 说明 |
-|------|------|
-| **色板** | 深苔绿 `#2d4a3e` + 暖铜金 `#c8a872` + 暖沙背景 `#faf6f0` |
-| **磨砂玻璃** | `backdrop-filter: blur(20px)` 导航栏、搜索栏、Tab栏 |
-| **渐变指示条** | 段标题底部铜金渐变装饰线 |
-| **日历交互** | 范围选择模式 — 入住(左圆角) → N晚 → 离店(右圆角)，最多连续5晚 |
-| **出行人管理** | 姓名首字头像、铜金默认角标、底部弹出式表单 |
-
-### 管理后台 — 「深邃极光」(Northern Lights Dashboard)
-
-以暗森林色调 + 极光渐变为设计语言，专为户外运营管理打造：
-
-| 元素 | 说明 |
-|------|------|
-| **色板** | 森林绿 `#3d8b5e` + 铜金 `#c8a872` + 暗森林侧边栏 `#141e1a` |
-| **玻璃拟态** | Dashboard 卡片半透明 + 内发光边框 |
-| **极光渐变** | 侧边栏 logo 区域 + 登录页动态背景 |
-| **操作按钮** | 全局统一 32px 圆形图标按钮 — 11种配色变体 + hover上浮光晕动效 |
-| **变量系统** | `--color-primary`、`--color-accent`、`--color-primary-glow` 等全局 CSS 变量 |
-
-操作按钮变体一览：
-
-| 变体 | 用途 | 配色 |
-|------|------|------|
-| `action-btn--edit` | 编辑 | 森林绿 |
-| `action-btn--view` | 详情/查看 | 深蓝 |
-| `action-btn--inventory` | 库存/规则 | 靛蓝 |
-| `action-btn--online` | 上架 | 清新绿 |
-| `action-btn--offline` | 下架 | 琥珀金 |
-| `action-btn--approve` | 通过/审批 | 成功绿 |
-| `action-btn--reject` | 驳回 | 警告橙 |
-| `action-btn--pay` | 打款 | 铜金 |
-| `action-btn--delete` | 删除/移除 | 柔和红 |
-| `action-btn--save` | 保存 | 主色绿 |
-| `action-btn--cancel` | 取消 | 灰色 |
-
----
-
-## 🏕️ 品牌 & 营地配置
-
-项目支持多营地独立品牌，同一套代码构建不同营地的应用：
-
-| 文件 | 说明 |
-|------|------|
-| `uni-app/src/config/sites.ts` | 营地品牌定义（名称、Slogan、主题色、联系方式、坐标等） |
-| `uni-app/.env.xijiao` | 西郊林场构建环境变量 |
-| `uni-app/.env.dalonggu` | 大聋谷构建环境变量 |
-| `admin/src/config/brand.ts` | 管理后台品牌名、描述 |
-| `server/.env` → `APP_NAME` | 后端应用名称 |
-| `admin/index.html` | 管理后台 HTML 标题 |
-
-新增营地只需：
-1. 在 `sites.ts` 中添加营地配置
-2. 新增 `.env.{code}` 环境变量文件
-3. 在 `package.json` 中添加对应的构建脚本
-4. 后端 `middleware/site.py` 中允许新的 site_id
-
----
-
-## 📋 技术栈总结
-
-| 层级 | 技术 |
-|------|------|
-| **小程序前端** | uni-app + Vue 3 + TypeScript + Pinia + Vite + SCSS |
-| **管理后台前端** | Vue 3 + TypeScript + Vite + Element Plus + Pinia + ECharts |
-| **后端 API** | Python 3.11 + FastAPI + Uvicorn (ASGI) |
-| **ORM** | SQLAlchemy 2.0 (Async) |
-| **数据库** | PostgreSQL 15（57张表） |
-| **缓存/队列** | Redis 7 |
-| **异步任务** | Celery + Redis Broker（25个定时任务） |
-| **数据库迁移** | Alembic |
-| **API 文档** | Swagger UI / ReDoc（自动生成） |
-| **多营地隔离** | X-Site-Id 请求头 + 全链路 site_id 过滤 |
-| **图片资源** | AI 生成高质量商品/Banner 图片（21张 1024×1024）|
-
----
-
-## 🐳 Docker & K8s 部署
-
-### 当前线上信息
-
-- 线上域名：`https://www.yyylcamp.com/`
-- 管理后台入口：`https://www.yyylcamp.com/`（未登录默认进入 `/landing`）
-- 登录页直达：`https://www.yyylcamp.com/login`
-- 线上 API 健康检查：`https://www.yyylcamp.com/health`
-- 线上 API 前缀：`https://www.yyylcamp.com/api/v1`
-- 后台测试账号：`admin` / `admin123456`
-- 线上 API 当前使用 Podman 蓝绿容器，生产切换由 `scripts/prod/06-deploy-blue-green.sh` 执行
+- Nginx 站点配置：`/www/server/panel/vhost/nginx/ttt.conf`
+- 蓝绿容器：`yyyl-api-blue` / `yyyl-api-green`
+- 默认端口：`8001` / `8002`
 - 微信支付证书目录：`/opt/yyyl/secure/wechat-pay`
-- 当前测试价：商品、SKU、日期定价均为 `0.01` 元
-
-> 注意：截至 2026-06-12，线上 Nginx 根目录已部署 `admin/dist` 管理后台构建产物，`location /` 已配置 `try_files $uri $uri/ /index.html` 支持 SPA history 路由。旧静态页已备份在服务器 `/www/server/nginx/html.bak.20260612113831`。
+- 数据层过渡状态：PostgreSQL/Redis 仍在 Docker 网络内，Podman API 容器通过 host 网络和 `--add-host` 解析访问。
 
 ### 微信审核测试数据
 
-线上最小审核数据使用 `site_id=1`（西郊林场），用于让审核人员浏览首页、商品列表、商品详情并创建待支付订单。该数据不包含订单、票券或支付流水，避免污染线上经营报表。
-
-在能访问线上数据库配置的后端环境中执行：
+线上最小审核数据使用 `site_id=1`，用于审核人员浏览首页、商品列表、商品详情并创建待支付订单。
 
 ```bash
 cd server
@@ -721,139 +394,36 @@ python seed_admin.py
 python seed_xijiao_demo_data.py
 ```
 
-执行后会补齐 18 件商品、16 个 SKU、18 条定价规则、未来 45 天营位库存、首页 Banner/公告和 3 条优惠规则。详细说明见 `docs/wechat_review_seed_data.md`。
+执行后会补齐商品、SKU、定价规则、未来库存、首页 Banner/公告和优惠规则。详情见 [docs/wechat_review_seed_data.md](docs/wechat_review_seed_data.md)。
 
-### 部署策略分层
+### TKE / Kubernetes
 
-| 环境 | 方式 | 说明 |
-|------|------|------|
-| **开发/测试** | 本地直接启动 | 各服务独立运行，简单直接 |
-| **集成测试** | `docker-compose up` | 一键拉起全套，验证服务间协作 |
-| **线上生产** | 腾讯云 TKE (K8s) | HPA 自动扩缩容，秒杀场景弹性伸缩 |
-
-### 本地开发（推荐方式）
-
-各服务独立启动，便于调试：
+仓库保留腾讯云 TKE 部署清单，适合后续迁移到云托管数据层与弹性扩容：
 
 ```bash
-# 1. 基础设施（PG + Redis）— 本地安装或 Docker
-docker run -d --name yyyl-postgres -e POSTGRES_DB=yyyl -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:15
-docker run -d --name yyyl-redis -p 6379:6379 redis:7-alpine
-
-# 2. 后端 API
-cd server && source venv/bin/activate
-alembic upgrade head          # 数据库迁移
-python seed_admin.py          # 初始化管理员账号（首次）
-python seed_products.py       # 初始化商品数据（首次，可选）
-uvicorn main:app --reload --port 8000
-
-# 3. Celery Worker（新终端）
-cd server && source venv/bin/activate
-celery -A celery_app worker --loglevel=info
-
-# 4. Celery Beat（新终端）
-cd server && source venv/bin/activate
-celery -A celery_app beat --loglevel=info
-
-# 5. 管理后台（新终端）
-cd admin && npm run dev
-
-# 6. uni-app 小程序（新终端）
-cd uni-app && npm install --force
-npm run dev:wx:xijiao     # 或 dev:wx:dalonggu
-# 构建产物在 dist/dev/mp-weixin/，用微信开发者工具导入
-```
-
-### Docker Compose 部署
-
-适合服务器上快速部署或集成测试：
-
-```bash
-# 先在 server/.env 中配置好环境变量
-# 然后设置数据库密码
-export DB_PASSWORD=your_secure_password
-
-# 构建并启动全部服务
-docker-compose up -d --build
-
-# 查看服务状态
-docker-compose ps
-
-# 查看 API 日志
-docker-compose logs -f api
-
-# 停止全部
-docker-compose down
-```
-
-### 腾讯云 TKE (K8s) 部署
-
-线上生产环境使用 K8s，支持秒杀场景自动扩容：
-
-```bash
-# 1. 创建命名空间
 kubectl apply -f k8s/namespace.yaml
-
-# 2. 创建配置和密钥（⚠️ 修改 secret.yaml 中的真实值）
 kubectl apply -f k8s/configmap.yaml
 kubectl apply -f k8s/secret.yaml
-
-# 3. 部署服务
 kubectl apply -f k8s/api-deployment.yaml
 kubectl apply -f k8s/api-hpa.yaml
 kubectl apply -f k8s/worker-deployment.yaml
 kubectl apply -f k8s/beat-deployment.yaml
 kubectl apply -f k8s/admin-deployment.yaml
-
-# 4. 配置 Ingress（需先配置域名和 TLS 证书）
 kubectl apply -f k8s/ingress.yaml
-
-# 查看 Pod 状态
-kubectl get pods -n yyyl
-
-# 查看 HPA 扩缩容状态
-kubectl get hpa -n yyyl
 ```
 
-#### 秒杀扩容能力
-
-| 指标 | 配置 |
-|------|------|
-| 平时副本数 | 2 Pod |
-| 最大副本数 | 8 Pod |
-| 扩容触发 | CPU > 60% 或 内存 > 75% |
-| 扩容速度 | 30 秒内判定，一次最多加 4 Pod |
-| 缩容速度 | 5 分钟稳定窗口，一次减 1 Pod |
-
-#### 线上数据层建议
-
-| 组件 | 推荐方案 | 理由 |
-|------|---------|------|
-| PostgreSQL | 腾讯云 TDSQL-C | 自动备份、主从高可用、免运维 |
-| Redis | 腾讯云 Redis | 持久化、主从切换、监控告警 |
-| 对象存储 | 腾讯云 COS | 图片 CDN 加速 |
-
-> K8s 里只跑无状态服务（API、Worker、Beat、Admin），有状态的数据层交给云服务托管。
-
-### 生产 Podman 蓝绿部署
-
-线上 API 生产部署优先使用 Podman 蓝绿发布，见 [scripts/prod/README.md](scripts/prod/README.md)。
-
----
-
-## 📄 项目文档
+## 项目文档
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
-| 产品需求文档 | `prd/yyyl_prd.md` | PRD v1.4 基线版（评审通过 9.6/10） |
-| 增量需求文档 | `prd/yyyl_prd_v1.5_increment.md` | PRD v1.5 增量（5个新模块，评审通过 9.0+/10） |
-| 技术架构文档 | `docs/architecture.md` | 架构设计 v1.2（56张表 + 150+ API，评审通过 9.3/10） |
-| 项目总览 | `docs/project_overview.md` | 项目分层、代码入口、生产状态速览 |
-| 测试合规报告 | `docs/test_report.md` | 综合评分 8.5/10 |
-| 测试用例文档 | `docs/test_cases.md` | 203 条测试用例（P0:105 / P1:84 / P2:14） |
+| 项目总览 | [docs/project_overview.md](docs/project_overview.md) | 三端职责、代码入口、生产状态 |
+| 技术架构 | [docs/architecture.md](docs/architecture.md) | 架构设计、数据模型、服务边界 |
+| 生产运维 | [scripts/prod/README.md](scripts/prod/README.md) | Podman 蓝绿发布、健康检查、故障处理 |
+| 测试报告 | [docs/test_report.md](docs/test_report.md) | 测试与合规总结 |
+| 测试用例 | [docs/test_cases.md](docs/test_cases.md) | 端到端测试用例 |
+| PRD 基线 | [prd/yyyl_prd.md](prd/yyyl_prd.md) | 产品需求基线 |
+| PRD 增量 | [prd/yyyl_prd_v1.5_increment.md](prd/yyyl_prd_v1.5_increment.md) | 搭配售卖、秒杀、地图、内部管理等 |
 
----
-
-## 📝 License
+## License
 
 Private — All rights reserved.
