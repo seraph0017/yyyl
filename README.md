@@ -8,6 +8,8 @@
 
 **v1.6 UI/UX 全面升级**：小程序采用「野奢」（Organic Luxury Outdoor）设计系统 — 侘寂美学 + 户外奢华风格；管理后台采用「深邃极光」（Northern Lights Dashboard）设计系统 — 暗森林侧边栏 + 极光渐变 + 玻璃拟态卡片；全量表格操作按钮统一为圆形图标按钮 + 光晕动效；新增出行人管理页面完全重设计、日历范围选择等。
 
+**当前生产状态**：真实微信支付已接入生产，但当前商户侧收款能力受限，真实支付会返回 `NO_AUTH`。测试阶段商品、SKU、日期定价已统一降至 `0.01` 元，便于验证完整订单链路。
+
 **v1.7 安全加固与代码规范化**：后端启动时自动检测不安全密钥并在生产环境阻止启动；全局异常处理与请求追踪；购物车接口改用 Pydantic Schema 强类型校验；管理后台路由守卫增加服务端 Token 验证；Dashboard 移除硬编码 Mock 回退数据；小程序切换正式微信 AppID；新增高频查询数据库索引。
 
 ---
@@ -61,6 +63,13 @@
 
 - **前端**：同一套代码，通过 `VITE_SITE_CODE` 环境变量在构建时切换品牌名、主题色、Slogan 等
 - **后端**：所有 API 通过 `X-Site-Id` 请求头实现数据隔离，每个营地看到各自的商品、订单、用户、报表数据
+
+### 架构速览
+
+- `uni-app/`：小程序与员工端，负责前台购票、支付、订单、电子票。
+- `admin/`：管理后台，负责商品、库存、订单、财务、会员和报表。
+- `server/`：FastAPI 后端，负责业务编排、数据库、Redis、Celery、微信支付与通知。
+- `docs/project_overview.md`：给新开发者和 Agent 的轻量导览。
 
 ---
 
@@ -540,7 +549,7 @@ npm run type-check
 | 我的 | `pages/mine` | 个人中心 + 功能入口 | ✅ 已接入 |
 | 商品详情 | `pages/product-detail` | 图文介绍 + SKU选择 + 日历 | ✅ 已接入 |
 | 订单确认 | `pages/order-confirm` | 出行人填写 + 支付 | ✅ 已接入 |
-| 支付 | `pages/payment` | 模拟支付（成功/失败） | ✅ 已接入 |
+| 支付 | `pages/payment` | 微信支付（真实支付；测试价 `0.01` 元） | ✅ 已接入 |
 | 支付结果 | `pages/payment-result` | 支付成功/失败展示 | 纯展示 |
 | 订单详情 | `pages/order-detail` | 订单信息 + 退票操作 | ✅ 已接入 |
 | 电子票 | `pages/ticket` | 二维码展示 + QR刷新 | ✅ 已接入 |
@@ -694,6 +703,9 @@ npm run type-check
 - 线上 API 健康检查：`https://www.yyylcamp.com/health`
 - 线上 API 前缀：`https://www.yyylcamp.com/api/v1`
 - 后台测试账号：`admin` / `admin123456`
+- 线上 API 当前使用 Podman 蓝绿容器，生产切换由 `scripts/prod/06-deploy-blue-green.sh` 执行
+- 微信支付证书目录：`/opt/yyyl/secure/wechat-pay`
+- 当前测试价：商品、SKU、日期定价均为 `0.01` 元
 
 > 注意：截至 2026-06-12，线上 Nginx 根目录已部署 `admin/dist` 管理后台构建产物，`location /` 已配置 `try_files $uri $uri/ /index.html` 支持 SPA history 路由。旧静态页已备份在服务器 `/www/server/nginx/html.bak.20260612113831`。
 
@@ -823,6 +835,10 @@ kubectl get hpa -n yyyl
 
 > K8s 里只跑无状态服务（API、Worker、Beat、Admin），有状态的数据层交给云服务托管。
 
+### 生产 Podman 蓝绿部署
+
+线上 API 生产部署优先使用 Podman 蓝绿发布，见 [scripts/prod/README.md](scripts/prod/README.md)。
+
 ---
 
 ## 📄 项目文档
@@ -832,6 +848,7 @@ kubectl get hpa -n yyyl
 | 产品需求文档 | `prd/yyyl_prd.md` | PRD v1.4 基线版（评审通过 9.6/10） |
 | 增量需求文档 | `prd/yyyl_prd_v1.5_increment.md` | PRD v1.5 增量（5个新模块，评审通过 9.0+/10） |
 | 技术架构文档 | `docs/architecture.md` | 架构设计 v1.2（56张表 + 150+ API，评审通过 9.3/10） |
+| 项目总览 | `docs/project_overview.md` | 项目分层、代码入口、生产状态速览 |
 | 测试合规报告 | `docs/test_report.md` | 综合评分 8.5/10 |
 | 测试用例文档 | `docs/test_cases.md` | 203 条测试用例（P0:105 / P1:84 / P2:14） |
 

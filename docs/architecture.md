@@ -8,6 +8,16 @@
 
 ---
 
+## 当前实现备注（2026-06）
+
+- 生产 API 当前采用 Podman 蓝绿容器运行，容器名为 `yyyl-api-blue` / `yyyl-api-green`，Nginx 通过 `upstream yyyl_api_backend` 切换 `8001/8002`。
+- 生产 PostgreSQL/Redis 仍处于过渡状态：数据服务在 Docker 网络中，Podman API 容器使用 host network 并通过 `--add-host` 解析。
+- 微信支付已从模拟支付切到真实 JSAPI 支付：小程序调用 `POST /api/v1/orders/{id}/pay` 获取 `uni.requestPayment()` 参数，支付通知为 `/api/v1/payments/wechat/notify`，退款通知为 `/api/v1/payments/wechat/refund-notify`。
+- 微信支付证书不进入镜像，生产通过只读挂载 `/opt/yyyl/secure` 提供证书文件。
+- 当前测试阶段线上商品、SKU、日期定价已临时统一为 `0.01` 元；真实支付仍受微信商户侧 `NO_AUTH` 收款限制影响，解除限制需在微信商户平台处理。
+
+---
+
 ## 目录
 
 1. [系统架构概览](#1-系统架构概览)

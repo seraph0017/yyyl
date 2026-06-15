@@ -60,11 +60,12 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 
 ## Current Focus
 
-- 一月一露真实微信支付接入已上线到生产 API。
-- 当前生产 API 使用 Podman 蓝绿容器，最近一次修复是订单创建响应序列化的 MissingGreenlet 问题。
+- 一月一露真实微信支付已接入生产，但微信商户侧当前对该商户号存在收款限制，真实支付会返回 \`NO_AUTH\`。
+- 当前生产 API 使用 Podman 蓝绿容器，生产发布脚本已补充微信支付证书只读挂载。
 - 小程序端已改为通过后端 \`POST /api/v1/orders/{id}/pay\` 获取微信支付参数，再调用 \`uni.requestPayment()\`。
 - 支付通知地址：\`/api/v1/payments/wechat/notify\`。
 - 退款通知地址：\`/api/v1/payments/wechat/refund-notify\`。
+- 测试阶段已将商品、SKU、日期定价统一压到 \`0.01\` 元，便于验证完整支付链路。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -85,8 +86,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - Nginx 站点配置：\`/www/server/panel/vhost/nginx/ttt.conf\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
 - 最近生产镜像：
-  - \`yyyl-api:65c5d55\`：真实微信支付接入。
-  - \`yyyl-api:65c5d55-orderfix\`：补拷新版订单路由，修复提交订单后响应序列化异常。
+  - \`yyyl-api:payment-cert-mount\`：补充证书挂载并映射微信支付异常。
+  - \`yyyl-api:65c5d55-orderfix\`：真实微信支付接入 + 订单路由修复的基线镜像。
 - 生产依赖过渡状态：PostgreSQL/Redis 仍在 Docker 网络内，Podman API 容器用 host 网络并通过 \`--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>\` 解析。
 
 ## Recent Changes To Preserve
@@ -97,10 +98,12 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 微信支付成功通知会标记订单已支付、确认库存并生成电子票。
 - 微信退款审批对真实微信支付订单会调用微信退款，退款通知成功后再释放库存并更新退款状态。
 - 小程序支付页已从模拟支付改为真实 \`uni.requestPayment()\`。
+- 测试价已统一为 \`0.01\` 元，并保留了价格备份表用于回滚。
 - 订单创建接口应重新加载订单详情后再序列化，避免 async SQLAlchemy 懒加载触发 \`MissingGreenlet\`。
 - 本地和远端 Git 最近提交：
   - \`65c5d55 feat: 接入真实微信支付\`
   - \`069ce33 test: 覆盖订单创建响应重载\`
+  - \`0156e83 docs: add current handoff workflow\`
 
 ## Verification Commands
 

@@ -19,6 +19,7 @@ ENV_FILE="${ENV_FILE:-$APP_DIR/server/.env}"
 LOG_DIR="${LOG_DIR:-$APP_DIR/logs/api}"
 DATA_DIR="${DATA_DIR:-$APP_DIR/data}"
 IMAGES_DIR="${IMAGES_DIR:-$APP_DIR/server/images}"
+SECURE_DIR="${SECURE_DIR:-$APP_DIR/secure}"
 NGINX_CONF="${NGINX_CONF:-/www/server/nginx/conf/nginx.conf}"
 HEALTH_PATH="${HEALTH_PATH:-/health}"
 NETWORK_MODE="${NETWORK_MODE:-bridge}"
@@ -45,6 +46,12 @@ command -v podman >/dev/null 2>&1 || err "podman 未安装"
 command -v curl >/dev/null 2>&1 || err "curl 未安装"
 
 mkdir -p "$LOG_DIR" "$DATA_DIR"
+SECURE_VOLUME_ARGS=()
+if [ -d "$SECURE_DIR" ]; then
+  SECURE_VOLUME_ARGS=(-v "$SECURE_DIR:$SECURE_DIR:ro,Z")
+else
+  warn "安全文件目录不存在，跳过挂载: $SECURE_DIR"
+fi
 
 if podman ps --format '{{.Names}}' | grep -qx yyyl-api-blue; then
   CUR=blue; CUR_PORT=$BLUE_PORT
@@ -91,6 +98,7 @@ podman run -d --name "yyyl-api-$NEXT" \
   -v "$LOG_DIR:/app/logs:Z" \
   -v "$DATA_DIR:/data:Z" \
   -v "$IMAGES_DIR:/app/images:ro,Z" \
+  "${SECURE_VOLUME_ARGS[@]}" \
   --env-file "$ENV_FILE" \
   --env APP_ENV=production \
   --env DEBUG=false \

@@ -530,7 +530,15 @@ async def initiate_payment(
             detail={"code": 40904, "message": "支付超时"},
         )
 
-    payment_params = await wechat_pay_service.create_jsapi_prepay(order, site_id=order.site_id)
+    try:
+        payment_params = await wechat_pay_service.create_jsapi_prepay(order, site_id=order.site_id)
+    except wechat_pay_service.WechatPayError as exc:
+        logger.error("[微信支付] 发起支付失败: order_id=%s, error=%s", order_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"code": 50201, "message": "微信支付暂不可用，请稍后重试"},
+        ) from exc
+
     order.payment_method = payment_method
     await db.flush()
     return payment_params
