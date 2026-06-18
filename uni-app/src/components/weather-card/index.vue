@@ -43,7 +43,21 @@
         <text class="weather-tip__text">{{ tipText }}</text>
       </view>
 
-      <!-- 未来预报 -->
+      <!-- 未来几小时 -->
+      <scroll-view class="weather-hourly" scroll-x enable-flex v-if="hourlyForecast.length > 0">
+        <view
+          class="hourly-item"
+          v-for="item in hourlyForecast"
+          :key="item.datetime"
+        >
+          <text class="hourly-item__time">{{ item.time }}</text>
+          <text class="hourly-item__icon">{{ item.icon || getForecastEmoji(item.weather) }}</text>
+          <text class="hourly-item__temp">{{ item.temperature }}°</text>
+          <text class="hourly-item__rain" v-if="item.precipitation_probability > 0">{{ item.precipitation_probability }}%</text>
+        </view>
+      </scroll-view>
+
+      <!-- 未来几天 -->
       <scroll-view class="weather-forecast" scroll-x enable-flex v-if="forecast.length > 0">
         <view
           class="forecast-item"
@@ -63,7 +77,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { get } from '@/utils/request'
-import type { IWeatherCurrent, IWeatherForecast } from '@/types'
+import type { IWeatherCurrent, IWeatherForecast, IWeatherHourlyForecast } from '@/types'
 
 const loading = ref(true)
 const loadFailed = ref(false)
@@ -80,6 +94,7 @@ const current = ref<IWeatherCurrent>({
 })
 
 const forecast = ref<IWeatherForecast[]>([])
+const hourlyForecast = ref<IWeatherHourlyForecast[]>([])
 
 /** 天气 → emoji 映射 */
 const weatherEmojiMap: Record<string, string> = {
@@ -165,6 +180,7 @@ async function loadWeather() {
 
     if (currentData) {
       current.value = currentData
+      hourlyForecast.value = (currentData.hourly_forecasts || []).slice(0, 6)
     }
     if (forecastRes && forecastRes.forecasts && Array.isArray(forecastRes.forecasts)) {
       forecast.value = forecastRes.forecasts.slice(0, 3)
@@ -344,6 +360,49 @@ onMounted(() => {
   gap: 12rpx;
   margin-top: 24rpx;
   white-space: nowrap;
+}
+
+.weather-hourly {
+  display: flex;
+  gap: 12rpx;
+  margin-top: 20rpx;
+  white-space: nowrap;
+}
+
+.hourly-item {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 106rpx;
+  padding: 14rpx 10rpx;
+  background: rgba(45, 74, 62, 0.06);
+  border: 1rpx solid rgba(45, 74, 62, 0.08);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+
+  &__time {
+    font-size: 20rpx;
+    color: var(--color-text-secondary);
+    margin-bottom: 6rpx;
+  }
+
+  &__icon {
+    font-size: 34rpx;
+    line-height: 1;
+    margin-bottom: 6rpx;
+  }
+
+  &__temp {
+    font-size: 24rpx;
+    color: var(--color-text);
+    font-weight: 700;
+  }
+
+  &__rain {
+    font-size: 18rpx;
+    color: var(--color-accent);
+    margin-top: 2rpx;
+  }
 }
 
 .forecast-item {

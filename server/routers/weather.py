@@ -4,7 +4,7 @@
 - GET /api/v1/weather/current   — 当前天气（🌐 游客可访问）
 - GET /api/v1/weather/forecast  — 未来7天预报（🌐 游客可访问）
 
-通过请求头 X-Site-Id 确定营地位置。
+通过请求头 X-Site-Id 确定营地位置。服务端使用进程内缓存，30 分钟刷新一次。
 """
 
 from typing import Optional
@@ -29,7 +29,7 @@ async def get_current_weather(
     """获取营地当前天气（游客可访问）
 
     通过 X-Site-Id header 确定营地。
-    数据缓存在 Redis，TTL=1小时。
+    数据缓存在服务进程内，TTL=30分钟。
     """
     site_id = get_site_id(request)
     weather_data = await weather_service.get_current_weather(site_id=site_id)
@@ -46,7 +46,7 @@ async def get_weather_forecast(
     """获取营地未来天气预报（游客可访问）
 
     通过 X-Site-Id header 确定营地。
-    数据缓存在 Redis，TTL=1小时。
+    数据缓存在服务进程内，TTL=30分钟。
     """
     site_id = get_site_id(request)
     forecast_data = await weather_service.get_weather_forecast(

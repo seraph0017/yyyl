@@ -27,6 +27,24 @@ class WeatherCurrent(BaseModel):
     sunset: str = Field(description="日落时间（HH:MM）")
     icon: str = Field(description="天气图标编码")
     description: str = Field(description="天气描述文案")
+    hourly_forecasts: List["WeatherHourlyForecast"] = Field(
+        default_factory=list, description="未来小时级天气",
+    )
+    updated_at: Optional[int] = Field(default=None, description="天气数据更新时间戳")
+
+
+class WeatherHourlyForecast(BaseModel):
+    """小时级天气预报"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    datetime: str = Field(description="预报时间")
+    time: str = Field(description="展示时间（HH:MM）")
+    temperature: float = Field(description="温度（℃）")
+    weather: str = Field(description="天气状况")
+    icon: str = Field(description="天气图标编码")
+    precipitation: float = Field(default=0, description="降水量 / 降水强度")
+    precipitation_probability: int = Field(default=0, description="降水概率（%）")
 
 
 class WeatherForecast(BaseModel):
@@ -39,6 +57,7 @@ class WeatherForecast(BaseModel):
     temperature_max: float = Field(description="最高温度（℃）")
     weather: str = Field(description="天气状况")
     icon: str = Field(description="天气图标编码")
+    precipitation_probability: int = Field(default=0, description="降水概率（%）")
 
 
 class WeatherForecastResponse(BaseModel):

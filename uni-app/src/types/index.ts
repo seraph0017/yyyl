@@ -257,6 +257,18 @@ export interface IWeatherCurrent {
   sunset: string
   icon: string
   description: string
+  hourly_forecasts?: IWeatherHourlyForecast[]
+  updated_at?: number
+}
+
+export interface IWeatherHourlyForecast {
+  datetime: string
+  time: string
+  temperature: number
+  weather: string
+  icon: string
+  precipitation: number
+  precipitation_probability: number
 }
 
 export interface IWeatherForecast {
@@ -265,6 +277,7 @@ export interface IWeatherForecast {
   temperature_max: number
   weather: string
   icon: string
+  precipitation_probability?: number
 }
 
 /** 搭配售卖 */

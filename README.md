@@ -276,6 +276,10 @@ WECHAT_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_xxx
 WECHAT_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/notify
 WECHAT_REFUND_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/refund-notify
 
+CAIYUN_API_TOKEN=your_caiyun_api_token
+CAIYUN_BASE_URL=https://wrapper.cyapi.cn
+CAIYUN_TIMEOUT_SECONDS=10
+
 CORS_ORIGINS=["http://localhost:3000","http://localhost:8080"]
 ```
 

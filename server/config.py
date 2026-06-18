@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     WECHAT_NOTIFY_URL: str = ""
     WECHAT_REFUND_NOTIFY_URL: str = ""
 
+    # ---- 彩云天气配置 ----
+    CAIYUN_API_TOKEN: str = ""
+    CAIYUN_BASE_URL: str = "https://wrapper.cyapi.cn"
+    CAIYUN_TIMEOUT_SECONDS: float = 10.0
+
     # ---- 抖音小程序配置（预留） ----
     DOUYIN_APPS: str = '{}'
 

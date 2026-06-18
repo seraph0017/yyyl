@@ -98,6 +98,16 @@
         <text>请选择入营日期</text>
         <text class="detail-date__arrow">›</text>
       </view>
+      <view class="detail-date__weather" v-if="selectedWeather">
+        <text class="detail-date__weather-icon">{{ selectedWeather.icon }}</text>
+        <text class="detail-date__weather-text">
+          {{ selectedWeather.date === checkInDate ? '入住日' : '近期' }} {{ selectedWeather.weather }}
+          {{ selectedWeather.temperature_min }}°~{{ selectedWeather.temperature_max }}°
+        </text>
+        <text class="detail-date__weather-rain" v-if="selectedWeather.precipitation_probability">
+          降水{{ selectedWeather.precipitation_probability }}%
+        </text>
+      </view>
     </view>
 
     <!-- 数量选择 -->
@@ -196,6 +206,9 @@
             <text class="calendar-day__tag" v-if="item.isCheckIn && item.isCurrentMonth">入住</text>
             <text class="calendar-day__tag" v-else-if="item.isCheckOut && item.isCurrentMonth">离店</text>
             <text class="calendar-day__price" v-else-if="item.isCurrentMonth && item.isAvailable && item.price > 0">¥{{ item.price }}</text>
+            <text class="calendar-day__weather" v-if="item.isCurrentMonth && getWeatherForDate(item.date)">
+              {{ getWeatherForDate(item.date)?.icon }}
+            </text>
             <text class="calendar-day__label" v-if="item.isCurrentMonth && !item.isAvailable && !item.isPast">售罄</text>
           </view>
         </view>
@@ -262,12 +275,12 @@ import { get, resolveImageUrl } from '@/utils/request'
 import { brandConfig } from '@/config/sites'
 import PriceTag from '@/components/price-tag/index.vue'
 import Countdown from '@/components/countdown/index.vue'
+import type { IProduct, IProductAttribute, IWeatherForecast, ProductCategory } from '@/types'
 
 /** 状态栏 + 导航栏高度 */
 const systemInfo = uni.getSystemInfoSync()
 const statusBarHeight = ref(systemInfo.statusBarHeight || 44)
 const navBarHeight = ref(44)
-import type { IProduct, IProductAttribute, ProductCategory } from '@/types'
 
 interface ICalendarDay {
   date: string
@@ -304,7 +317,14 @@ const disclaimerAgreed = ref(false)
 const loading = ref(true)
 const isFavorite = ref(false)
 const notStarted = ref(false)
+const weatherForecasts = ref<IWeatherForecast[]>([])
 const disclaimerLines = computed(() => disclaimerText.value.split('\n').filter(line => line.trim()))
+const selectedWeather = computed(() => {
+  if (checkInDate.value) {
+    return getWeatherForDate(checkInDate.value)
+  }
+  return weatherForecasts.value[0] || null
+})
 
 /** 最大连续预定天数限制（PRD 3.2.1: MAX_CONSECUTIVE = 5，即最多住5晚） */
 const MAX_BOOKING_NIGHTS = 5
@@ -333,6 +353,7 @@ function getTodayInfo() {
 onLoad((options) => {
   const id = options?.id || '1'
   loadProduct(Number(id))
+  loadWeatherForecast()
 })
 
 onShareAppMessage(() => {
@@ -404,6 +425,24 @@ async function loadProduct(id: number) {
     loading.value = false
     uni.showToast({ title: '加载失败', icon: 'none' })
   }
+}
+
+async function loadWeatherForecast() {
+  try {
+    const res = await get<{ forecasts: IWeatherForecast[] }>(
+      '/weather/forecast',
+      { days: 7 },
+      { needAuth: false, showError: false },
+    )
+    weatherForecasts.value = Array.isArray(res?.forecasts) ? res.forecasts : []
+  } catch (err) {
+    console.warn('加载天气预报失败:', err)
+    weatherForecasts.value = []
+  }
+}
+
+function getWeatherForDate(dateStr: string): IWeatherForecast | null {
+  return weatherForecasts.value.find(item => item.date === dateStr) || null
 }
 
 /** 生成日历 */
@@ -1069,6 +1108,35 @@ function onGoBack() {
     font-size: var(--font-size-xl);
     color: var(--color-text-placeholder);
   }
+
+  &__weather {
+    display: flex;
+    align-items: center;
+    gap: 10rpx;
+    margin-top: 16rpx;
+    padding: 14rpx 18rpx;
+    background: rgba(45, 74, 62, 0.06);
+    border: 1rpx solid rgba(45, 74, 62, 0.08);
+    border-radius: var(--radius-md);
+  }
+
+  &__weather-icon {
+    font-size: 30rpx;
+  }
+
+  &__weather-text {
+    flex: 1;
+    min-width: 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-text);
+    font-weight: 500;
+  }
+
+  &__weather-rain {
+    font-size: 20rpx;
+    color: var(--color-accent);
+    white-space: nowrap;
+  }
 }
 
 /* 数量选择 */
@@ -1305,6 +1373,14 @@ function onGoBack() {
     margin-top: 2rpx;
   }
 
+  &__weather {
+    position: absolute;
+    top: 6rpx;
+    right: 8rpx;
+    font-size: 18rpx;
+    line-height: 1;
+  }
+
   &__tag {
     font-size: 16rpx;
     color: rgba(255, 255, 255, 0.9);
@@ -1326,6 +1402,7 @@ function onGoBack() {
     border-radius: var(--radius-sm);
     .calendar-day__num { color: #fff; font-weight: 700; }
     .calendar-day__price { color: rgba(255, 255, 255, 0.8); }
+    .calendar-day__weather { opacity: 0.8; }
 
     &.calendar-day--has-checkout {
       border-radius: var(--radius-sm) 0 0 var(--radius-sm);
@@ -1338,6 +1415,7 @@ function onGoBack() {
     border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
     .calendar-day__num { color: #fff; font-weight: 700; }
     .calendar-day__price { color: rgba(255, 255, 255, 0.8); }
+    .calendar-day__weather { opacity: 0.8; }
   }
 
   /* 范围中间日期 — 浅色连续背景 */

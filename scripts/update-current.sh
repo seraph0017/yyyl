@@ -66,6 +66,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 支付通知地址：\`/api/v1/payments/wechat/notify\`。
 - 退款通知地址：\`/api/v1/payments/wechat/refund-notify\`。
 - 测试阶段已将商品、SKU、日期定价统一压到 \`0.01\` 元，便于验证完整支付链路。
+- 天气服务已接入彩云天气数据源：服务端按营地坐标请求彩云 API，进程内缓存 30 分钟；未配置 \`CAIYUN_API_TOKEN\` 或第三方异常时返回兜底天气。
+- 小程序首页天气卡展示当前天气、未来小时级天气和未来几天预报；商品详情预定日期区域和日历展示对应日期天气。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -75,6 +77,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 3. 如出现支付请求失败，检查 \`services/wechat_pay_service.py\` 抛出的微信支付 API 返回码、商户证书序列号、公钥 ID、APIv3 密钥和用户 openid。
 4. 后续常规发布最好修复服务器 Docker Hub 拉取 \`python:3.11-slim\` 超时问题；最近一次上线采用基于既有镜像的离线派生方式。
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
+6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
 
 ## Production State
 
@@ -100,6 +103,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 小程序支付页已从模拟支付改为真实 \`uni.requestPayment()\`。
 - 测试价已统一为 \`0.01\` 元，并保留了价格备份表用于回滚。
 - 订单创建接口应重新加载订单详情后再序列化，避免 async SQLAlchemy 懒加载触发 \`MissingGreenlet\`。
+- 天气服务使用彩云接口 \`/v2.7/{token}/{lon},{lat}/weather\`，当前缓存只放在 API 进程内存中，TTL=1800 秒。
+- 天气接口保持 \`/api/v1/weather/current\` 和 \`/api/v1/weather/forecast\`，并扩展了小时级天气与降水概率字段。
 - 本地和远端 Git 最近提交：
   - \`65c5d55 feat: 接入真实微信支付\`
   - \`069ce33 test: 覆盖订单创建响应重载\`
@@ -119,6 +124,10 @@ cd /Users/nathan/Projects/yyyl/server
 # FastAPI 路由注册检查
 cd /Users/nathan/Projects/yyyl/server
 /Users/nathan/miniconda3/envs/yyyl/bin/python -c "from main import app; print([r.path for r in app.routes if 'payments/wechat' in r.path])"
+
+# 彩云天气服务解析和内存缓存
+cd /Users/nathan/Projects/yyyl/server
+/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest tests/test_weather_service.py -v
 
 # 小程序类型检查和构建
 cd /Users/nathan/Projects/yyyl/uni-app

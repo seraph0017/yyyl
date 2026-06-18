@@ -1586,8 +1586,8 @@ erDiagram
 
 | # | 方法 | 路径 | 功能说明 | 权限 | 端 |
 |---|------|------|----------|------|-----|
-| 191 | `GET` | `/api/v1/weather/current` | 获取营地当前天气（缓存1小时） | 🌐 | 小程序 |
-| 192 | `GET` | `/api/v1/weather/forecast` | 获取营地7天天气预报（缓存1小时） | 🌐 | 小程序 |
+| 191 | `GET` | `/api/v1/weather/current` | 获取营地当前天气 + 未来小时级预报（进程内缓存30分钟） | 🌐 | 小程序 |
+| 192 | `GET` | `/api/v1/weather/forecast` | 获取营地7天天气预报（进程内缓存30分钟） | 🌐 | 小程序 |
 
 **营地地图管理（B端）**：
 
@@ -2990,8 +2990,6 @@ graph LR
 | `customer_service:info` | String: JSON | 1小时 | 客服信息缓存 |
 | `disclaimer:template:active` | String: JSON | 1小时 | 当前有效免责声明模板 |
 | `system:settings` | String: JSON | 10分钟 | 系统配置缓存 |
-| `weather:current:{site_id}` | String: JSON | 1小时 | 当前天气数据 |
-| `weather:forecast:{site_id}` | String: JSON | 1小时 | 7天天气预报 |
 | `game:token:{user_id}` | String: HMAC token | 30分钟 | H5游戏签名token |
 
 **验票系统**：
