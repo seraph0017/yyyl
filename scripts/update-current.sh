@@ -69,6 +69,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 天气服务已接入彩云天气数据源：服务端按营地坐标请求彩云 API，进程内缓存 30 分钟；未配置 \`CAIYUN_API_TOKEN\` 或第三方异常时返回兜底天气。
 - 小程序首页天气卡展示当前天气、未来小时级天气和未来几天预报；商品详情预定日期区域和日历展示对应日期天气。
 - 生产 \`/opt/yyyl/server/.env\` 已配置 \`CAIYUN_API_TOKEN\`（来自 PJproject 彩云默认 APP_TOKEN，勿打印明文），当前线上天气接口已返回小时级天气。
+- 生产测试数据配图已补齐：16 个 SKU 的 \`image_url\` 已回填到 \`/images/test/test-sku-01.jpg\` 至 \`/images/test/test-sku-16.jpg\`；商品主图 18 个已审计正常。
+- 生产 Nginx 已增加 \`location ^~ /images/\` 静态映射到 \`/opt/yyyl/server/images/\`，解决商品/测试图片公网 404。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -88,6 +90,10 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 生产环境文件：\`/opt/yyyl/server/.env\`，不要打印或提交其中的密钥。
 - 微信支付证书目录：\`/opt/yyyl/secure/wechat-pay\`，不要复制证书内容到文档或聊天。
 - Nginx 站点配置：\`/www/server/panel/vhost/nginx/ttt.conf\`。
+- 生产图片目录：\`/opt/yyyl/server/images\`；本次测试图目录：\`/opt/yyyl/server/images/test\`。
+- 最近生产备份：
+  - SKU 图片字段备份：\`/opt/yyyl/backups/yyyl_sku_image_url_backup_20260618_064248.json\`。
+  - Nginx 图片映射前配置备份：\`/opt/yyyl/backups/ttt.conf.images_fix_20260618_144345.bak\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
 - 最近生产镜像：
   - \`yyyl-api:c82570a-weather\`：接入彩云天气，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`。
@@ -143,6 +149,10 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \\
 
 # 生产天气接口检查（不要打印 .env）
 curl -fsS -H 'X-Site-Id: 1' https://www.yyylcamp.com/api/v1/weather/current
+
+# 生产图片访问检查
+curl -fsSI https://www.yyylcamp.com/images/test/test-sku-01.jpg
+curl -fsSI https://www.yyylcamp.com/images/shop-drinks.jpg
 \`\`\`
 
 ## Repo Snapshot
