@@ -203,12 +203,12 @@
             @tap="onSelectDate(item)"
           >
             <text class="calendar-day__num">{{ item.day }}</text>
-            <text class="calendar-day__tag" v-if="item.isCheckIn && item.isCurrentMonth">入住</text>
-            <text class="calendar-day__tag" v-else-if="item.isCheckOut && item.isCurrentMonth">离店</text>
-            <text class="calendar-day__price" v-else-if="item.isCurrentMonth && item.isAvailable && item.price > 0">¥{{ item.price }}</text>
             <text class="calendar-day__weather" v-if="item.isCurrentMonth && getWeatherForDate(item.date)">
               {{ getWeatherForDate(item.date)?.icon }}
             </text>
+            <text class="calendar-day__tag" v-if="item.isCheckIn && item.isCurrentMonth">入住</text>
+            <text class="calendar-day__tag" v-else-if="item.isCheckOut && item.isCurrentMonth">离店</text>
+            <text class="calendar-day__price" v-else-if="item.isCurrentMonth && item.isAvailable && item.price > 0">¥{{ item.price }}</text>
             <text class="calendar-day__label" v-if="item.isCurrentMonth && !item.isAvailable && !item.isPast">售罄</text>
           </view>
         </view>
@@ -275,7 +275,7 @@ import { get, resolveImageUrl } from '@/utils/request'
 import { brandConfig } from '@/config/sites'
 import PriceTag from '@/components/price-tag/index.vue'
 import Countdown from '@/components/countdown/index.vue'
-import type { IProduct, IProductAttribute, IWeatherForecast, ProductCategory } from '@/types'
+import type { IProduct, IProductAttribute, IWeatherForecast, IWeatherForecastResponse, ProductCategory } from '@/types'
 
 /** 状态栏 + 导航栏高度 */
 const systemInfo = uni.getSystemInfoSync()
@@ -429,7 +429,7 @@ async function loadProduct(id: number) {
 
 async function loadWeatherForecast() {
   try {
-    const res = await get<{ forecasts: IWeatherForecast[] }>(
+    const res = await get<IWeatherForecastResponse>(
       '/weather/forecast',
       { days: 7 },
       { needAuth: false, showError: false },
@@ -1364,7 +1364,8 @@ function onGoBack() {
   &__price {
     font-size: 18rpx;
     color: var(--color-orange);
-    margin-top: 2rpx;
+    margin-top: 0;
+    line-height: 1.1;
   }
 
   &__label {
@@ -1374,11 +1375,11 @@ function onGoBack() {
   }
 
   &__weather {
-    position: absolute;
-    top: 6rpx;
-    right: 8rpx;
-    font-size: 18rpx;
+    font-size: 22rpx;
     line-height: 1;
+    margin-top: 3rpx;
+    margin-bottom: 2rpx;
+    min-height: 22rpx;
   }
 
   &__tag {

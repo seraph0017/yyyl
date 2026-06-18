@@ -19,6 +19,7 @@ class WeatherCurrent(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    location_name: Optional[str] = Field(default=None, description="天气对应营地名称")
     temperature: float = Field(description="当前温度（℃）")
     weather: str = Field(description="天气状况（如：晴、多云）")
     wind: str = Field(description="风向风力（如：东风3级）")
@@ -65,6 +66,7 @@ class WeatherForecastResponse(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    location_name: Optional[str] = Field(default=None, description="天气对应营地名称")
     forecasts: List[WeatherForecast] = Field(
         default_factory=list, description="天气预报列表",
     )

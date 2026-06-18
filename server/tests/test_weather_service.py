@@ -121,6 +121,40 @@ class WeatherServiceTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(data["weather"], "多云")
         self.assertIn("hourly_forecasts", data)
+        self.assertEqual(data["location_name"], "一月一露·西郊林场")
+
+    async def test_site_location_uses_xijiao_coordinates(self):
+        captured = {}
+        location = weather_service.SITE_LOCATIONS[1]
+        self.assertEqual(location["name"], "一月一露·西郊林场")
+        self.assertAlmostEqual(location["longitude"], 121.120115)
+        self.assertAlmostEqual(location["latitude"], 30.955131)
+
+        async def fake_request(site_id: int, mode: str, steps: int):
+            captured["site_id"] = site_id
+            captured["mode"] = mode
+            captured["steps"] = steps
+            return {
+                "status": "ok",
+                "result": {
+                    "realtime": {
+                        "temperature": 22,
+                        "skycon": "CLEAR_DAY",
+                        "humidity": 0.5,
+                        "wind": {"direction": 90, "speed": 3},
+                    },
+                    "hourly": {},
+                },
+            }
+
+        with (
+            patch.object(weather_service.settings, "CAIYUN_API_TOKEN", "token"),
+            patch.object(weather_service, "_request_caiyun_weather", side_effect=fake_request),
+        ):
+            data = await weather_service.get_current_weather(site_id=1)
+
+        self.assertEqual(captured["site_id"], 1)
+        self.assertEqual(data["location_name"], "一月一露·西郊林场")
 
 
 if __name__ == "__main__":

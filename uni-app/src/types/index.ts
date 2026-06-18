@@ -249,6 +249,7 @@ export interface IBanner {
 
 /** 天气信息 */
 export interface IWeatherCurrent {
+  location_name?: string
   temperature: number
   weather: string
   wind: string
@@ -278,6 +279,11 @@ export interface IWeatherForecast {
   weather: string
   icon: string
   precipitation_probability?: number
+}
+
+export interface IWeatherForecastResponse {
+  location_name?: string
+  forecasts: IWeatherForecast[]
 }
 
 /** 搭配售卖 */

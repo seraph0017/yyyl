@@ -57,7 +57,7 @@ const SITES: Record<string, SiteConfig> = {
     headerGradientEnd: '#3d6b5a',
     phone: '',
     address: '',
-    location: { lat: 31.2, lng: 121.3 },
+    location: { lat: 30.955131, lng: 121.120115 },
   },
   dalonggu: {
     id: 2,

@@ -23,7 +23,7 @@ CURRENT_KEY = "current:{site_id}"
 FORECAST_KEY = "forecast:{site_id}"
 
 SITE_LOCATIONS: dict[int, dict[str, float | str]] = {
-    1: {"name": "一月一露·西郊林场", "longitude": 121.3, "latitude": 31.2},
+    1: {"name": "一月一露·西郊林场", "longitude": 121.120115, "latitude": 30.955131},
     2: {"name": "一月一露·大聋谷", "longitude": 120.1, "latitude": 30.2},
 }
 
@@ -111,12 +111,16 @@ def _set_cached(cache_key: str, data: Dict[str, Any]) -> None:
 
 async def _fetch_current_weather(site_id: int) -> Dict[str, Any]:
     payload = await _request_caiyun_weather(site_id, mode="current", steps=12)
-    return _parse_caiyun_current(payload)
+    data = _parse_caiyun_current(payload)
+    data["location_name"] = str(_get_site_location(site_id)["name"])
+    return data
 
 
 async def _fetch_weather_forecast(site_id: int, days: int) -> Dict[str, Any]:
     payload = await _request_caiyun_weather(site_id, mode="daily", steps=max(days, 7))
-    return _parse_caiyun_daily(payload, days)
+    data = _parse_caiyun_daily(payload, days)
+    data["location_name"] = str(_get_site_location(site_id)["name"])
+    return data
 
 
 async def _request_caiyun_weather(site_id: int, mode: str, steps: int) -> Dict[str, Any]:
@@ -237,6 +241,7 @@ def _parse_caiyun_daily(payload: Dict[str, Any], days: int) -> Dict[str, Any]:
 
 def _fallback_current_weather(site_id: int) -> Dict[str, Any]:
     return {
+        "location_name": str(_get_site_location(site_id)["name"]),
         "temperature": 22.5,
         "weather": "多云",
         "wind": "东南风2级",
@@ -272,7 +277,7 @@ def _fallback_weather_forecast(site_id: int, days: int) -> Dict[str, Any]:
             "icon": icon,
             "precipitation_probability": probability,
         })
-    return {"forecasts": forecasts}
+    return {"location_name": str(_get_site_location(site_id)["name"]), "forecasts": forecasts}
 
 
 def _fallback_hourly_forecasts() -> list[dict[str, Any]]:

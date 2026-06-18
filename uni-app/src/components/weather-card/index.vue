@@ -58,7 +58,7 @@
       </scroll-view>
 
       <!-- 未来几天 -->
-      <scroll-view class="weather-forecast" scroll-x enable-flex v-if="forecast.length > 0">
+      <view class="weather-forecast" v-if="forecast.length > 0">
         <view
           class="forecast-item"
           v-for="item in forecast"
@@ -69,7 +69,7 @@
           <text class="forecast-item__weather">{{ item.weather }}</text>
           <text class="forecast-item__temp">{{ item.temperature_min }}°~{{ item.temperature_max }}°</text>
         </view>
-      </scroll-view>
+      </view>
     </view>
   </view>
 </template>
@@ -77,7 +77,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { get } from '@/utils/request'
-import type { IWeatherCurrent, IWeatherForecast, IWeatherHourlyForecast } from '@/types'
+import type { IWeatherCurrent, IWeatherForecast, IWeatherForecastResponse, IWeatherHourlyForecast } from '@/types'
 
 const loading = ref(true)
 const loadFailed = ref(false)
@@ -175,7 +175,7 @@ async function loadWeather() {
   try {
     const [currentData, forecastRes] = await Promise.all([
       get<IWeatherCurrent>('/weather/current', undefined, { needAuth: false, showError: false }),
-      get<{ forecasts: IWeatherForecast[] }>('/weather/forecast', undefined, { needAuth: false, showError: false }),
+      get<IWeatherForecastResponse>('/weather/forecast', undefined, { needAuth: false, showError: false }),
     ])
 
     if (currentData) {
@@ -359,7 +359,8 @@ onMounted(() => {
   display: flex;
   gap: 12rpx;
   margin-top: 24rpx;
-  white-space: nowrap;
+  justify-content: center;
+  width: 100%;
 }
 
 .weather-hourly {
@@ -406,16 +407,18 @@ onMounted(() => {
 }
 
 .forecast-item {
-  display: inline-flex;
+  display: flex;
   flex-direction: column;
   align-items: center;
-  min-width: 140rpx;
+  justify-content: center;
+  width: 160rpx;
+  min-height: 196rpx;
   padding: 18rpx 14rpx;
   background: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(10px);
   border-radius: var(--radius-lg);
   border: 1rpx solid rgba(255, 255, 255, 0.8);
-  flex-shrink: 0;
+  box-sizing: border-box;
 
   &__date {
     font-size: var(--font-size-xs);
