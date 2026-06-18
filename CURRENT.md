@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-18 14:51:11 CST
+Last updated: 2026-06-18 15:20:39 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -19,6 +19,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 测试阶段已将商品、SKU、日期定价统一压到 `0.01` 元，便于验证完整支付链路。
 - 天气服务已接入彩云天气数据源：服务端按营地坐标请求彩云 API，进程内缓存 30 分钟；未配置 `CAIYUN_API_TOKEN` 或第三方异常时返回兜底天气。
 - 小程序首页天气卡展示当前天气、未来小时级天气和未来几天预报；商品详情预定日期区域和日历展示对应日期天气。
+- 小程序首页三日天气卡已改为居中三列布局；商品详情日历日期格内已在日期下方展示对应天气图标。
+- 西郊林场天气坐标已修正为经度 `121.120115`、纬度 `30.955131`，天气接口响应新增 `location_name` 便于确认地点。
 - 生产 `/opt/yyyl/server/.env` 已配置 `CAIYUN_API_TOKEN`（来自 PJproject 彩云默认 APP_TOKEN，勿打印明文），当前线上天气接口已返回小时级天气。
 - 生产测试数据配图已补齐：16 个 SKU 的 `image_url` 已回填到 `/images/test/test-sku-01.jpg` 至 `/images/test/test-sku-16.jpg`；10 个测试用户头像已回填到 `/images/test/test-avatar-01.jpg` 至 `/images/test/test-avatar-10.jpg`；商品主图 18 个已审计正常。
 - 生产 Nginx 已增加 `location ^~ /images/` 静态映射到 `/opt/yyyl/server/images/`，解决商品/测试图片公网 404。
@@ -48,6 +50,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Nginx 图片映射前配置备份：`/opt/yyyl/backups/ttt.conf.images_fix_20260618_144345.bak`。
 - API 蓝绿容器：`yyyl-api-blue` / `yyyl-api-green`，端口 `8001` / `8002`。
 - 最近生产镜像：
+  - `yyyl-api:53e092e-weather-ui`：修正西郊林场天气坐标并返回 `location_name`，当前活跃容器 `yyyl-api-blue`，Nginx upstream 指向 `127.0.0.1:8001`。
   - `yyyl-api:c82570a-weather`：接入彩云天气，当前活跃容器 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`。
   - `yyyl-api:payment-cert-mount`：补充证书挂载并映射微信支付异常。
   - `yyyl-api:65c5d55-orderfix`：真实微信支付接入 + 订单路由修复的基线镜像。
@@ -65,6 +68,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 订单创建接口应重新加载订单详情后再序列化，避免 async SQLAlchemy 懒加载触发 `MissingGreenlet`。
 - 天气服务使用彩云接口 `/v2.7/{token}/{lon},{lat}/weather`，当前缓存只放在 API 进程内存中，TTL=1800 秒。
 - 天气接口保持 `/api/v1/weather/current` 和 `/api/v1/weather/forecast`，并扩展了小时级天气与降水概率字段。
+- 生产天气接口当前返回 `location_name=一月一露·西郊林场`，当前天气和 7 天游程预报均来自 site_id=1。
 - 本地和远端 Git 最近提交：
   - `65c5d55 feat: 接入真实微信支付`
   - `069ce33 test: 覆盖订单创建响应重载`
@@ -101,6 +105,7 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 
 # 生产天气接口检查（不要打印 .env）
 curl -fsS -H 'X-Site-Id: 1' https://www.yyylcamp.com/api/v1/weather/current
+curl -fsS -H 'X-Site-Id: 1' 'https://www.yyylcamp.com/api/v1/weather/forecast?days=7'
 
 # 生产图片访问检查
 curl -fsSI https://www.yyylcamp.com/images/test/test-sku-01.jpg
@@ -115,11 +120,12 @@ curl -fsSI https://www.yyylcamp.com/images/shop-drinks.jpg
 - path: `/Users/nathan/Projects/yyyl`
 - branch: `main`
 - upstream: `origin/main`
-- head: `633f238 docs: 记录生产测试配图状态`
-- uncommitted changes: `9`
+- head: `53e092e fix: 调整天气展示与西郊坐标`
+- uncommitted changes: `10`
 - status sample:
 
 ```text
+ M CURRENT.md
  M scripts/update-current.sh
 ?? admin/CODEBASE_PATTERNS.md
 ?? docs/superpowers/
