@@ -38,6 +38,8 @@ from models.order import Order, OrderItem
 from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product
 from models.user import User
 from schemas.admin import (
+    AdminUserCreate,
+    AdminUserUpdate,
     CalendarQuery,
     CalendarResponse,
     DashboardOverview,
@@ -48,8 +50,18 @@ from schemas.admin import (
     TrendDataResponse,
 )
 from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
+from utils.security import hash_password
 
 router = APIRouter(prefix="/api/v1/admin", tags=["管理后台"])
+
+
+def _ensure_super_admin(admin: AdminUser) -> None:
+    """校验当前后台用户是否为超级管理员。"""
+    if not admin.role or admin.role.role_code != "super_admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "仅超级管理员可操作管理员账号"},
+        )
 
 
 # ========== Dashboard ==========
@@ -1349,33 +1361,81 @@ async def list_staff(
             "phone": u.phone,
             "real_name": u.real_name,
             "role_id": u.role_id,
-            "role_name": u.role.role_name if u.role else None,
+            "role": {
+                "id": u.role.id,
+                "role_name": u.role.role_name,
+                "role_code": u.role.role_code,
+                "description": u.role.description,
+            } if u.role else None,
             "status": u.status,
             "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         })
-    return ResponseModel.success(data={"items": items, "total": total, "page": page, "page_size": page_size})
+    return PaginatedResponse.create(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.post("/staff", summary="创建员工")
 async def create_staff(
-    body: dict,
+    body: AdminUserCreate,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """创建员工账号"""
-    import hashlib
+    """创建员工/管理员账号（仅超级管理员）"""
+    _ensure_super_admin(admin)
 
-    password = body.get("password", "123456")
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    username = (body.username or body.phone or "").strip()
+    phone = (body.phone or "").strip()
+    real_name = (body.real_name or "").strip()
+    password = body.password or "123456"
+
+    if not username:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "ADMIN_USERNAME_REQUIRED", "message": "请填写用户名"},
+        )
+
+    role_result = await db.execute(
+        select(AdminRole).where(
+            AdminRole.id == body.role_id,
+            AdminRole.is_deleted.is_(False),
+        )
+    )
+    role = role_result.scalar_one_or_none()
+    if not role:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "ADMIN_ROLE_NOT_FOUND", "message": "角色不存在"},
+        )
+    if role.role_code == "super_admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "SUPER_ADMIN_CREATE_FORBIDDEN", "message": "不能在页面创建超级管理员账号"},
+        )
+
+    duplicate_conditions = [AdminUser.username == username]
+    if phone:
+        duplicate_conditions.append(AdminUser.phone == phone)
+    duplicate_result = await db.execute(
+        select(AdminUser).where(
+            AdminUser.is_deleted.is_(False),
+            or_(*duplicate_conditions),
+        )
+    )
+    duplicate = duplicate_result.scalar_one_or_none()
+    if duplicate:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "ADMIN_ACCOUNT_DUPLICATE", "message": "用户名或手机号已存在"},
+        )
 
     staff = AdminUser(
-        username=body.get("phone", ""),
-        phone=body.get("phone", ""),
-        real_name=body.get("real_name", ""),
-        role_id=body.get("role_id"),
-        password_hash=password_hash,
+        username=username,
+        phone=phone or None,
+        real_name=real_name,
+        role_id=body.role_id,
+        password_hash=hash_password(password),
         status="active",
+        site_id=getattr(admin, "site_id", 1) or 1,
     )
     db.add(staff)
     await db.commit()
@@ -1386,25 +1446,45 @@ async def create_staff(
 @router.put("/staff/{staff_id}", summary="更新员工")
 async def update_staff(
     staff_id: int,
-    body: dict,
+    body: AdminUserUpdate,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """更新员工信息"""
+    """更新员工/管理员信息（仅超级管理员）"""
+    _ensure_super_admin(admin)
+
     result = await db.execute(
         select(AdminUser).where(AdminUser.id == staff_id, AdminUser.is_deleted.is_(False))
     )
     staff = result.scalar_one_or_none()
     if not staff:
         raise HTTPException(status_code=404, detail="员工不存在")
-    if "real_name" in body:
-        staff.real_name = body["real_name"]
-    if "phone" in body:
-        staff.phone = body["phone"]
-    if "role_id" in body:
-        staff.role_id = body["role_id"]
-    if "status" in body:
-        staff.status = body["status"]
+    update_data = body.model_dump(exclude_unset=True)
+    if "real_name" in update_data:
+        staff.real_name = update_data["real_name"]
+    if "phone" in update_data:
+        staff.phone = update_data["phone"]
+    if "role_id" in update_data:
+        role_result = await db.execute(
+            select(AdminRole).where(
+                AdminRole.id == update_data["role_id"],
+                AdminRole.is_deleted.is_(False),
+            )
+        )
+        role = role_result.scalar_one_or_none()
+        if not role:
+            raise HTTPException(
+                status_code=404,
+                detail={"code": "ADMIN_ROLE_NOT_FOUND", "message": "角色不存在"},
+            )
+        if role.role_code == "super_admin":
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "SUPER_ADMIN_ASSIGN_FORBIDDEN", "message": "不能在页面分配超级管理员角色"},
+            )
+        staff.role_id = update_data["role_id"]
+    if "status" in update_data:
+        staff.status = update_data["status"]
     await db.commit()
     return ResponseModel.success(message="员工更新成功")
 
@@ -1415,7 +1495,9 @@ async def delete_staff(
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """删除员工（软删除）"""
+    """删除员工/管理员（仅超级管理员，软删除）"""
+    _ensure_super_admin(admin)
+
     result = await db.execute(
         select(AdminUser).where(AdminUser.id == staff_id, AdminUser.is_deleted.is_(False))
     )
@@ -2828,9 +2910,15 @@ async def admin_get_order_detail(
         "user_nickname": user.nickname if user else None,
         "user_phone": user.phone if user else None,
         "status": order.status,
+        "payment_status": order.payment_status,
         "total_amount": float(order.total_amount) if order.total_amount else 0,
+        "paid_amount": float(order.actual_amount) if order.actual_amount else 0,
+        "refund_amount": float(order.refunded_amount) if order.refunded_amount else 0,
+        "settled_amount": float(order.settled_amount) if order.settled_amount else 0,
+        "settlement_status": order.settlement_status,
         "payment_method": order.payment_method,
-        "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+        "paid_at": order.payment_time.isoformat() if order.payment_time else None,
+        "expire_at": order.expire_at.isoformat() if order.expire_at else None,
         "items": order_items,
         "remark": order.remark,
         "created_at": order.created_at.isoformat() if order.created_at else None,

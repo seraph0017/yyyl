@@ -28,7 +28,7 @@ class OrderCreateItem(BaseModel):
     product_id: int = Field(description="商品ID")
     sku_id: Optional[int] = Field(default=None, description="SKU ID（多规格商品）")
     quantity: int = Field(ge=1, description="数量")
-    dates: List[date] = Field(min_length=1, description="预约日期列表（多日票传多个日期）")
+    dates: List[date] = Field(default_factory=list, description="预约日期列表（营位商品必填）")
     time_slot: Optional[str] = Field(default=None, max_length=20, description="场次（活动类）")
     identity_ids: Optional[List[int]] = Field(default=None, description="出行人身份信息ID列表")
     parent_order_item_id: Optional[int] = Field(
@@ -49,6 +49,9 @@ class OrderCreateRequest(BaseModel):
     remark: Optional[str] = Field(default=None, max_length=200, description="备注")
     payment_method: str = Field(default="wechat_pay", description="支付方式: wechat_pay/mock_pay")
     times_card_id: Optional[int] = Field(default=None, description="使用的次数卡ID")
+    source_qrcode_id: Optional[int] = Field(default=None, description="来源小程序码ID")
+    source_channel: Optional[str] = Field(default=None, max_length=64, description="来源渠道")
+    source_scanned_at: Optional[datetime] = Field(default=None, description="来源扫码时间")
 
     @model_validator(mode="before")
     @classmethod
@@ -180,6 +183,16 @@ class OrderListParams(BaseModel):
     keyword: Optional[str] = Field(default=None, max_length=50, description="搜索关键词（订单号/商品名）")
     payment_status: Optional[str] = Field(default=None, description="支付状态")
     user_id: Optional[int] = Field(default=None, description="用户ID（管理端）")
+    product_id: Optional[int] = Field(default=None, description="商品ID")
+    product_type: Optional[str] = Field(default=None, description="商品类型/品类")
+    booking_date_start: Optional[date] = Field(default=None, description="预约日期开始")
+    booking_date_end: Optional[date] = Field(default=None, description="预约日期结束")
+    payment_time_start: Optional[datetime] = Field(default=None, description="支付时间开始")
+    payment_time_end: Optional[datetime] = Field(default=None, description="支付时间结束")
+    amount_min: Optional[Decimal] = Field(default=None, ge=0, description="实付金额最小值")
+    amount_max: Optional[Decimal] = Field(default=None, ge=0, description="实付金额最大值")
+    verify_status: Optional[str] = Field(default=None, description="核销状态")
+    source_channel: Optional[str] = Field(default=None, max_length=64, description="二维码来源渠道")
 
 
 # ---- 订单操作 ----

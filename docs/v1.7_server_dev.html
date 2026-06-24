@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>v1.7 后端（server）开发文档</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+    :root { color-scheme: light; --bg:#f6f3ec; --paper:#fffdf8; --ink:#21352d; --line:#d8d0c2; --accent:#2d4a3e; --accent-2:#c8a872; --soft:#eef3ef; }
+    html { background: var(--bg); color: var(--ink); scroll-behavior: smooth; }
+    body { max-width:1180px; margin:0 auto; padding:32px 28px 64px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; line-height:1.72; background:var(--paper); box-shadow:0 18px 48px rgba(33,53,45,.12); }
+    header#title-block-header { text-align:left; margin:-32px -28px 28px; padding:44px 42px 38px; background:linear-gradient(135deg,#223d33 0%,#2d4a3e 58%,#7a6a42 100%); color:#fffaf0; }
+    header#title-block-header::before { content:"YYYL DEVELOPMENT DOC"; display:block; color:rgba(255,250,240,.72); font-size:12px; letter-spacing:.18em; margin-bottom:14px; font-weight:700; }
+    h1.title { margin:0; font-size:34px; line-height:1.18; letter-spacing:0; }
+    h1,h2,h3,h4 { color:var(--accent); letter-spacing:0; }
+    h1 { font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:12px; }
+    h2 { font-size:24px; margin-top:42px; border-left:5px solid var(--accent-2); padding-left:12px; }
+    h3 { font-size:19px; margin-top:28px; }
+    blockquote { margin:18px 0 24px; padding:14px 18px; border-left:5px solid var(--accent-2); background:#fbf7ec; color:#42534c; border-radius:0 8px 8px 0; }
+    nav#TOC { margin:0 0 32px; padding:18px 20px; background:var(--soft); border:1px solid #dbe4dc; border-radius:8px; columns:2; column-gap:28px; }
+    nav#TOC::before { content:"目录"; display:block; font-weight:800; color:var(--accent); margin-bottom:10px; column-span:all; }
+    nav#TOC ul { margin:0; padding-left:1.1em; } nav#TOC li { break-inside:avoid; margin:4px 0; }
+    table { display:table; width:100%; border-collapse:collapse; margin:18px 0 26px; background:#fff; border:1px solid var(--line); font-size:14px; }
+    thead { background:#edf2ee; } tbody { border-top:none; border-bottom:none; } th,td { border:1px solid var(--line); padding:9px 11px; vertical-align:top; } th { color:var(--accent); font-weight:800; text-align:left; } tr:nth-child(even) td { background:#fffaf1; }
+    code { background:#eef3ef; color:#17392d; border-radius:4px; padding:1px 5px; font-family:Menlo,Monaco,Consolas,"SFMono-Regular",monospace; }
+    pre { background:#20382f; color:#f7f2e8; padding:16px; border-radius:8px; overflow-x:auto; } pre code { background:transparent; color:inherit; padding:0; }
+    @media (max-width:760px){ body{padding:18px 14px 44px; box-shadow:none;} header#title-block-header{margin:-18px -14px 22px; padding:30px 22px;} h1.title{font-size:26px;} nav#TOC{columns:1;} table{display:block; overflow-x:auto; white-space:nowrap;} }
+    @media print { html,body{background:#fff; box-shadow:none;} body{max-width:none; padding:0; font-size:11pt;} header#title-block-header{margin:0 0 18px; color:#000; background:#fff; border-bottom:2px solid #000;} nav#TOC{columns:1; page-break-after:always;} h2,h3{page-break-after:avoid;} table{font-size:9pt;} }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">v1.7 后端（server）开发文档</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#v17-后端server开发文档"
+id="toc-v17-后端server开发文档">v1.7 后端（server）开发文档</a>
+<ul>
+<li><a href="#1-概述" id="toc-1-概述">1. 概述</a></li>
+<li><a href="#2-文件清单" id="toc-2-文件清单">2. 文件清单</a>
+<ul>
+<li><a href="#21-新增文件" id="toc-21-新增文件">2.1 新增文件</a></li>
+<li><a href="#22-修改文件" id="toc-22-修改文件">2.2 修改文件</a></li>
+</ul></li>
+<li><a href="#3-数据模型" id="toc-3-数据模型">3. 数据模型</a>
+<ul>
+<li><a href="#31-小程序码" id="toc-31-小程序码">3.1 小程序码</a></li>
+<li><a href="#32-订单来源与结算字段" id="toc-32-订单来源与结算字段">3.2
+订单来源与结算字段</a></li>
+<li><a href="#33-资金结算" id="toc-33-资金结算">3.3 资金结算</a></li>
+<li><a href="#34-退款主事实表" id="toc-34-退款主事实表">3.4
+退款主事实表</a></li>
+<li><a href="#35-导出任务" id="toc-35-导出任务">3.5 导出任务</a></li>
+</ul></li>
+<li><a href="#4-api-设计" id="toc-4-api-设计">4. API 设计</a>
+<ul>
+<li><a href="#41-小程序码" id="toc-41-小程序码">4.1 小程序码</a></li>
+<li><a href="#42-订单高级筛选与导出" id="toc-42-订单高级筛选与导出">4.2
+订单高级筛选与导出</a></li>
+<li><a href="#43-资金结算" id="toc-43-资金结算">4.3 资金结算</a></li>
+<li><a href="#44-新退款-api" id="toc-44-新退款-api">4.4 新退款
+API</a></li>
+</ul></li>
+<li><a href="#5-服务层关键约束" id="toc-5-服务层关键约束">5.
+服务层关键约束</a>
+<ul>
+<li><a href="#51-二维码归因" id="toc-51-二维码归因">5.1
+二维码归因</a></li>
+<li><a href="#52-导出任务" id="toc-52-导出任务">5.2 导出任务</a></li>
+<li><a href="#53-退款与财务" id="toc-53-退款与财务">5.3
+退款与财务</a></li>
+</ul></li>
+<li><a href="#6-验证命令" id="toc-6-验证命令">6. 验证命令</a></li>
+<li><a href="#7-验收标准" id="toc-7-验收标准">7. 验收标准</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="v17-后端server开发文档">v1.7 后端（server）开发文档</h1>
+<blockquote>
+<p><strong>版本</strong>：v1.7<br />
+<strong>日期</strong>：2026-06-18<br />
+<strong>基线</strong>：PRD v1.7（用户已确认默认值）+ 架构师评审
+<code>CONDITIONAL APPROVED 8.62</code><br />
+<strong>目标读者</strong>：后端开发 Agent<br />
+<strong>状态</strong>：开发文档草案，待后端开发 Agent 评审</p>
+</blockquote>
+<hr />
+<h2 id="1-概述">1. 概述</h2>
+<p>本次后端开发范围覆盖 v1.7 的 P0 主链路：</p>
+<ol type="1">
+<li><strong>小程序码系统</strong>：商品、分类、活动、CMS
+自定义页面生成小程序码，扫码解析与归因日志。</li>
+<li><strong>CMS 页面二维码</strong>：复用 v1.6
+<code>CmsPage</code>，为已发布页面生成二维码。</li>
+<li><strong>订单高级筛选与导出</strong>：扩展订单查询参数，提供私有导出任务和鉴权下载。</li>
+<li><strong>资金结算</strong>：支付成功进入
+<code>pending_amount</code>，订单完成后结算到
+<code>available_amount</code>。</li>
+<li><strong>退款策略升级</strong>：新增 RefundRecord
+主事实表，支持全额/部分/按项退款，支持保留订单或取消订单。</li>
+</ol>
+<p><strong>不在本端范围内</strong>：</p>
+<ul>
+<li>管理后台页面与交互实现。</li>
+<li>小程序扫码分发页与本地归因存储。</li>
+<li>商家小程序版后台 P2 首期实现。</li>
+</ul>
+<hr />
+<h2 id="2-文件清单">2. 文件清单</h2>
+<h3 id="21-新增文件">2.1 新增文件</h3>
+<pre class="text"><code>server/
+├── models/qrcode.py                  # 小程序码与扫码日志模型
+├── models/refund.py                  # 退款主记录与退款明细
+├── models/settlement.py              # 订单结算记录
+├── models/export_task.py             # 订单导出任务
+├── schemas/qrcode.py                 # 小程序码请求/响应 schema
+├── schemas/refund.py                 # 新退款 API schema
+├── schemas/settlement.py             # 结算记录 schema
+├── schemas/order_export.py           # 订单导出 schema
+├── routers/qrcodes.py                # C/B 端二维码 API
+├── routers/refunds.py                # 新退款 API
+├── services/qrcode_service.py        # 微信小程序码生成、缓存、解析
+├── services/refund_service.py        # 退款状态机与微信退款编排
+├── services/settlement_service.py    # 资金结算与补偿逻辑
+├── services/order_export_service.py  # 订单筛选导出任务
+├── tasks/settlement.py               # completed 订单结算补偿
+└── tasks/order_export.py             # 导出任务生成与过期文件清理</code></pre>
+<h3 id="22-修改文件">2.2 修改文件</h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>变更说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>models/__init__.py</code></td>
+<td>导入
+MiniProgramQRCode、RefundRecord、FinanceSettlement、OrderExportTask
+等模型</td>
+</tr>
+<tr>
+<td><code>models/order.py</code></td>
+<td>新增来源、结算、退款状态字段</td>
+</tr>
+<tr>
+<td><code>models/finance.py</code></td>
+<td><code>TransactionType</code> 增加
+<code>settlement</code>，<code>FinanceTransaction</code> 关联
+refund_record_id</td>
+</tr>
+<tr>
+<td><code>models/admin.py</code></td>
+<td>权限资源增加 <code>qrcode</code>、<code>order_export</code>、可选
+<code>refund</code></td>
+</tr>
+<tr>
+<td><code>schemas/order.py</code></td>
+<td>扩展订单创建来源字段、列表筛选字段、响应字段</td>
+</tr>
+<tr>
+<td><code>schemas/finance.py</code></td>
+<td>扩展 overview、transaction、settlement 响应</td>
+</tr>
+<tr>
+<td><code>routers/orders.py</code></td>
+<td>高级筛选参数、订单导出入口、订单来源写入</td>
+</tr>
+<tr>
+<td><code>routers/finance.py</code></td>
+<td>增加结算记录列表和手动结算接口</td>
+</tr>
+<tr>
+<td><code>routers/cms.py</code></td>
+<td>增加 <code>/admin/cms/pages/{id}/qrcode</code></td>
+</tr>
+<tr>
+<td><code>routers/payments.py</code></td>
+<td>支付/退款通知接入 Finance/RefundRecord 幂等更新</td>
+</tr>
+<tr>
+<td><code>services/order_service.py</code></td>
+<td>订单列表筛选、来源归因、完成后触发结算</td>
+</tr>
+<tr>
+<td><code>services/finance_service.py</code></td>
+<td>行级锁账户更新、结算流水、退款扣减</td>
+</tr>
+<tr>
+<td><code>services/wechat_pay_service.py</code></td>
+<td>小程序码 access_token 缓存、退款查询补偿（如未已有）</td>
+</tr>
+<tr>
+<td><code>main.py</code></td>
+<td>注册 qrcodes、refunds 路由</td>
+</tr>
+<tr>
+<td><code>celery_app.py</code> / <code>celery_config.py</code></td>
+<td>注册 settlement/export 任务</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-数据模型">3. 数据模型</h2>
+<h3 id="31-小程序码">3.1 小程序码</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MiniProgramQRCode(Base):</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    __tablename__ <span class="op">=</span> <span class="st">&quot;mini_program_qrcode&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    __table_args__ <span class="op">=</span> (</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>        Index(</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;uq_qrcode_site_target_channel_scene&quot;</span>,</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>            <span class="st">&quot;site_id&quot;</span>, <span class="st">&quot;target_type&quot;</span>, <span class="st">&quot;target_key&quot;</span>, <span class="st">&quot;channel&quot;</span>, <span class="st">&quot;scene&quot;</span>,</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>            unique<span class="op">=</span><span class="va">True</span>,</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>            postgresql_where<span class="op">=</span>text(<span class="st">&quot;is_deleted = false&quot;</span>),</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>        ),</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_qrcode_short_code&quot;</span>, <span class="st">&quot;short_code&quot;</span>, unique<span class="op">=</span><span class="va">True</span>),</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_qrcode_site_status&quot;</span>, <span class="st">&quot;site_id&quot;</span>, <span class="st">&quot;status&quot;</span>),</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    site_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="dv">1</span>, server_default<span class="op">=</span><span class="st">&quot;1&quot;</span>)</span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    target_type <span class="op">=</span> mapped_column(String(<span class="dv">32</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    target_key <span class="op">=</span> mapped_column(String(<span class="dv">128</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    title <span class="op">=</span> mapped_column(String(<span class="dv">128</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    path <span class="op">=</span> mapped_column(String(<span class="dv">256</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    scene <span class="op">=</span> mapped_column(String(<span class="dv">128</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    short_code <span class="op">=</span> mapped_column(String(<span class="dv">32</span>), nullable<span class="op">=</span><span class="va">False</span>, unique<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    channel <span class="op">=</span> mapped_column(String(<span class="dv">64</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;default&quot;</span>)</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    image_url <span class="op">=</span> mapped_column(String(<span class="dv">512</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    status <span class="op">=</span> mapped_column(String(<span class="dv">16</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;active&quot;</span>)</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    generated_by <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    generated_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    last_used_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>    usage_count <span class="op">=</span> mapped_column(Integer, nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="dv">0</span>, server_default<span class="op">=</span><span class="st">&quot;0&quot;</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> MiniProgramQRCodeScanLog(Base):</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    __tablename__ <span class="op">=</span> <span class="st">&quot;mini_program_qrcode_scan_log&quot;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    __table_args__ <span class="op">=</span> (</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_qrcode_scan_qr_time&quot;</span>, <span class="st">&quot;qr_code_id&quot;</span>, <span class="st">&quot;scanned_at&quot;</span>),</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_qrcode_scan_site_time&quot;</span>, <span class="st">&quot;site_id&quot;</span>, <span class="st">&quot;scanned_at&quot;</span>),</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    site_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    qr_code_id <span class="op">=</span> mapped_column(BigInteger, ForeignKey(<span class="st">&quot;mini_program_qrcode.id&quot;</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    user_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    openid <span class="op">=</span> mapped_column(String(<span class="dv">64</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>    channel <span class="op">=</span> mapped_column(String(<span class="dv">64</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    scanned_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    raw_scene <span class="op">=</span> mapped_column(String(<span class="dv">256</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    client_info <span class="op">=</span> mapped_column(JSONB, nullable<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<h3 id="32-订单来源与结算字段">3.2 订单来源与结算字段</h3>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Order</code></td>
+<td><code>source_qrcode_id</code> BigInteger nullable</td>
+<td>来源小程序码</td>
+</tr>
+<tr>
+<td><code>Order</code></td>
+<td><code>source_channel</code> String(64) nullable</td>
+<td>来源渠道</td>
+</tr>
+<tr>
+<td><code>Order</code></td>
+<td><code>source_scanned_at</code> DateTime nullable</td>
+<td>归因扫码时间</td>
+</tr>
+<tr>
+<td><code>Order</code></td>
+<td><code>settled_amount</code> Numeric(10,2) default 0</td>
+<td>累计已结算金额</td>
+</tr>
+<tr>
+<td><code>Order</code></td>
+<td><code>settlement_status</code> String(20) default
+<code>unsettled</code></td>
+<td>unsettled/partial/settled/failed</td>
+</tr>
+<tr>
+<td><code>Order</code></td>
+<td><code>refund_status</code> String(20) default <code>none</code></td>
+<td>none/pending/partial/refunded/rejected</td>
+</tr>
+<tr>
+<td><code>OrderItem</code></td>
+<td><code>refund_status</code> 扩展</td>
+<td>none/pending/partial/refunded</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-资金结算">3.3 资金结算</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> FinanceSettlement(Base):</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    __tablename__ <span class="op">=</span> <span class="st">&quot;finance_settlement&quot;</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    __table_args__ <span class="op">=</span> (</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>        UniqueConstraint(<span class="st">&quot;order_id&quot;</span>, <span class="st">&quot;settlement_no&quot;</span>, name<span class="op">=</span><span class="st">&quot;uq_settlement_order_no&quot;</span>),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_settlement_site_status&quot;</span>, <span class="st">&quot;site_id&quot;</span>, <span class="st">&quot;status&quot;</span>),</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_settlement_order&quot;</span>, <span class="st">&quot;order_id&quot;</span>),</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    site_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    order_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    settlement_no <span class="op">=</span> mapped_column(String(<span class="dv">40</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>    amount <span class="op">=</span> mapped_column(Numeric(<span class="dv">10</span>, <span class="dv">2</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>    status <span class="op">=</span> mapped_column(String(<span class="dv">20</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;completed&quot;</span>)</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    trigger_type <span class="op">=</span> mapped_column(String(<span class="dv">32</span>), nullable<span class="op">=</span><span class="va">False</span>)  <span class="co"># order_completed/celery_compensation/manual_retry</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>    settled_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>    error_message <span class="op">=</span> mapped_column(String(<span class="dv">500</span>), nullable<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<p>迁移必须增加账户非负约束：</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode sql"><code class="sourceCode sql"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="kw">ALTER</span> <span class="kw">TABLE</span> finance_account</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="kw">ADD</span> <span class="kw">CONSTRAINT</span> ck_finance_pending_non_negative <span class="kw">CHECK</span> (pending_amount <span class="op">&gt;=</span> <span class="dv">0</span>),</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="kw">ADD</span> <span class="kw">CONSTRAINT</span> ck_finance_available_non_negative <span class="kw">CHECK</span> (available_amount <span class="op">&gt;=</span> <span class="dv">0</span>);</span></code></pre></div>
+<h3 id="34-退款主事实表">3.4 退款主事实表</h3>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> RefundRecord(Base):</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>    __tablename__ <span class="op">=</span> <span class="st">&quot;refund_record&quot;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    __table_args__ <span class="op">=</span> (</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_refund_site_status&quot;</span>, <span class="st">&quot;site_id&quot;</span>, <span class="st">&quot;status&quot;</span>),</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_refund_order&quot;</span>, <span class="st">&quot;order_id&quot;</span>),</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_refund_no&quot;</span>, <span class="st">&quot;refund_no&quot;</span>, unique<span class="op">=</span><span class="va">True</span>),</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a>    site_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>    order_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>    refund_no <span class="op">=</span> mapped_column(String(<span class="dv">40</span>), nullable<span class="op">=</span><span class="va">False</span>, unique<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>    refund_mode <span class="op">=</span> mapped_column(String(<span class="dv">20</span>), nullable<span class="op">=</span><span class="va">False</span>)  <span class="co"># full/partial/item</span></span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>    order_action <span class="op">=</span> mapped_column(String(<span class="dv">20</span>), nullable<span class="op">=</span><span class="va">False</span>)  <span class="co"># keep_order/cancel_order</span></span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a>    refund_amount <span class="op">=</span> mapped_column(Numeric(<span class="dv">10</span>, <span class="dv">2</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a>    system_amount <span class="op">=</span> mapped_column(Numeric(<span class="dv">10</span>, <span class="dv">2</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>    release_inventory <span class="op">=</span> mapped_column(Boolean, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>    reason <span class="op">=</span> mapped_column(String(<span class="dv">500</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a>    risk_level <span class="op">=</span> mapped_column(String(<span class="dv">20</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;normal&quot;</span>)</span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a>    status <span class="op">=</span> mapped_column(String(<span class="dv">20</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;pending&quot;</span>)</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>    wechat_refund_id <span class="op">=</span> mapped_column(String(<span class="dv">64</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>    requested_by <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a>    approved_by <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a>    approved_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>    completed_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> RefundRecordItem(Base):</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    __tablename__ <span class="op">=</span> <span class="st">&quot;refund_record_item&quot;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>    refund_record_id <span class="op">=</span> mapped_column(BigInteger, ForeignKey(<span class="st">&quot;refund_record.id&quot;</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>    order_item_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>    refund_amount <span class="op">=</span> mapped_column(Numeric(<span class="dv">10</span>, <span class="dv">2</span>), nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>    quantity <span class="op">=</span> mapped_column(Integer, nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a>    release_inventory <span class="op">=</span> mapped_column(Boolean, nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<h3 id="35-导出任务">3.5 导出任务</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="kw">class</span> OrderExportTask(Base):</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>    __tablename__ <span class="op">=</span> <span class="st">&quot;order_export_task&quot;</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>    __table_args__ <span class="op">=</span> (</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_order_export_site_status&quot;</span>, <span class="st">&quot;site_id&quot;</span>, <span class="st">&quot;status&quot;</span>),</span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a>        Index(<span class="st">&quot;idx_order_export_creator&quot;</span>, <span class="st">&quot;created_by&quot;</span>),</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a>    site_id <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>    task_no <span class="op">=</span> mapped_column(String(<span class="dv">40</span>), nullable<span class="op">=</span><span class="va">False</span>, unique<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>    filters <span class="op">=</span> mapped_column(JSONB, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>    file_format <span class="op">=</span> mapped_column(String(<span class="dv">10</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;xlsx&quot;</span>)</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a>    file_path <span class="op">=</span> mapped_column(String(<span class="dv">512</span>), nullable<span class="op">=</span><span class="va">True</span>)  <span class="co"># 私有路径，不是公开 URL</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a>    row_count <span class="op">=</span> mapped_column(Integer, nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>    status <span class="op">=</span> mapped_column(String(<span class="dv">20</span>), nullable<span class="op">=</span><span class="va">False</span>, default<span class="op">=</span><span class="st">&quot;pending&quot;</span>)</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>    error_message <span class="op">=</span> mapped_column(String(<span class="dv">500</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a>    created_by <span class="op">=</span> mapped_column(BigInteger, nullable<span class="op">=</span><span class="va">False</span>)</span>
+<span id="cb8-17"><a href="#cb8-17" aria-hidden="true" tabindex="-1"></a>    completed_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb8-18"><a href="#cb8-18" aria-hidden="true" tabindex="-1"></a>    expires_at <span class="op">=</span> mapped_column(DateTime(timezone<span class="op">=</span><span class="va">True</span>), nullable<span class="op">=</span><span class="va">True</span>)</span></code></pre></div>
+<hr />
+<h2 id="4-api-设计">4. API 设计</h2>
+<h3 id="41-小程序码">4.1 小程序码</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+<th>权限</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/qrcodes</code></td>
+<td>创建或复用小程序码</td>
+<td>admin write</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/qrcodes</code></td>
+<td>二维码列表</td>
+<td>admin read</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/qrcodes/{id}</code></td>
+<td>二维码详情</td>
+<td>admin read</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/qrcodes/{id}/regenerate</code></td>
+<td>重新生成</td>
+<td>admin write</td>
+</tr>
+<tr>
+<td><code>PATCH</code></td>
+<td><code>/api/v1/admin/qrcodes/{id}/status</code></td>
+<td>active/inactive</td>
+<td>super_admin</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/qrcodes/{id}/download</code></td>
+<td>下载图片</td>
+<td>admin read</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/cms/pages/{id}/qrcode</code></td>
+<td>CMS 页面二维码</td>
+<td>admin write</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/qrcodes/resolve</code></td>
+<td>C 端扫码解析</td>
+<td>public</td>
+</tr>
+</tbody>
+</table>
+<p><code>POST /admin/qrcodes</code> 请求：</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;target_type&quot;</span><span class="fu">:</span> <span class="st">&quot;product&quot;</span><span class="fu">,</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;target_key&quot;</span><span class="fu">:</span> <span class="st">&quot;123&quot;</span><span class="fu">,</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;湖畔营位 A 区&quot;</span><span class="fu">,</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;channel&quot;</span><span class="fu">:</span> <span class="st">&quot;poster&quot;</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>解析响应：</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;qr_code_id&quot;</span><span class="fu">:</span> <span class="dv">12</span><span class="fu">,</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;target_type&quot;</span><span class="fu">:</span> <span class="st">&quot;product&quot;</span><span class="fu">,</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;target_key&quot;</span><span class="fu">:</span> <span class="st">&quot;123&quot;</span><span class="fu">,</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;湖畔营位 A 区&quot;</span><span class="fu">,</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;path&quot;</span><span class="fu">:</span> <span class="st">&quot;/pages/product-detail/index?id=123&quot;</span><span class="fu">,</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;channel&quot;</span><span class="fu">:</span> <span class="st">&quot;poster&quot;</span><span class="fu">,</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;status&quot;</span><span class="fu">:</span> <span class="st">&quot;active&quot;</span><span class="fu">,</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;attribution_ttl_seconds&quot;</span><span class="fu">:</span> <span class="dv">86400</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p><strong>安全硬约束</strong>：</p>
+<ul>
+<li><code>path</code>
+只能由后端枚举模板生成，不允许从数据库任意字符串直接返回。</li>
+<li>微信返回必须校验 <code>Content-Type=image/*</code> 和文件大小；错误
+JSON 不得保存为图片。</li>
+<li>access_token 必须缓存，限流/网络错误可重试，参数错误直接失败。</li>
+</ul>
+<h3 id="42-订单高级筛选与导出">4.2 订单高级筛选与导出</h3>
+<p>扩展 <code>GET /api/v1/admin/orders</code> 查询参数：</p>
+<pre class="text"><code>keyword,status,payment_status,refund_status,order_type,category,product_id,sku_id,
+qrcode_id,channel,created_start,created_end,paid_start,paid_end,
+booking_start,booking_end,amount_min,amount_max,user_id,user_phone,verify_status,
+sort_by,sort_order,page,page_size</code></pre>
+<p>新增导出 API：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/orders/export</code></td>
+<td>创建导出任务或同步生成小文件</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/orders/export-tasks</code></td>
+<td>导出任务列表</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/orders/export-tasks/{id}</code></td>
+<td>任务详情</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/orders/export-tasks/{id}/download</code></td>
+<td>鉴权下载</td>
+</tr>
+</tbody>
+</table>
+<p>导出文件必须写入私有目录，例如
+<code>server/private_exports/orders/</code>。下载只能通过认证接口流式返回，不得放入
+<code>/images</code> 等公开静态目录。</p>
+<h3 id="43-资金结算">4.3 资金结算</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/finance/settlements</code></td>
+<td>结算记录列表</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/orders/{id}/settle</code></td>
+<td>手动触发结算，super_admin</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/finance/overview</code></td>
+<td>增加结算统计</td>
+</tr>
+</tbody>
+</table>
+<p>支付成功处理：</p>
+<ol type="1">
+<li>锁定 <code>Order</code>。</li>
+<li>以微信 <code>transaction_id/payment_no</code> 幂等检查。</li>
+<li><code>FinanceAccount.pending_amount += order.actual_amount</code>。</li>
+<li>创建
+<code>FinanceTransaction(type='income', account_type='pending')</code>。</li>
+</ol>
+<p>结算处理：</p>
+<ol type="1">
+<li>仅处理 <code>Order.status='completed'</code> 且
+<code>settlement_status != 'settled'</code>。</li>
+<li>同一事务内 <code>SELECT ... FOR UPDATE</code> 锁定
+<code>Order</code> 与 <code>FinanceAccount</code>。</li>
+<li><code>settle_amount = actual_amount - refunded_amount - settled_amount</code>。</li>
+<li><code>pending_amount -= settle_amount</code>，<code>available_amount += settle_amount</code>。</li>
+<li>创建
+<code>FinanceTransaction(type='settlement', from_account='pending', to_account='available')</code>。</li>
+</ol>
+<h3 id="44-新退款-api">4.4 新退款 API</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/orders/{id}/refunds</code></td>
+<td>创建退款操作</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/orders/{id}/refunds</code></td>
+<td>订单退款记录</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/refunds</code></td>
+<td>退款列表/审批队列</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/v1/admin/refunds/{id}</code></td>
+<td>退款详情</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/refunds/{id}/approve</code></td>
+<td>审批通过</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/v1/admin/refunds/{id}/reject</code></td>
+<td>拒绝</td>
+</tr>
+</tbody>
+</table>
+<p>创建请求：</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;refund_mode&quot;</span><span class="fu">:</span> <span class="st">&quot;partial&quot;</span><span class="fu">,</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;order_action&quot;</span><span class="fu">:</span> <span class="st">&quot;keep_order&quot;</span><span class="fu">,</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;refund_amount&quot;</span><span class="fu">:</span> <span class="st">&quot;50.00&quot;</span><span class="fu">,</span></span>
+<span id="cb12-5"><a href="#cb12-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;release_inventory&quot;</span><span class="fu">:</span> <span class="kw">false</span><span class="fu">,</span></span>
+<span id="cb12-6"><a href="#cb12-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;reason&quot;</span><span class="fu">:</span> <span class="st">&quot;服务体验补偿&quot;</span><span class="fu">,</span></span>
+<span id="cb12-7"><a href="#cb12-7" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;items&quot;</span><span class="fu">:</span> <span class="ot">[</span></span>
+<span id="cb12-8"><a href="#cb12-8" aria-hidden="true" tabindex="-1"></a>    <span class="fu">{</span> <span class="dt">&quot;order_item_id&quot;</span><span class="fu">:</span> <span class="dv">1001</span><span class="fu">,</span> <span class="dt">&quot;refund_amount&quot;</span><span class="fu">:</span> <span class="st">&quot;50.00&quot;</span><span class="fu">,</span> <span class="dt">&quot;quantity&quot;</span><span class="fu">:</span> <span class="dv">1</span> <span class="fu">}</span></span>
+<span id="cb12-9"><a href="#cb12-9" aria-hidden="true" tabindex="-1"></a>  <span class="ot">]</span><span class="fu">,</span></span>
+<span id="cb12-10"><a href="#cb12-10" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;confirm_code&quot;</span><span class="fu">:</span> <span class="st">&quot;123456&quot;</span></span>
+<span id="cb12-11"><a href="#cb12-11" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<p>状态分层规则：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th><code>Order.status</code></th>
+<th><code>payment_status</code></th>
+<th><code>refund_status</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>部分退款不取消</td>
+<td>不改变服务状态</td>
+<td>partial_refunded</td>
+<td>partial</td>
+</tr>
+<tr>
+<td>全额退款不取消</td>
+<td>不改变服务状态</td>
+<td>refunded</td>
+<td>refunded</td>
+</tr>
+<tr>
+<td>全额退款并取消</td>
+<td>cancelled</td>
+<td>refunded</td>
+<td>refunded</td>
+</tr>
+<tr>
+<td>部分退款并取消</td>
+<td>cancelled</td>
+<td>partial_refunded</td>
+<td>partial</td>
+</tr>
+</tbody>
+</table>
+<p>全额退款不取消订单只能 <code>super_admin</code>
+操作，必须二次确认并强制备注。</p>
+<hr />
+<h2 id="5-服务层关键约束">5. 服务层关键约束</h2>
+<h3 id="51-二维码归因">5.1 二维码归因</h3>
+<ul>
+<li>小程序扫码解析成功后会在下单时传
+<code>source_qrcode_id/source_channel/source_scanned_at</code>。</li>
+<li>后端必须校验二维码存在、active、site_id 匹配。</li>
+<li>归因 TTL 默认 24 小时，超过 TTL 的来源不写入订单。</li>
+</ul>
+<h3 id="52-导出任务">5.2 导出任务</h3>
+<ul>
+<li>5000 行以内可同步生成任务并返回 completed。</li>
+<li>超过 5000 行写入 pending，由 Celery 生成。</li>
+<li>导出字段默认手机号脱敏；完整手机号需要 <code>order export</code>
+权限。</li>
+<li><code>OperationLog</code> 记录
+filters、row_count、file_format、created_by。</li>
+</ul>
+<h3 id="53-退款与财务">5.3 退款与财务</h3>
+<ul>
+<li>未结算订单退款优先扣 <code>pending_amount</code>。</li>
+<li>已结算订单退款扣
+<code>available_amount</code>；不足时审批失败。</li>
+<li>部分结算订单优先扣 pending，不足扣 available。</li>
+<li>微信退款成功回调以 <code>out_refund_no/refund_no</code> 幂等更新
+<code>RefundRecord</code>。</li>
+<li>回调未到的 processing 记录由定时任务查询补偿。</li>
+</ul>
+<hr />
+<h2 id="6-验证命令">6. 验证命令</h2>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /Users/nathan/Projects/yyyl/server</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest <span class="dt">\</span></span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>  tests/test_qrcode_service.py <span class="dt">\</span></span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>  tests/test_order_export_service.py <span class="dt">\</span></span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>  tests/test_settlement_service.py <span class="dt">\</span></span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a>  tests/test_refund_service.py <span class="dt">\</span></span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a>  tests/test_order_routes.py <span class="dt">\</span></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a>  tests/test_payment_routes.py <span class="at">-v</span></span></code></pre></div>
+<p>路由注册检查：</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /Users/nathan/Projects/yyyl/server</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-c</span> <span class="st">&quot;from main import app; print([r.path for r in app.routes if &#39;qrcodes&#39; in r.path or &#39;refunds&#39; in r.path])&quot;</span></span></code></pre></div>
+<hr />
+<h2 id="7-验收标准">7. 验收标准</h2>
+<ul class="task-list">
+<li><p><label><input type="checkbox" />商品、分类、活动、CMS
+页面均可生成并复用小程序码。</label></p></li>
+<li><p><label><input
+type="checkbox" />二维码解析只返回白名单内部路径。</label></p></li>
+<li><p><label><input
+type="checkbox" />下单可写入二维码来源，订单导出可按来源筛选。</label></p></li>
+<li><p><label><input
+type="checkbox" />订单导出文件只能通过后台鉴权接口下载。</label></p></li>
+<li><p><label><input
+type="checkbox" />支付成功只入账一次到不可提现账户。</label></p></li>
+<li><p><label><input type="checkbox" />completed
+订单只结算一次到可提现账户。</label></p></li>
+<li><p><label><input type="checkbox" />退款可全额/部分/按项，并可
+keep_order/cancel_order。</label></p></li>
+<li><p><label><input
+type="checkbox" />退款与结算并发不会导致账户负数或重复流水。</label></p></li>
+</ul>
+</body>
+</html>

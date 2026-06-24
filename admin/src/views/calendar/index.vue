@@ -149,7 +149,7 @@ function isToday(date: string): boolean {
 }
 
 function getWeekday(date: string): string {
-  return ['日', '一', '二', '三', '四', '五', '六'][dayjs(date).day()]
+  return ['日', '一', '二', '三', '四', '五', '六'][dayjs(date).day()] || ''
 }
 
 function changeMonth(offset: number) {

@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-18 15:20:39 CST
+Last updated: 2026-06-24 23:40:58 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -24,6 +24,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 生产 `/opt/yyyl/server/.env` 已配置 `CAIYUN_API_TOKEN`（来自 PJproject 彩云默认 APP_TOKEN，勿打印明文），当前线上天气接口已返回小时级天气。
 - 生产测试数据配图已补齐：16 个 SKU 的 `image_url` 已回填到 `/images/test/test-sku-01.jpg` 至 `/images/test/test-sku-16.jpg`；10 个测试用户头像已回填到 `/images/test/test-avatar-01.jpg` 至 `/images/test/test-avatar-10.jpg`；商品主图 18 个已审计正常。
 - 生产 Nginx 已增加 `location ^~ /images/` 静态映射到 `/opt/yyyl/server/images/`，解决商品/测试图片公网 404。
+- 本地 v1.7 已按需求实现完成并生成 HTML 报告：二维码独立生成、自定义页面二维码、订单高级筛选与导出、资金 pending/available 结算、增强退款策略、Admin 财务与退款界面、小程序扫码归因。
+- v1.7 验证已通过：后端 35 个相关单测 OK，Admin `npm run build` OK，小程序 `npm run type-check`、`build:wx:xijiao`、`build:wx:dalonggu` OK。Admin 仅有 Vite 大 chunk 警告，小程序仅有 uni-app/Sass 既有弃用警告。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -34,6 +36,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 4. 后续常规发布最好修复服务器 Docker Hub 拉取 `python:3.11-slim` 超时问题；最近一次上线采用基于既有镜像的离线派生方式。
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
 6. 生产启用真实天气前，在 `/opt/yyyl/server/.env` 配置 `CAIYUN_API_TOKEN`；不要把 token 写入仓库或文档。
+7. v1.7 上线前先审阅并执行迁移 `server/alembic/versions/b7e2f8a9c1d4_v1_7_add_qrcode_refund_settlement_export.py`，再按三端构建产物发布。
 
 ## Production State
 
@@ -48,6 +51,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - SKU 图片字段备份：`/opt/yyyl/backups/yyyl_sku_image_url_backup_20260618_064248.json`。
   - 用户头像字段备份：`/opt/yyyl/backups/yyyl_user_avatar_url_backup_20260618_065016.json`。
   - Nginx 图片映射前配置备份：`/opt/yyyl/backups/ttt.conf.images_fix_20260618_144345.bak`。
+  - Admin 静态目录发布前备份：`/opt/yyyl/backups/admin-html-before-20260620135346.tgz`。
 - API 蓝绿容器：`yyyl-api-blue` / `yyyl-api-green`，端口 `8001` / `8002`。
 - 最近生产镜像：
   - `yyyl-api:53e092e-weather-ui`：修正西郊林场天气坐标并返回 `location_name`，当前活跃容器 `yyyl-api-blue`，Nginx upstream 指向 `127.0.0.1:8001`。
@@ -69,6 +73,21 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 天气服务使用彩云接口 `/v2.7/{token}/{lon},{lat}/weather`，当前缓存只放在 API 进程内存中，TTL=1800 秒。
 - 天气接口保持 `/api/v1/weather/current` 和 `/api/v1/weather/forecast`，并扩展了小时级天气与降水概率字段。
 - 生产天气接口当前返回 `location_name=一月一露·西郊林场`，当前天气和 7 天游程预报均来自 site_id=1。
+- v1.7 文档链已输出 Markdown + HTML：
+  - `prd/yyyl_prd_v1.7_increment.md/html`
+  - `docs/prd_v17_review.md/html`
+  - `docs/v1.7_server_dev.md/html`
+  - `docs/v1.7_admin_dev.md/html`
+  - `docs/v1.7_miniapp_dev.md/html`
+  - `docs/v1.7_*_review.md/html`
+  - `docs/v1.7_implementation_plan.md/html`
+- v1.7 后端新增模型、迁移、路由与服务：二维码、退款、结算、订单导出；订单与支付流程已接入来源归因、pending 入账、completed 自动结算和退款资金扣减。
+- v1.7 Admin 已新增二维码管理、订单高级筛选/导出、财务结算展示、订单详情统一退款弹窗和退款历史；全量构建历史 TS 阻塞已修复。
+- 2026-06-20 已将当前本地 Admin 构建产物发布到生产静态目录 `/www/server/nginx/html`，用于优化 CMS 新建页面 `page_code` 的人性化提示与前端校验；线上入口 JS 为 `/assets/index-CTwaA7bN.js`，发布后 `https://www.yyylcamp.com/` 与 `/health` 均返回 200。
+- v1.7 小程序已新增扫码 landing 页、二维码解析 API、归因 storage、分类 tab 跳转桥接，并在下单时携带二维码来源。
+- 小程序商品详情已调整为仅营位商品（daily_camping/event_camping）显示和校验日期；活动、装备租赁、小商店、周边等非营位商品可直接购买/预订。后端订单 schema 与服务层已同步允许非营位商品无日期下单，营位商品仍强制选择日期。
+- 小程序首页默认分类卡片已复用 pending category storage；点击小商店/装备租赁/活动等分类切到 tabBar 分类页时会自动停留在对应 tab。订单确认页仅营位商品显示和提交出行人信息，非营位商品不再加载出行人列表。
+- 小程序商品类型判断必须优先使用后端 `type` 字段，再兜底 `category`；`category` 可能是业务分类而不是商品类型。已新增 `utils/product-rules.ts::normalizeProductCategory()`，详情页、确认页、分类页、首页推荐、CMS 商品列表都已接入，避免营位被误判为非营位导致日期/营位属性/出行人信息消失。
 - 本地和远端 Git 最近提交：
   - `65c5d55 feat: 接入真实微信支付`
   - `069ce33 test: 覆盖订单创建响应重载`
@@ -99,6 +118,22 @@ npm run type-check
 npm run build:wx:xijiao
 npm run build:wx:dalonggu
 
+# v1.7 后端回归
+cd /Users/nathan/Projects/yyyl/server
+/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest \
+  tests/test_qrcode_service.py \
+  tests/test_order_filters.py \
+  tests/test_order_export_service.py \
+  tests/test_settlement_service.py \
+  tests/test_refund_service.py \
+  tests/test_payment_routes.py \
+  tests/test_v17_contracts.py \
+  tests/test_order_routes.py -v
+
+# v1.7 Admin 构建
+cd /Users/nathan/Projects/yyyl/admin
+npm run build
+
 # 生产健康检查
 ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
   'podman ps --format "{{.Names}} {{.Image}} {{.Status}}"; curl -fsS -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8002/health'
@@ -120,21 +155,16 @@ curl -fsSI https://www.yyylcamp.com/images/shop-drinks.jpg
 - path: `/Users/nathan/Projects/yyyl`
 - branch: `main`
 - upstream: `origin/main`
-- head: `53e092e fix: 调整天气展示与西郊坐标`
-- uncommitted changes: `10`
+- head: `328947c feat: 实现 v1.7 二维码退款结算能力`
+- uncommitted changes: `5`
 - status sample:
 
 ```text
- M CURRENT.md
- M scripts/update-current.sh
-?? admin/CODEBASE_PATTERNS.md
-?? docs/superpowers/
 ?? findings.md
 ?? output/
 ?? progress.md
 ?? task_plan.md
 ?? tmp/
-?? uni-app/src/pages/index/components/
 ```
 
 ## Operating Rule

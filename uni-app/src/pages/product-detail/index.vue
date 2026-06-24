@@ -73,7 +73,7 @@
     </view>
 
     <!-- 日期选择 -->
-    <view class="detail-date card" @tap="onOpenCalendar">
+    <view class="detail-date card" v-if="isCampsiteProduct(product.category)" @tap="onOpenCalendar">
       <view class="detail-section-title">选择日期</view>
       <view class="detail-date__range" v-if="checkInDate && checkOutDate">
         <view class="detail-date__point">
@@ -111,7 +111,7 @@
     </view>
 
     <!-- 数量选择 -->
-    <view class="detail-quantity card" v-if="product.category === 'camp_shop' || product.category === 'merchandise'">
+    <view class="detail-quantity card" v-if="isRetailProduct(product.category)">
       <view class="detail-section-title">购买数量</view>
       <view class="detail-quantity__control">
         <view :class="['qty-btn', quantity <= 1 ? 'qty-btn--disabled' : '']" @tap="onQuantityMinus">
@@ -158,12 +158,12 @@
         <view
           class="detail-footer__cart-btn"
           @tap="onAddToCart"
-          v-if="product.category === 'camp_shop' || product.category === 'merchandise'"
+          v-if="isRetailProduct(product.category)"
         >
           <text>加入购物车</text>
         </view>
         <view :class="['detail-footer__book-btn', notStarted ? 'btn-disabled' : '']" @tap="onBook">
-          <text>{{ notStarted ? '即将开票' : (product.category === 'camp_shop' || product.category === 'merchandise') ? '立即购买' : '立即预定' }}</text>
+          <text>{{ notStarted ? '即将开票' : isRetailProduct(product.category) ? '立即购买' : '立即预定' }}</text>
         </view>
       </view>
     </view>
@@ -272,6 +272,7 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import { get, resolveImageUrl } from '@/utils/request'
+import { isCampsiteProduct, isRetailProduct, normalizeProductCategory } from '@/utils/product-rules'
 import { brandConfig } from '@/config/sites'
 import PriceTag from '@/components/price-tag/index.vue'
 import Countdown from '@/components/countdown/index.vue'
@@ -387,9 +388,7 @@ async function loadProduct(id: number) {
       if (detail.ext_camping.area) attributes.push({ key: 'area', label: '区域', value: detail.ext_camping.area, icon: '📍' })
     }
 
-    let category: ProductCategory = (detail.category || detail.type || 'daily_camping') as ProductCategory
-    if (category === 'rental' as any) category = 'equipment_rental'
-    if (category === 'shop' as any) category = 'camp_shop'
+    const category = normalizeProductCategory(detail.type, detail.category)
 
     const p: IProduct = {
       id: detail.id,
@@ -693,7 +692,7 @@ function onAddToCart() {
   const p = product.value
   if (!p) return
 
-  if (p.category !== 'camp_shop' && p.category !== 'merchandise') {
+  if (!isRetailProduct(p.category)) {
     uni.showToast({ title: '该商品不支持加入购物车，请直接预定', icon: 'none' })
     return
   }
@@ -711,8 +710,7 @@ function onBook() {
     return
   }
 
-  const needDate = ['daily_camping', 'event_camping', 'equipment_rental', 'daily_activity', 'special_activity']
-  if (needDate.includes(p.category) && selectedDates.value.length === 0) {
+  if (isCampsiteProduct(p.category) && selectedDates.value.length === 0) {
     uni.showToast({ title: '请先选择日期', icon: 'none' })
     return
   }
@@ -722,8 +720,9 @@ function onBook() {
     return
   }
 
+  const dateQuery = isCampsiteProduct(p.category) ? selectedDates.value.join(',') : ''
   uni.navigateTo({
-    url: `/pages/order-confirm/index?product_id=${p.id}&dates=${selectedDates.value.join(',')}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
+    url: `/pages/order-confirm/index?product_id=${p.id}&dates=${dateQuery}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
   })
 }
 

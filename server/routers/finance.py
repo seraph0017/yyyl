@@ -15,6 +15,7 @@ from middleware.auth import get_current_admin
 from middleware.site import get_site_id
 from models.admin import AdminUser
 from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
+from schemas.settlement import FinanceSettlementResponse
 from schemas.finance import (
     DepositRecordResponse,
     DepositRefundRequest,
@@ -24,7 +25,7 @@ from schemas.finance import (
     WithdrawRequest,
     WithdrawResponse,
 )
-from services import finance_service
+from services import finance_service, settlement_service
 
 router = APIRouter(prefix="/api/v1/admin/finance", tags=["财务"])
 
@@ -86,6 +87,29 @@ async def list_transactions(
     items = [TransactionResponse.model_validate(tx) for tx in transactions]
     return PaginatedResponse.create(
         items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+
+
+@router.get("/settlements", summary="结算记录列表")
+async def list_settlements(
+    request: Request,
+    pagination: PaginationParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """查询订单资金结算记录。"""
+    site_id = get_site_id(request)
+    settlements, total = await settlement_service.list_settlements(
+        db,
+        site_id=site_id,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+    return PaginatedResponse.create(
+        items=[FinanceSettlementResponse.model_validate(item) for item in settlements],
         total=total,
         page=pagination.page,
         page_size=pagination.page_size,

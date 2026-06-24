@@ -237,9 +237,11 @@ const realtimeCards = computed(() => [
 
 function getBarWidth(item: SalesRankingItem, idx: number): string {
   if (!rankingList.value.length) return '0%'
+  const topItem = rankingList.value[0]
+  if (!topItem) return '0%'
   const max = rankSort.value === 'sales_count'
-    ? rankingList.value[0].sales_count
-    : rankingList.value[0].sales_amount
+    ? topItem.sales_count
+    : topItem.sales_amount
   const val = rankSort.value === 'sales_count' ? item.sales_count : item.sales_amount
   return `${(val / max * 100).toFixed(0)}%`
 }

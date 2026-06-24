@@ -201,9 +201,30 @@ class Order(Base):
         BigInteger, nullable=False, default=1, server_default="1",
         comment="营地ID"
     )
+    source_qrcode_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="来源小程序码ID"
+    )
+    source_channel: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="来源渠道"
+    )
+    source_scanned_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="来源扫码时间"
+    )
     refunded_amount: Mapped[Decimal] = mapped_column(
         Numeric(10, 2), nullable=False, default=0, server_default="0",
         comment="累计已退款金额"
+    )
+    settled_amount: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2), nullable=False, default=0, server_default="0",
+        comment="累计已结算金额"
+    )
+    settlement_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unsettled", server_default="unsettled",
+        comment="结算状态: unsettled/partial/settled/failed"
+    )
+    refund_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="none", server_default="none",
+        comment="退款状态: none/pending/partial/refunded/rejected"
     )
     assigned_staff_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, nullable=True,
@@ -277,7 +298,7 @@ class OrderItem(Base):
         String(20), nullable=False,
         default=RefundStatus.NONE.value,
         server_default=RefundStatus.NONE.value,
-        comment="退款状态: none/refunded"
+        comment="退款状态: none/pending/partial/refunded"
     )
     bundle_group_id: Mapped[Optional[str]] = mapped_column(
         String(32), nullable=True,

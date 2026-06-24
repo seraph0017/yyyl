@@ -31,6 +31,7 @@ from models.base import Base
 class TransactionType(str, enum.Enum):
     INCOME = "income"
     REFUND = "refund"
+    SETTLEMENT = "settlement"
     DEPOSIT_IN = "deposit_in"
     DEPOSIT_OUT = "deposit_out"
     DEPOSIT_DEDUCT = "deposit_deduct"
@@ -162,6 +163,10 @@ class FinanceTransaction(Base):
     amount_deviation_rate: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(5, 2), nullable=True,
         comment="自定义金额与系统金额的偏差率(%)"
+    )
+    refund_record_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True,
+        comment="关联退款记录ID"
     )
 
     # 关系

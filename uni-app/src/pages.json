@@ -112,6 +112,12 @@
         "navigationBarTitleText": "活动",
         "enablePullDownRefresh": true
       }
+    },
+    {
+      "path": "pages/qr/landing",
+      "style": {
+        "navigationBarTitleText": "正在打开"
+      }
     }
   ],
   "subPackages": [

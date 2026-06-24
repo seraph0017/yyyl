@@ -82,9 +82,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { onLoad, onReachBottom, onPullDownRefresh } from '@dcloudio/uni-app'
+import { ref } from 'vue'
+import { onLoad, onReachBottom, onPullDownRefresh, onShow, onUnload } from '@dcloudio/uni-app'
 import { get, resolveImageUrl } from '@/utils/request'
+import { consumePendingCategoryKey, savePendingCategoryKey } from '@/utils/attribution'
+import { normalizeProductCategory } from '@/utils/product-rules'
 import type { IProduct, ProductCategory } from '@/types'
 import ProductCard from '@/components/product-card/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
@@ -124,14 +126,18 @@ const searchMode = ref(false)
 const searchKeyword = ref('')
 const page = ref(1)
 const hasMore = ref(true)
+const categorySwitchHandler = ({ category_key }: { category_key?: string }) => {
+  if (category_key && !applyCategoryKey(category_key)) {
+    savePendingCategoryKey(category_key)
+  }
+}
 
 function mapProductItem(item: Record<string, unknown>): IProduct {
   const images = (item.images as Array<{ url: string }>) || []
   const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '') : ''
   const tags: string[] = []
   if (item.is_seckill) tags.push('秒杀')
-  let category = ((item.category || item.type || 'daily_camping') as string) as ProductCategory
-  if (TYPE_MAP[category as string]) category = TYPE_MAP[category as string] as ProductCategory
+  const category = normalizeProductCategory(item.type as string | undefined, item.category as string | undefined)
 
   return {
     id: item.id as number,
@@ -189,6 +195,18 @@ function onTabChange(index: number) {
   loadProducts()
 }
 
+function applyCategoryKey(categoryKey: string): boolean {
+  const tabIndex = tabs.value.findIndex((t) => t.key === categoryKey)
+  if (tabIndex < 0) return false
+  activeTab.value = tabIndex
+  page.value = 1
+  hasMore.value = true
+  products.value = []
+  activeFilters.value = []
+  loadProducts()
+  return true
+}
+
 function onFilterToggle(key: string) {
   const idx = activeFilters.value.indexOf(key)
   if (idx >= 0) {
@@ -218,12 +236,24 @@ function onSearchCancel() {
 }
 
 onLoad((options) => {
+  let loaded = false
   if (options?.search === '1') searchMode.value = true
   if (options?.category) {
-    const tabIndex = tabs.value.findIndex((t) => t.key === options.category)
-    if (tabIndex >= 0) activeTab.value = tabIndex
+    loaded = applyCategoryKey(String(options.category))
   }
-  loadProducts()
+  uni.$on('cms:category-switch', categorySwitchHandler)
+  if (!loaded) loadProducts()
+})
+
+onShow(() => {
+  const categoryKey = consumePendingCategoryKey()
+  if (categoryKey) {
+    applyCategoryKey(categoryKey)
+  }
+})
+
+onUnload(() => {
+  uni.$off('cms:category-switch', categorySwitchHandler)
 })
 
 onReachBottom(() => {

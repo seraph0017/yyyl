@@ -135,7 +135,9 @@
  */
 import { ref, onMounted } from 'vue'
 import { get, resolveImageUrl } from '@/utils/request'
-import type { IProduct, IProductAttribute, ProductCategory, IBanner } from '@/types'
+import { savePendingCategoryKey } from '@/utils/attribution'
+import { normalizeProductCategory } from '@/utils/product-rules'
+import type { IProduct, IProductAttribute, IBanner } from '@/types'
 import ProductCard from '@/components/product-card/index.vue'
 import WeatherCard from '@/components/weather-card/index.vue'
 
@@ -178,9 +180,7 @@ function mapProduct(item: Record<string, unknown>): IProduct {
     if (extCamping.area) attributes.push({ key: 'area', label: '区域', value: String(extCamping.area), icon: '📍' })
   }
 
-  let category: ProductCategory = ((item.category || item.type || 'daily_camping') as string) as ProductCategory
-  if (category === ('rental' as unknown)) category = 'equipment_rental'
-  if (category === ('shop' as unknown)) category = 'camp_shop'
+  const category = normalizeProductCategory(item.type as string | undefined, item.category as string | undefined)
 
   return {
     id: item.id as number,
@@ -253,6 +253,7 @@ function onCategoryTap(_key: string) {
   if (cat?.url) {
     uni.navigateTo({ url: cat.url })
   } else {
+    savePendingCategoryKey(_key)
     uni.switchTab({ url: '/pages/category/index' })
   }
 }

@@ -1,6 +1,6 @@
 import { get, post, put, del } from '@/utils/request'
 import type {
-  StaffMember, Permission, OperationLog, OperationLogSearchParams,
+  RoleInfo, StaffMember, Permission, OperationLog, OperationLogSearchParams,
   FaqCategory, FaqItem, PageConfig, NotificationTemplate,
   NotificationRecord, NotificationStats, SalesReportParams, SalesReportData, PaginatedResponse
 } from '@/types'
@@ -10,11 +10,26 @@ export function getStaffList(params?: { page?: number; page_size?: number }) {
   return get<{ data: PaginatedResponse<StaffMember> }>('/admin/staff', params)
 }
 
-export function createStaff(data: { phone: string; real_name: string; role_id: number; password?: string }) {
+export interface StaffCreatePayload {
+  username: string
+  phone?: string
+  real_name: string
+  role_id: number
+  password?: string
+}
+
+export interface StaffUpdatePayload {
+  phone?: string
+  real_name?: string
+  role_id?: number
+  status?: 'active' | 'disabled'
+}
+
+export function createStaff(data: StaffCreatePayload) {
   return post('/admin/staff', data)
 }
 
-export function updateStaff(id: number, data: Partial<StaffMember & { role_id: number }>) {
+export function updateStaff(id: number, data: StaffUpdatePayload) {
   return put(`/admin/staff/${id}`, data)
 }
 
@@ -24,7 +39,7 @@ export function deleteStaff(id: number) {
 
 // 角色与权限
 export function getRoles() {
-  return get<{ data: any[] }>('/admin/roles')
+  return get<{ data: Array<RoleInfo & { permission_count?: number }> }>('/admin/roles')
 }
 
 export function getRolePermissions(roleId: number) {

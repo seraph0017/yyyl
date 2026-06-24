@@ -71,9 +71,9 @@ async function fetchStats() {
     const params: Record<string, string | number> = {}
     if (dateRange.value) {
       // 后端接受 year 和 month 参数
-      const [startYear, startMonth] = dateRange.value[0].split('-')
-      params.year = parseInt(startYear)
-      params.month = parseInt(startMonth)
+      const [startYear, startMonth] = (dateRange.value[0] || '').split('-')
+      params.year = parseInt(startYear || '0')
+      params.month = parseInt(startMonth || '0')
     }
     const res = await getExpenseStats(params)
     renderCharts(res.data)

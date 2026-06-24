@@ -56,7 +56,7 @@
         <el-table-column label="更新时间" width="170">
           <template #default="{ row }">{{ formatDateTime(row.updated_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="160" fixed="right" align="center">
+        <el-table-column label="操作" width="200" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-tooltip content="编辑" placement="top" :show-after="400">
@@ -86,6 +86,11 @@
                   </el-tooltip>
                 </template>
               </el-popconfirm>
+              <el-tooltip content="二维码" placement="top" :show-after="400">
+                <el-button class="action-btn action-btn--view" circle size="small" @click="handleQrcode(row)">
+                  <el-icon><Share /></el-icon>
+                </el-button>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
@@ -110,9 +115,10 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Search, Plus, Picture, Edit, Delete, Top, Bottom } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Plus, Picture, Edit, Delete, Top, Bottom, Share } from '@element-plus/icons-vue'
 import { getProducts, updateProductStatus, deleteProduct } from '@/api/product'
+import { createQrcode } from '@/api/qrcode'
 import { formatPrice, formatDateTime, getCategoryName, categoryMap } from '@/utils'
 import type { Product, ProductSearchParams } from '@/types'
 
@@ -164,6 +170,21 @@ async function handleDelete(id: number) {
     ElMessage.success('删除成功')
     fetchData()
   } catch {}
+}
+
+async function handleQrcode(row: Product) {
+  await ElMessageBox.confirm(`确认为商品「${row.name}」生成小程序码？`, '商品二维码', {
+    type: 'info',
+    confirmButtonText: '生成',
+    cancelButtonText: '取消',
+  })
+  await createQrcode({
+    target_type: row.category === 'activity' ? 'activity_product' : 'product',
+    target_key: String(row.id),
+    title: row.name,
+    channel: 'admin_product',
+  })
+  ElMessage.success('商品二维码已生成，可在二维码管理中查看')
 }
 
 onMounted(fetchData)

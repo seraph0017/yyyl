@@ -1,0 +1,2057 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>一月一露 PRD 增量需求文档 v1.7</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+    :root {
+      color-scheme: light;
+      --bg: #f6f3ec;
+      --paper: #fffdf8;
+      --ink: #21352d;
+      --muted: #66756f;
+      --line: #d8d0c2;
+      --accent: #2d4a3e;
+      --accent-2: #c8a872;
+      --soft: #eef3ef;
+      --warn: #8a5b18;
+    }
+    html { background: var(--bg); color: var(--ink); scroll-behavior: smooth; }
+    body {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 28px 64px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.72;
+      background: var(--paper);
+      box-shadow: 0 18px 48px rgba(33, 53, 45, 0.12);
+    }
+    header#title-block-header {
+      text-align: left;
+      margin: -32px -28px 28px;
+      padding: 44px 42px 38px;
+      background: linear-gradient(135deg, #223d33 0%, #2d4a3e 58%, #7a6a42 100%);
+      color: #fffaf0;
+    }
+    header#title-block-header::before {
+      content: "YYYL PRODUCT REPORT";
+      display: block;
+      color: rgba(255, 250, 240, 0.72);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      margin-bottom: 14px;
+      font-weight: 700;
+    }
+    h1.title { margin: 0; font-size: 34px; line-height: 1.18; letter-spacing: 0; }
+    h1, h2, h3, h4 { color: var(--accent); letter-spacing: 0; }
+    h1 { font-size: 30px; border-bottom: 2px solid var(--accent); padding-bottom: 12px; }
+    h2 { font-size: 24px; margin-top: 42px; border-left: 5px solid var(--accent-2); padding-left: 12px; }
+    h3 { font-size: 19px; margin-top: 28px; }
+    h4 { font-size: 16px; color: #394d45; }
+    p { margin: 0.75em 0; }
+    a { color: var(--accent); }
+    blockquote {
+      margin: 18px 0 24px;
+      padding: 14px 18px;
+      border-left: 5px solid var(--accent-2);
+      background: #fbf7ec;
+      color: #42534c;
+      border-radius: 0 8px 8px 0;
+    }
+    nav#TOC {
+      margin: 0 0 32px;
+      padding: 18px 20px;
+      background: var(--soft);
+      border: 1px solid #dbe4dc;
+      border-radius: 8px;
+      columns: 2;
+      column-gap: 28px;
+    }
+    nav#TOC::before {
+      content: "目录";
+      display: block;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 10px;
+      column-span: all;
+    }
+    nav#TOC ul { margin: 0; padding-left: 1.1em; }
+    nav#TOC li { break-inside: avoid; margin: 4px 0; }
+    table {
+      display: table;
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0 26px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 14px;
+    }
+    thead { background: #edf2ee; }
+    tbody { border-top: none; border-bottom: none; }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      vertical-align: top;
+    }
+    th { color: var(--accent); font-weight: 800; text-align: left; }
+    tr:nth-child(even) td { background: #fffaf1; }
+    code {
+      background: #eef3ef;
+      color: #17392d;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Menlo, Monaco, Consolas, "SFMono-Regular", monospace;
+    }
+    pre {
+      background: #20382f;
+      color: #f7f2e8;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    ul.task-list { padding-left: 1.4em; }
+    hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+    strong { color: #233b31; }
+    @media (max-width: 760px) {
+      body { padding: 18px 14px 44px; box-shadow: none; }
+      header#title-block-header { margin: -18px -14px 22px; padding: 30px 22px; }
+      h1.title { font-size: 26px; }
+      nav#TOC { columns: 1; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+    }
+    @media print {
+      html, body { background: #fff; box-shadow: none; }
+      body { max-width: none; padding: 0; font-size: 11pt; }
+      header#title-block-header { margin: 0 0 18px; color: #000; background: #fff; border-bottom: 2px solid #000; }
+      nav#TOC { columns: 1; page-break-after: always; }
+      h2, h3 { page-break-after: avoid; }
+      table { font-size: 9pt; }
+    }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">一月一露 PRD 增量需求文档 v1.7</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#一月一露--prd-增量需求文档-v17"
+id="toc-一月一露--prd-增量需求文档-v17">一月一露 — PRD 增量需求文档
+v1.7</a>
+<ul>
+<li><a href="#0-默认假设与已确认决策" id="toc-0-默认假设与已确认决策">0.
+默认假设与已确认决策</a>
+<ul>
+<li><a href="#01-默认假设" id="toc-01-默认假设">0.1 默认假设</a></li>
+<li><a href="#02-已确认决策" id="toc-02-已确认决策">0.2
+已确认决策</a></li>
+</ul></li>
+<li><a href="#变更总览" id="toc-变更总览">变更总览</a></li>
+<li><a href="#需求-1小程序码统一生成与管理p0"
+id="toc-需求-1小程序码统一生成与管理p0">需求
+1：小程序码统一生成与管理（P0）</a>
+<ul>
+<li><a href="#11-功能描述" id="toc-11-功能描述">1.1 功能描述</a></li>
+<li><a href="#12-用户故事" id="toc-12-用户故事">1.2 用户故事</a></li>
+<li><a href="#13-业务规则" id="toc-13-业务规则">1.3 业务规则</a></li>
+<li><a href="#14-数据模型变更" id="toc-14-数据模型变更">1.4
+数据模型变更</a></li>
+<li><a href="#15-api-变更" id="toc-15-api-变更">1.5 API 变更</a></li>
+<li><a href="#16-前端变更" id="toc-16-前端变更">1.6 前端变更</a></li>
+<li><a href="#17-异常处理" id="toc-17-异常处理">1.7 异常处理</a></li>
+<li><a href="#18-验收标准" id="toc-18-验收标准">1.8 验收标准</a></li>
+</ul></li>
+<li><a href="#需求-2自定义页面二维码能力增强p0"
+id="toc-需求-2自定义页面二维码能力增强p0">需求
+2：自定义页面二维码能力增强（P0）</a>
+<ul>
+<li><a href="#21-功能描述" id="toc-21-功能描述">2.1 功能描述</a></li>
+<li><a href="#22-用户故事" id="toc-22-用户故事">2.2 用户故事</a></li>
+<li><a href="#23-业务规则" id="toc-23-业务规则">2.3 业务规则</a></li>
+<li><a href="#24-api-变更" id="toc-24-api-变更">2.4 API 变更</a></li>
+<li><a href="#25-前端变更" id="toc-25-前端变更">2.5 前端变更</a></li>
+<li><a href="#26-验收标准" id="toc-26-验收标准">2.6 验收标准</a></li>
+</ul></li>
+<li><a href="#需求-3商家订单高级筛选与导出p0"
+id="toc-需求-3商家订单高级筛选与导出p0">需求
+3：商家订单高级筛选与导出（P0）</a>
+<ul>
+<li><a href="#31-功能描述" id="toc-31-功能描述">3.1 功能描述</a></li>
+<li><a href="#32-用户故事" id="toc-32-用户故事">3.2 用户故事</a></li>
+<li><a href="#33-筛选规则" id="toc-33-筛选规则">3.3 筛选规则</a></li>
+<li><a href="#34-导出规则" id="toc-34-导出规则">3.4 导出规则</a></li>
+<li><a href="#35-数据模型变更" id="toc-35-数据模型变更">3.5
+数据模型变更</a></li>
+<li><a href="#36-api-变更" id="toc-36-api-变更">3.6 API 变更</a></li>
+<li><a href="#37-前端变更" id="toc-37-前端变更">3.7 前端变更</a></li>
+<li><a href="#38-异常处理" id="toc-38-异常处理">3.8 异常处理</a></li>
+<li><a href="#39-验收标准" id="toc-39-验收标准">3.9 验收标准</a></li>
+</ul></li>
+<li><a href="#需求-4订单资金结算账户流转p0"
+id="toc-需求-4订单资金结算账户流转p0">需求
+4：订单资金结算账户流转（P0）</a>
+<ul>
+<li><a href="#41-功能描述" id="toc-41-功能描述">4.1 功能描述</a></li>
+<li><a href="#42-用户故事" id="toc-42-用户故事">4.2 用户故事</a></li>
+<li><a href="#43-业务规则" id="toc-43-业务规则">4.3 业务规则</a></li>
+<li><a href="#44-数据模型变更" id="toc-44-数据模型变更">4.4
+数据模型变更</a></li>
+<li><a href="#45-api-变更" id="toc-45-api-变更">4.5 API 变更</a></li>
+<li><a href="#46-前端变更" id="toc-46-前端变更">4.6 前端变更</a></li>
+<li><a href="#47-异常处理" id="toc-47-异常处理">4.7 异常处理</a></li>
+<li><a href="#48-验收标准" id="toc-48-验收标准">4.8 验收标准</a></li>
+</ul></li>
+<li><a href="#需求-5退款策略升级退款与取消解耦p0"
+id="toc-需求-5退款策略升级退款与取消解耦p0">需求
+5：退款策略升级：退款与取消解耦（P0）</a>
+<ul>
+<li><a href="#51-功能描述" id="toc-51-功能描述">5.1 功能描述</a></li>
+<li><a href="#52-用户故事" id="toc-52-用户故事">5.2 用户故事</a></li>
+<li><a href="#53-业务规则" id="toc-53-业务规则">5.3 业务规则</a></li>
+<li><a href="#54-数据模型变更" id="toc-54-数据模型变更">5.4
+数据模型变更</a></li>
+<li><a href="#55-api-变更" id="toc-55-api-变更">5.5 API 变更</a></li>
+<li><a href="#56-前端变更" id="toc-56-前端变更">5.6 前端变更</a></li>
+<li><a href="#57-异常处理" id="toc-57-异常处理">5.7 异常处理</a></li>
+<li><a href="#58-验收标准" id="toc-58-验收标准">5.8 验收标准</a></li>
+</ul></li>
+<li><a href="#需求-6商家小程序版后台p2"
+id="toc-需求-6商家小程序版后台p2">需求 6：商家小程序版后台（P2）</a>
+<ul>
+<li><a href="#61-功能描述" id="toc-61-功能描述">6.1 功能描述</a></li>
+<li><a href="#62-范围" id="toc-62-范围">6.2 范围</a></li>
+<li><a href="#63-验收标准" id="toc-63-验收标准">6.3 验收标准</a></li>
+</ul></li>
+<li><a href="#数据一致性与兼容性"
+id="toc-数据一致性与兼容性">数据一致性与兼容性</a></li>
+<li><a href="#验收总览" id="toc-验收总览">验收总览</a></li>
+<li><a href="#架构师评审关注点"
+id="toc-架构师评审关注点">架构师评审关注点</a></li>
+<li><a href="#版本记录" id="toc-版本记录">版本记录</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="一月一露--prd-增量需求文档-v17">一月一露 — PRD 增量需求文档
+v1.7</h1>
+<blockquote>
+<p><strong>版本</strong>：v1.7-draft<br />
+<strong>日期</strong>：2026-06-18<br />
+<strong>基线</strong>：基于 PRD v1.6（2026-04-01 三端开发文档
+APPROVED，2026-04-02 开发完成）<br />
+<strong>作者</strong>：产品需求与项目总控 Agent<br />
+<strong>状态</strong>：产品草案（用户已确认默认值），待架构师评审</p>
+</blockquote>
+<hr />
+<h2 id="0-默认假设与已确认决策">0. 默认假设与已确认决策</h2>
+<h3 id="01-默认假设">0.1 默认假设</h3>
+<table>
+<thead>
+<tr>
+<th>序号</th>
+<th>假设</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>二维码指微信小程序码</td>
+<td>通过服务端调用微信 <code>getUnlimitedQRCode</code> /
+<code>wxacode.getUnlimited</code> 能力生成，返回图片
+URL；不使用普通网页二维码作为主方案</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>“分类”指商品分类/品类入口</td>
+<td>与现有 Product.category 对齐；若后续存在独立 Category 表，则以
+Category.id 为二维码目标</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>“活动”指活动类商品与 CMS 活动页两类入口</td>
+<td>活动商品走 product 目标；装修活动页/自定义活动页走 cms_page
+目标</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>自定义页面基于 v1.6 CMS</td>
+<td>复用 <code>CmsPage.page_type=custom</code> 与
+<code>/api/v1/cms/pages/{page_code}</code>
+渲染能力，不新建另一套页面系统</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>“不可提现账户”对应现有
+<code>FinanceAccount.pending_amount</code></td>
+<td>支付成功后收入进入待确认金额；服务完成后从
+<code>pending_amount</code> 转入 <code>available_amount</code></td>
+</tr>
+<tr>
+<td>A6</td>
+<td>“自动提现”在本版本定义为自动转入可提现账户</td>
+<td>不默认对接微信零钱/银行账户企业付款。实际对外打款仍沿用现有提现流程，避免把“结算确认”和“外部付款”混在一起</td>
+</tr>
+<tr>
+<td>A7</td>
+<td>退款动作与订单取消动作解耦</td>
+<td>管理员可选择退款后保留订单有效，或退款后取消订单并释放/不释放库存</td>
+</tr>
+</tbody>
+</table>
+<h3 id="02-已确认决策">0.2 已确认决策</h3>
+<p>用户于 2026-06-18
+确认接受以下建议默认值，后续架构评审和开发文档拆分按这些决策执行。</p>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>问题</th>
+<th>已确认决策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1</td>
+<td>分类二维码落地页是商品列表页还是分类专题页？</td>
+<td>商品列表页，按 category 过滤</td>
+</tr>
+<tr>
+<td>Q2</td>
+<td>活动二维码是否需要区分“活动商品”和“活动 CMS 页面”？</td>
+<td>两者都支持，目标类型不同</td>
+</tr>
+<tr>
+<td>Q3</td>
+<td>小程序码是否需要永久缓存并复用？</td>
+<td>是，同一 site_id + target_type + target_id + path + scene 复用</td>
+</tr>
+<tr>
+<td>Q4</td>
+<td>服务完成的触发点是什么？</td>
+<td>订单状态进入
+<code>completed</code>，或电子票全部核销后由定时任务补偿完成</td>
+</tr>
+<tr>
+<td>Q5</td>
+<td>资金自动转可提现是否需要延迟观察期？</td>
+<td>本期默认 0 天，后续可通过站点配置扩展为 N 天</td>
+</tr>
+<tr>
+<td>Q6</td>
+<td>商家小程序版后台是否允许退款、导出等高危操作？</td>
+<td>P2 阶段仅查看和轻量处理，不开放导出与高危退款</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="变更总览">变更总览</h2>
+<p>本次新增 <strong>5 个需求模块</strong>，按优先级排列：</p>
+<table>
+<thead>
+<tr>
+<th>序号</th>
+<th>需求</th>
+<th>优先级</th>
+<th>影响面</th>
+<th>简述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>小程序码统一生成与管理</td>
+<td>P0</td>
+<td>后端 API + 管理后台 + 小程序路由</td>
+<td>分类、商品、活动、自定义页面均可生成独立小程序码，支持缓存、下载、停用</td>
+</tr>
+<tr>
+<td>2</td>
+<td>自定义页面二维码能力增强</td>
+<td>P0</td>
+<td>CMS + 管理后台 + 小程序</td>
+<td>自定义页面发布后可生成独立小程序码，扫码直达页面</td>
+</tr>
+<tr>
+<td>3</td>
+<td>商家订单高级筛选与导出</td>
+<td>P0</td>
+<td>后端查询/导出 + 管理后台</td>
+<td>订单列表支持多条件筛选、保存筛选、Excel/CSV 导出、导出任务审计</td>
+</tr>
+<tr>
+<td>4</td>
+<td>订单资金结算账户流转</td>
+<td>P0</td>
+<td>支付回调 + 财务模型 + Celery</td>
+<td>支付成功进入不可提现账户，服务完成后自动转可提现账户</td>
+</tr>
+<tr>
+<td>5</td>
+<td>退款策略升级：退款与取消解耦</td>
+<td>P0</td>
+<td>退款审批 + 订单状态 + 库存 + 财务</td>
+<td>全部/部分退款，退款后可保留订单或取消订单</td>
+</tr>
+<tr>
+<td>6</td>
+<td>商家小程序版后台</td>
+<td>P2</td>
+<td>小程序 + 权限 + 后端</td>
+<td>低优先级，提供移动端商家处理入口，不阻塞 P0 模块</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="需求-1小程序码统一生成与管理p0">需求
+1：小程序码统一生成与管理（P0）</h2>
+<h3 id="11-功能描述">1.1 功能描述</h3>
+<p>管理后台为运营对象生成独立微信小程序码。支持对象包括商品分类、单个商品、活动、CMS
+自定义页面。二维码用于线下物料、社群海报、门店桌牌等渠道，用户扫码后进入对应小程序页面，并保留目标对象、营地和渠道参数。</p>
+<h3 id="12-用户故事">1.2 用户故事</h3>
+<ul>
+<li>作为管理员，我想给每个商品生成单独小程序码，用于打印在商品海报上。</li>
+<li>作为管理员，我想给每个分类生成小程序码，让用户扫码后看到该分类商品列表。</li>
+<li>作为管理员，我想给活动生成小程序码，用于活动招募海报。</li>
+<li>作为管理员，我想查看某个二维码的目标、生成时间和状态，避免使用过期或错误二维码。</li>
+<li>作为用户，我扫码后应直接进入对应商品、分类、活动或自定义页面，而不是只打开首页。</li>
+</ul>
+<h3 id="13-业务规则">1.3 业务规则</h3>
+<h4 id="131-支持目标">1.3.1 支持目标</h4>
+<table>
+<thead>
+<tr>
+<th>目标类型</th>
+<th>target_type</th>
+<th>target_id / target_code</th>
+<th>小程序落地页</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>商品分类</td>
+<td><code>category</code></td>
+<td>category code/name</td>
+<td><code>/pages/products/index?category=campsite</code></td>
+<td>若后续新增 Category 表，改为 category_id</td>
+</tr>
+<tr>
+<td>商品</td>
+<td><code>product</code></td>
+<td>product_id</td>
+<td><code>/pages/product-detail/index?id=123</code></td>
+<td>商品下架后扫码进入下架提示页</td>
+</tr>
+<tr>
+<td>活动商品</td>
+<td><code>activity_product</code></td>
+<td>product_id</td>
+<td><code>/pages/product-detail/index?id=456</code></td>
+<td>Product.type 为 daily_activity/special_activity</td>
+</tr>
+<tr>
+<td>CMS 活动页</td>
+<td><code>activity_page</code></td>
+<td>page_code</td>
+<td><code>/pages/cms/index?page_code=activity_spring_2026</code></td>
+<td>适用于装修活动页</td>
+</tr>
+<tr>
+<td>自定义页面</td>
+<td><code>custom_page</code></td>
+<td>page_code</td>
+<td><code>/pages/cms/index?page_code=custom_notice_2026</code></td>
+<td>page_type=custom</td>
+</tr>
+</tbody>
+</table>
+<h4 id="132-生成规则">1.3.2 生成规则</h4>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>唯一性</td>
+<td>同一
+<code>site_id + target_type + target_key + channel + scene</code>
+默认复用已有小程序码，不重复调用微信接口</td>
+</tr>
+<tr>
+<td>scene 参数</td>
+<td>统一编码为 <code>qr_id={id}</code> 或短码
+<code>q={short_code}</code>，小程序启动后通过后端解析真实目标，避免微信
+scene 长度限制</td>
+</tr>
+<tr>
+<td>页面路径</td>
+<td>微信接口 path 指向统一扫码分发页，如
+<code>/pages/qr/landing</code>，由分发页请求解析接口后跳转</td>
+</tr>
+<tr>
+<td>图片存储</td>
+<td>小程序码图片保存到
+<code>server/images/qrcodes/{site_id}/</code>，通过
+<code>/images/qrcodes/...</code> 访问</td>
+</tr>
+<tr>
+<td>渠道标记</td>
+<td>可选 <code>channel</code> 字段，默认
+<code>default</code>，用于区分海报、桌牌、社群、广告等投放场景</td>
+</tr>
+<tr>
+<td>失效控制</td>
+<td>支持后台停用二维码；停用后扫码展示“该二维码已停用”并不跳转</td>
+</tr>
+<tr>
+<td>重生成</td>
+<td>目标路径变化或图片丢失时可手动重新生成，保留原记录并更新
+<code>image_url</code> 与 <code>generated_at</code></td>
+</tr>
+<tr>
+<td>权限</td>
+<td><code>admin</code> 可生成/下载，<code>super_admin</code>
+可停用/删除</td>
+</tr>
+</tbody>
+</table>
+<h4 id="133-解析与跳转">1.3.3 解析与跳转</h4>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>扫码入口</td>
+<td>小程序新增统一页面 <code>/pages/qr/landing</code>，读取
+<code>scene</code> 后调用 <code>GET /api/v1/qrcodes/resolve</code></td>
+</tr>
+<tr>
+<td>解析返回</td>
+<td>后端返回目标类型、目标标题、跳转路径、状态和错误信息</td>
+</tr>
+<tr>
+<td>降级</td>
+<td>解析失败时展示友好错误页，并提供返回首页按钮</td>
+</tr>
+<tr>
+<td>统计</td>
+<td>每次解析记录扫码日志，包含
+<code>qr_code_id</code>、site_id、user_id（若已登录）、openid（若可得）、时间、来源
+channel</td>
+</tr>
+</tbody>
+</table>
+<h3 id="14-数据模型变更">1.4 数据模型变更</h3>
+<h4 id="新增表">新增表</h4>
+<table>
+<thead>
+<tr>
+<th>表名</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>MiniProgramQRCode</strong></td>
+<td>id, site_id, target_type, target_key, title, path, scene,
+short_code, channel, image_url, status, generated_by, generated_at,
+last_used_at, usage_count</td>
+<td>小程序码主表</td>
+</tr>
+<tr>
+<td><strong>MiniProgramQRCodeScanLog</strong></td>
+<td>id, site_id, qr_code_id, user_id(nullable), openid(nullable),
+channel, scanned_at, raw_scene, client_info(JSONB)</td>
+<td>扫码日志表</td>
+</tr>
+</tbody>
+</table>
+<h4 id="索引建议">索引建议</h4>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>索引</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MiniProgramQRCode</td>
+<td><code>uq_qrcode_site_target_channel_scene(site_id, target_type, target_key, channel, scene)</code>
+条件唯一索引，<code>idx_qrcode_short_code(short_code)</code></td>
+</tr>
+<tr>
+<td>MiniProgramQRCodeScanLog</td>
+<td><code>idx_qrcode_scan_qr_time(qr_code_id, scanned_at desc)</code>，<code>idx_qrcode_scan_site_time(site_id, scanned_at desc)</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="15-api-变更">1.5 API 变更</h3>
+<h4 id="新增接口">新增接口</h4>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+<th>端</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/qrcodes</code></td>
+<td>创建或复用小程序码</td>
+<td>B端</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/qrcodes</code></td>
+<td>小程序码列表，支持 target_type/channel/status 筛选</td>
+<td>B端</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/qrcodes/{id}</code></td>
+<td>小程序码详情</td>
+<td>B端</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/qrcodes/{id}/regenerate</code></td>
+<td>重新生成图片</td>
+<td>B端</td>
+</tr>
+<tr>
+<td>PATCH</td>
+<td><code>/api/v1/admin/qrcodes/{id}/status</code></td>
+<td>启用/停用二维码</td>
+<td>B端</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/qrcodes/{id}/download</code></td>
+<td>下载二维码图片</td>
+<td>B端</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/qrcodes/resolve</code></td>
+<td>扫码解析，参数 <code>scene</code> 或 <code>short_code</code></td>
+<td>C端</td>
+</tr>
+</tbody>
+</table>
+<h4 id="请求示例">请求示例</h4>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode json"><code class="sourceCode json"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">{</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;target_type&quot;</span><span class="fu">:</span> <span class="st">&quot;product&quot;</span><span class="fu">,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;target_key&quot;</span><span class="fu">:</span> <span class="st">&quot;123&quot;</span><span class="fu">,</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;title&quot;</span><span class="fu">:</span> <span class="st">&quot;湖畔营位 A 区&quot;</span><span class="fu">,</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">&quot;channel&quot;</span><span class="fu">:</span> <span class="st">&quot;poster&quot;</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">}</span></span></code></pre></div>
+<h3 id="16-前端变更">1.6 前端变更</h3>
+<h4 id="管理后台">管理后台</h4>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>商品列表/详情</td>
+<td>新增“生成小程序码”按钮，展示二维码预览、下载、复制图片地址</td>
+</tr>
+<tr>
+<td>分类管理/商品筛选区域</td>
+<td>支持对分类生成小程序码</td>
+</tr>
+<tr>
+<td>活动管理</td>
+<td>活动商品和 CMS 活动页均提供二维码入口</td>
+</tr>
+<tr>
+<td>CMS 页面装修列表</td>
+<td>custom/activity 页面提供二维码入口</td>
+</tr>
+<tr>
+<td>新增二维码管理页</td>
+<td>列表展示目标、渠道、状态、生成时间、扫码次数、操作</td>
+</tr>
+</tbody>
+</table>
+<h4 id="小程序">小程序</h4>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新增 <code>/pages/qr/landing</code></td>
+<td>解析 scene 并跳转到商品、分类或 CMS 页面</td>
+</tr>
+<tr>
+<td>商品列表页</td>
+<td>支持 category query 参数过滤</td>
+</tr>
+<tr>
+<td>CMS 渲染页</td>
+<td>支持 page_code query 参数加载自定义页面</td>
+</tr>
+</tbody>
+</table>
+<h3 id="17-异常处理">1.7 异常处理</h3>
+<ul>
+<li>微信接口未配置或调用失败：返回明确错误，后台显示“生成失败，可稍后重试”。</li>
+<li>目标不存在：禁止生成；若生成后目标被删除，扫码时展示“内容不存在或已下线”。</li>
+<li>目标未发布：CMS
+页面未发布时禁止生成正式小程序码，可使用预览码但不作为永久码。</li>
+<li>图片文件丢失：详情页提示重新生成。</li>
+</ul>
+<h3 id="18-验收标准">1.8 验收标准</h3>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />管理员可为商品、分类、活动、自定义页面生成小程序码。</label></li>
+<li><label><input
+type="checkbox" />同一目标重复生成默认复用同一二维码记录。</label></li>
+<li><label><input type="checkbox" />扫码能正确跳转目标页，并携带 site_id
+隔离。</label></li>
+<li><label><input type="checkbox" />CMS
+未发布页面不能生成正式二维码。</label></li>
+<li><label><input
+type="checkbox" />二维码可下载，停用后扫码不再跳转。</label></li>
+<li><label><input
+type="checkbox" />扫码日志记录使用次数和最近扫码时间。</label></li>
+</ul>
+<hr />
+<h2 id="需求-2自定义页面二维码能力增强p0">需求
+2：自定义页面二维码能力增强（P0）</h2>
+<h3 id="21-功能描述">2.1 功能描述</h3>
+<p>在 v1.6 CMS
+自定义页面基础上补齐“扫码访问”能力。管理员创建并发布自定义页面后，可直接生成该页面的小程序码。用户扫码进入小程序
+CMS 渲染页，按 <code>page_code</code> 加载已发布页面配置。</p>
+<h3 id="22-用户故事">2.2 用户故事</h3>
+<ul>
+<li>作为管理员，我想创建一个临时活动说明页，并生成二维码贴到现场。</li>
+<li>作为管理员，我想在页面发布前不能误生成正式二维码，避免用户扫码看到空页面。</li>
+<li>作为用户，我扫码后能直接看到对应自定义页面。</li>
+</ul>
+<h3 id="23-业务规则">2.3 业务规则</h3>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>生成前置条件</td>
+<td><code>CmsPage.status=active</code> 且
+<code>current_version_id</code> 不为空</td>
+</tr>
+<tr>
+<td>目标类型</td>
+<td>自定义页面使用 <code>target_type=custom_page</code>，活动装修页使用
+<code>target_type=activity_page</code></td>
+</tr>
+<tr>
+<td>页面路径</td>
+<td><code>/pages/cms/index?page_code={page_code}</code></td>
+</tr>
+<tr>
+<td>页面变更</td>
+<td>CMS 页面重新发布后二维码不需要重新生成，扫码加载最新发布版本</td>
+</tr>
+<tr>
+<td>页面停用</td>
+<td>CMS 页面停用后扫码展示“页面已停用”</td>
+</tr>
+<tr>
+<td>页面删除</td>
+<td>仅 custom 类型可软删除；删除后对应二维码自动置为 inactive
+或扫码失败</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-api-变更">2.4 API 变更</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/cms/pages/{id}/qrcode</code></td>
+<td>为 CMS 页面创建或获取小程序码</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/cms/pages/{page_code}</code></td>
+<td>继续复用现有公开页面配置接口</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-前端变更">2.5 前端变更</h3>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CMS 页面列表</td>
+<td>每行新增二维码操作；未发布页面按钮置灰并提示“发布后可生成”</td>
+</tr>
+<tr>
+<td>CMS 页面编辑器</td>
+<td>发布成功后弹窗提供“生成二维码”快捷入口</td>
+</tr>
+<tr>
+<td>小程序 CMS 页面</td>
+<td>若 page_code 不存在/停用/未发布，展示错误页和返回首页</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-验收标准">2.6 验收标准</h3>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />自定义页面发布后可生成小程序码。</label></li>
+<li><label><input
+type="checkbox" />未发布页面不可生成正式二维码。</label></li>
+<li><label><input
+type="checkbox" />自定义页面更新发布后，旧二维码访问最新版本。</label></li>
+<li><label><input
+type="checkbox" />页面停用/删除后扫码不展示旧内容。</label></li>
+</ul>
+<hr />
+<h2 id="需求-3商家订单高级筛选与导出p0">需求
+3：商家订单高级筛选与导出（P0）</h2>
+<h3 id="31-功能描述">3.1 功能描述</h3>
+<p>管理后台订单页从基础筛选升级为运营可用的高级筛选与导出工具。管理员可按订单号、用户、手机号、商品、分类、活动、订单状态、支付状态、退款状态、核销状态、预定日期、下单时间、支付时间、金额区间、营地、渠道等条件筛选，并将筛选结果导出为
+Excel/CSV。</p>
+<h3 id="32-用户故事">3.2 用户故事</h3>
+<ul>
+<li>作为商家，我想快速筛出某一天某个营位/活动的订单，方便现场核对。</li>
+<li>作为商家，我想筛选已支付但未核销的订单，提前联系客户。</li>
+<li>作为财务，我想导出某个时间段的已支付/已退款订单，用于对账。</li>
+<li>作为运营，我想导出某个二维码渠道带来的订单，用于评估投放效果。</li>
+</ul>
+<h3 id="33-筛选规则">3.3 筛选规则</h3>
+<table>
+<thead>
+<tr>
+<th>筛选项</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>关键词</td>
+<td>keyword</td>
+<td>支持订单号、用户昵称、手机号、商品名模糊搜索</td>
+</tr>
+<tr>
+<td>订单状态</td>
+<td>status</td>
+<td>pending_payment/paid/verified/completed/cancelled/refund_pending/refunded/partial_refunded</td>
+</tr>
+<tr>
+<td>支付状态</td>
+<td>payment_status</td>
+<td>unpaid/paid/refunded/partial_refunded</td>
+</tr>
+<tr>
+<td>退款状态</td>
+<td>refund_status</td>
+<td>none/refund_pending/refunded/partial_refunded</td>
+</tr>
+<tr>
+<td>订单类型</td>
+<td>order_type</td>
+<td>商品类型/年卡/搭配追加等</td>
+</tr>
+<tr>
+<td>商品分类</td>
+<td>category</td>
+<td>Product.category</td>
+</tr>
+<tr>
+<td>商品</td>
+<td>product_id</td>
+<td>精确筛选</td>
+</tr>
+<tr>
+<td>SKU</td>
+<td>sku_id</td>
+<td>精确筛选</td>
+</tr>
+<tr>
+<td>活动/页面渠道</td>
+<td>qrcode_id/channel</td>
+<td>来自二维码扫码或渠道参数</td>
+</tr>
+<tr>
+<td>下单时间</td>
+<td>created_start/created_end</td>
+<td>按 Order.created_at</td>
+</tr>
+<tr>
+<td>支付时间</td>
+<td>paid_start/paid_end</td>
+<td>按 Order.payment_time</td>
+</tr>
+<tr>
+<td>预定日期</td>
+<td>booking_start/booking_end</td>
+<td>按 OrderItem.date</td>
+</tr>
+<tr>
+<td>金额区间</td>
+<td>amount_min/amount_max</td>
+<td>按 Order.actual_amount</td>
+</tr>
+<tr>
+<td>用户</td>
+<td>user_id/user_phone</td>
+<td>精确筛选</td>
+</tr>
+<tr>
+<td>核销状态</td>
+<td>verify_status</td>
+<td>pending/verified/expired</td>
+</tr>
+<tr>
+<td>服务状态</td>
+<td>service_status</td>
+<td>paid/verified/completed 等订单生命周期</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34-导出规则">3.4 导出规则</h3>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>导出范围</td>
+<td>导出当前筛选条件下的全部结果，不仅限当前分页</td>
+</tr>
+<tr>
+<td>格式</td>
+<td>默认 <code>.xlsx</code>，兼容 <code>.csv</code></td>
+</tr>
+<tr>
+<td>最大行数</td>
+<td>同步导出最多 5000 行；超过 5000 行创建异步导出任务</td>
+</tr>
+<tr>
+<td>文件保存</td>
+<td>导出文件保存 7 天，过期由 Celery 清理</td>
+</tr>
+<tr>
+<td>敏感字段</td>
+<td>手机号默认脱敏；拥有 <code>order_export_sensitive</code>
+权限的管理员可导出完整手机号</td>
+</tr>
+<tr>
+<td>审计</td>
+<td>每次导出记录 OperationLog：筛选条件、导出行数、操作者、文件名</td>
+</tr>
+<tr>
+<td>权限</td>
+<td><code>admin</code> 可导出当前营地订单；<code>super_admin</code>
+可跨营地导出</td>
+</tr>
+</tbody>
+</table>
+<h3 id="35-数据模型变更">3.5 数据模型变更</h3>
+<h4 id="新增表-1">新增表</h4>
+<table>
+<thead>
+<tr>
+<th>表名</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>OrderExportTask</strong></td>
+<td>id, site_id, task_no, filters(JSONB), file_format, file_url,
+row_count, status, error_message, created_by, created_at, completed_at,
+expires_at</td>
+<td>订单导出任务</td>
+</tr>
+</tbody>
+</table>
+<h4 id="可选扩展字段">可选扩展字段</h4>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Order</td>
+<td><code>source_qrcode_id</code> nullable</td>
+<td>来源小程序码 ID</td>
+</tr>
+<tr>
+<td>Order</td>
+<td><code>source_channel</code> nullable</td>
+<td>来源渠道</td>
+</tr>
+</tbody>
+</table>
+<h3 id="36-api-变更">3.6 API 变更</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/orders</code></td>
+<td>增强筛选参数，返回保持分页结构</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/orders/export</code></td>
+<td>按筛选条件创建导出；小数据可直接返回下载 URL</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/orders/export-tasks</code></td>
+<td>导出任务列表</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/orders/export-tasks/{id}</code></td>
+<td>导出任务详情</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/orders/export-tasks/{id}/download</code></td>
+<td>下载导出文件</td>
+</tr>
+</tbody>
+</table>
+<h3 id="37-前端变更">3.7 前端变更</h3>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>订单列表</td>
+<td>新增高级筛选区，基础筛选默认展开，高级条件可折叠</td>
+</tr>
+<tr>
+<td>订单列表</td>
+<td>新增“导出”按钮，弹窗确认导出字段、格式、是否脱敏</td>
+</tr>
+<tr>
+<td>订单列表</td>
+<td>新增“当前筛选摘要”，便于导出前确认</td>
+</tr>
+<tr>
+<td>订单列表</td>
+<td>支持保存常用筛选条件到本地 Storage</td>
+</tr>
+<tr>
+<td>新增导出任务抽屉</td>
+<td>展示任务状态、行数、完成时间、下载入口</td>
+</tr>
+</tbody>
+</table>
+<h3 id="38-异常处理">3.8 异常处理</h3>
+<ul>
+<li>导出结果为空：返回空文件并提示“当前筛选无订单”。</li>
+<li>超过最大导出行数：自动转异步任务，不阻塞页面。</li>
+<li>文件生成失败：任务状态置为 failed，记录错误摘要。</li>
+<li>无敏感字段权限：完整手机号字段不导出或自动脱敏。</li>
+</ul>
+<h3 id="39-验收标准">3.9 验收标准</h3>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />订单页可按商品、分类、预定日期、支付时间、金额、核销状态筛选。</label></li>
+<li><label><input
+type="checkbox" />关键词支持订单号、用户昵称、手机号、商品名。</label></li>
+<li><label><input
+type="checkbox" />导出结果与当前筛选条件一致。</label></li>
+<li><label><input type="checkbox" />超过 5000
+行时创建异步任务。</label></li>
+<li><label><input type="checkbox" />导出操作有审计日志。</label></li>
+<li><label><input
+type="checkbox" />无权限管理员无法导出完整手机号。</label></li>
+</ul>
+<hr />
+<h2 id="需求-4订单资金结算账户流转p0">需求
+4：订单资金结算账户流转（P0）</h2>
+<h3 id="41-功能描述">4.1 功能描述</h3>
+<p>用户预定成功并支付现金后，订单收入先进入不可提现账户（待确认金额）。当服务最终完成后，系统自动将对应金额从不可提现账户转入可提现账户。该流程用于避免未履约订单提前提现，同时让退款、部分退款和财务对账有明确资金状态。</p>
+<h3 id="42-用户故事">4.2 用户故事</h3>
+<ul>
+<li>作为商家，我想用户支付后资金先冻结在不可提现账户，服务完成后才允许提现。</li>
+<li>作为财务，我想看到待确认金额、可提现金额和每笔结算流水。</li>
+<li>作为管理员，我想订单完成后系统自动结算，不需要人工逐笔处理。</li>
+<li>作为管理员，我想退款时优先从待确认金额扣减，已结算订单退款则从可提现金额扣减。</li>
+</ul>
+<h3 id="43-业务规则">4.3 业务规则</h3>
+<h4 id="431-入账规则">4.3.1 入账规则</h4>
+<table>
+<thead>
+<tr>
+<th>触发点</th>
+<th>资金动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>微信支付成功回调</td>
+<td><code>FinanceAccount.pending_amount += order.actual_amount</code></td>
+</tr>
+<tr>
+<td>模拟支付成功</td>
+<td>开发/测试环境同样写入 pending，便于回归</td>
+</tr>
+<tr>
+<td>年卡免费/次数卡/积分兑换</td>
+<td>无现金入账，不进入 pending</td>
+</tr>
+<tr>
+<td>押金</td>
+<td>押金继续进入 <code>deposit_amount</code>，不计入
+pending/available</td>
+</tr>
+</tbody>
+</table>
+<h4 id="432-结算规则">4.3.2 结算规则</h4>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>结算条件</td>
+<td>订单状态为 <code>completed</code>，支付状态为 <code>paid</code> 或
+<code>partial_refunded</code>，且存在未结算现金金额</td>
+</tr>
+<tr>
+<td>结算金额</td>
+<td><code>settle_amount = actual_amount - refunded_amount - settled_amount</code></td>
+</tr>
+<tr>
+<td>自动结算</td>
+<td>订单进入 completed 时即时尝试结算；Celery 每 10 分钟补偿扫描未结算
+completed 订单</td>
+</tr>
+<tr>
+<td>幂等</td>
+<td>同一订单同一金额只允许结算一次，使用 <code>FinanceSettlement</code>
+唯一约束防重</td>
+</tr>
+<tr>
+<td>资金流向</td>
+<td><code>pending_amount -= settle_amount</code>，<code>available_amount += settle_amount</code></td>
+</tr>
+<tr>
+<td>结算失败</td>
+<td>若 pending 不足，记录失败原因并告警，不得把账户扣成负数</td>
+</tr>
+</tbody>
+</table>
+<h4 id="433-退款与结算关系">4.3.3 退款与结算关系</h4>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>资金处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>未结算订单退款</td>
+<td>从 <code>pending_amount</code> 扣减退款金额</td>
+</tr>
+<tr>
+<td>已部分结算订单退款</td>
+<td>优先扣 pending，不足部分扣 available</td>
+</tr>
+<tr>
+<td>已全部结算订单退款</td>
+<td>从 <code>available_amount</code> 扣减退款金额；若 available
+不足，退款审批失败并提示财务补足</td>
+</tr>
+<tr>
+<td>部分退款且订单继续履约</td>
+<td>仅扣退款金额，剩余未结算金额服务完成后继续转可提现</td>
+</tr>
+<tr>
+<td>退款并取消订单</td>
+<td>扣退款金额；取消后剩余未退金额按业务规则处理，默认不结算</td>
+</tr>
+</tbody>
+</table>
+<h3 id="44-数据模型变更">4.4 数据模型变更</h3>
+<h4 id="新增表-2">新增表</h4>
+<table>
+<thead>
+<tr>
+<th>表名</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>FinanceSettlement</strong></td>
+<td>id, site_id, order_id, settlement_no, amount, status, settled_at,
+error_message, created_at</td>
+<td>订单结算记录</td>
+</tr>
+</tbody>
+</table>
+<h4 id="修改表">修改表</h4>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>变更</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Order</td>
+<td>新增 <code>settled_amount</code> Numeric(10,2), default=0</td>
+<td>累计已结算到可提现金额</td>
+</tr>
+<tr>
+<td>Order</td>
+<td>新增 <code>settlement_status</code> String(20),
+default=<code>unsettled</code></td>
+<td>unsettled/partial/settled/failed</td>
+</tr>
+<tr>
+<td>FinanceTransaction</td>
+<td>type 新增 <code>settlement</code></td>
+<td>待确认转可提现流水</td>
+</tr>
+<tr>
+<td>FinanceTransaction</td>
+<td>from_account/to_account 支持 pending/available</td>
+<td>记录账户内部流转</td>
+</tr>
+</tbody>
+</table>
+<h3 id="45-api-变更">4.5 API 变更</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/finance/settlements</code></td>
+<td>结算记录列表</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/orders/{id}/settle</code></td>
+<td>手动触发订单结算（super_admin）</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/orders/{id}</code></td>
+<td>响应新增 settled_amount、settlement_status</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/finance/overview</code></td>
+<td>返回 pending/available/deposit/settlement 统计</td>
+</tr>
+</tbody>
+</table>
+<h3 id="46-前端变更">4.6 前端变更</h3>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>财务概览</td>
+<td>明确展示不可提现金额、可提现金额、押金账户、累计结算金额</td>
+</tr>
+<tr>
+<td>订单详情</td>
+<td>展示资金状态：待结算/部分结算/已结算/结算失败</td>
+</tr>
+<tr>
+<td>财务流水</td>
+<td>新增 settlement 类型筛选和账户流向列</td>
+</tr>
+<tr>
+<td>结算记录页</td>
+<td>展示订单号、金额、状态、结算时间、失败原因、手动重试</td>
+</tr>
+</tbody>
+</table>
+<h3 id="47-异常处理">4.7 异常处理</h3>
+<ul>
+<li>重复支付回调：不得重复增加 pending。</li>
+<li>重复完成订单：不得重复结算。</li>
+<li>退款和结算并发：对订单和 FinanceAccount
+使用事务锁，保证金额一致。</li>
+<li>pending 不足：结算失败并记录审计，不允许账户为负。</li>
+</ul>
+<h3 id="48-验收标准">4.8 验收标准</h3>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />微信支付成功后订单金额进入不可提现账户。</label></li>
+<li><label><input type="checkbox" />订单 completed
+后自动转入可提现账户。</label></li>
+<li><label><input
+type="checkbox" />重复回调/重复完成不会重复入账或结算。</label></li>
+<li><label><input
+type="checkbox" />未结算订单退款从不可提现账户扣减。</label></li>
+<li><label><input
+type="checkbox" />已结算订单退款从可提现账户扣减。</label></li>
+<li><label><input
+type="checkbox" />财务后台可查看每笔结算流水和订单资金状态。</label></li>
+</ul>
+<hr />
+<h2 id="需求-5退款策略升级退款与取消解耦p0">需求
+5：退款策略升级：退款与取消解耦（P0）</h2>
+<h3 id="51-功能描述">5.1 功能描述</h3>
+<p>在 v1.5
+“退款金额可自定义、库存可选择释放”的基础上，补齐退款动作与订单取消动作的解耦。管理员处理退款时可选择全部退款或部分退款，并选择“退款后保留订单”或“退款后取消订单”。这覆盖补差价、服务瑕疵补偿、部分项目取消、全额取消等运营场景。</p>
+<h3 id="52-用户故事">5.2 用户故事</h3>
+<ul>
+<li>作为管理员，我想给用户部分退款但不取消订单，用户仍然可以入营。</li>
+<li>作为管理员，我想全额退款并取消订单，同时释放库存。</li>
+<li>作为管理员，我想全额退款但不取消订单，用于特殊补偿或内部测试订单处理。</li>
+<li>作为管理员，我想取消订单但可选择不释放库存，处理线下转让或保留位。</li>
+</ul>
+<h3 id="53-业务规则">5.3 业务规则</h3>
+<h4 id="531-退款模式">5.3.1 退款模式</h4>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>refund_mode</th>
+<th>金额规则</th>
+<th>订单影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全部退款</td>
+<td><code>full</code></td>
+<td>默认可退金额 = actual_amount - refunded_amount</td>
+<td>可保留订单或取消订单</td>
+</tr>
+<tr>
+<td>部分退款</td>
+<td><code>partial</code></td>
+<td>管理员输入金额或按订单项选择金额</td>
+<td>默认保留订单，也可选择取消订单</td>
+</tr>
+<tr>
+<td>按项退款</td>
+<td><code>item</code></td>
+<td>选择 OrderItem，并可填每项退款金额</td>
+<td>仅被退项标记退款，订单可部分保留</td>
+</tr>
+</tbody>
+</table>
+<h4 id="532-订单处理动作">5.3.2 订单处理动作</h4>
+<table>
+<thead>
+<tr>
+<th>动作</th>
+<th>order_action</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仅退款不取消</td>
+<td><code>keep_order</code></td>
+<td>执行退款，订单继续保持 paid/verified/completed 或
+partial_refunded；未退款电子票继续有效</td>
+</tr>
+<tr>
+<td>退款并取消订单</td>
+<td><code>cancel_order</code></td>
+<td>执行退款后订单置为 cancelled/refunded，未使用电子票作废</td>
+</tr>
+</tbody>
+</table>
+<h4 id="533-状态流转">5.3.3 状态流转</h4>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>订单状态</th>
+<th>支付状态</th>
+<th>电子票</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>部分退款不取消</td>
+<td><code>partial_refunded</code> 或保留原服务状态并带退款标记</td>
+<td><code>partial_refunded</code></td>
+<td>未退款项继续有效</td>
+</tr>
+<tr>
+<td>全额退款不取消</td>
+<td><code>paid/verified/completed</code> +
+<code>payment_status=refunded</code> 需业务确认</td>
+<td><code>refunded</code></td>
+<td>默认继续有效，必须填写高风险原因</td>
+</tr>
+<tr>
+<td>全额退款并取消</td>
+<td><code>refunded</code> 或 <code>cancelled</code>（建议统一
+<code>refunded</code>）</td>
+<td><code>refunded</code></td>
+<td>全部作废</td>
+</tr>
+<tr>
+<td>部分退款并取消</td>
+<td><code>cancelled</code> +
+<code>payment_status=partial_refunded</code></td>
+<td><code>partial_refunded</code></td>
+<td>全部作废</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>架构师评审需重点确认：全额退款但保留订单是否允许电子票继续有效。产品默认允许，但要求
+super_admin 二次确认和强制备注。</p>
+</blockquote>
+<h4 id="534-库存处理">5.3.4 库存处理</h4>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>默认</td>
+<td>退款并取消订单默认释放库存；退款不取消订单默认不释放库存</td>
+</tr>
+<tr>
+<td>可选</td>
+<td>管理员仍可显式选择 <code>release_inventory=true/false</code></td>
+</tr>
+<tr>
+<td>按项退款</td>
+<td>仅对被取消的订单项释放库存</td>
+</tr>
+<tr>
+<td>已核销订单</td>
+<td>已核销订单取消时默认不释放库存，除非 super_admin 强制释放</td>
+</tr>
+</tbody>
+</table>
+<h4 id="535-风险控制">5.3.5 风险控制</h4>
+<table>
+<thead>
+<tr>
+<th>规则项</th>
+<th>规则说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>必填原因</td>
+<td>所有部分退款、全额退款不取消、退款不释放库存必须填写原因</td>
+</tr>
+<tr>
+<td>二次确认</td>
+<td>全额退款不取消、退款金额 ≥ 500 元、偏差率 &gt; 20%
+触发高风险确认</td>
+</tr>
+<tr>
+<td>权限</td>
+<td>全额退款不取消订单仅 super_admin 可操作</td>
+</tr>
+<tr>
+<td>审计</td>
+<td>记录
+refund_mode、order_action、release_inventory、refund_amount、system_amount、reason、operator_id</td>
+</tr>
+</tbody>
+</table>
+<h3 id="54-数据模型变更">5.4 数据模型变更</h3>
+<h4 id="新增表-3">新增表</h4>
+<table>
+<thead>
+<tr>
+<th>表名</th>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>RefundRecord</strong></td>
+<td>id, site_id, order_id, refund_no, refund_mode, order_action,
+refund_amount, system_amount, release_inventory, reason, status,
+wechat_refund_id, requested_by, approved_by, approved_at,
+completed_at</td>
+<td>退款主记录</td>
+</tr>
+<tr>
+<td><strong>RefundRecordItem</strong></td>
+<td>id, refund_record_id, order_item_id, refund_amount, quantity,
+release_inventory</td>
+<td>按项退款明细</td>
+</tr>
+</tbody>
+</table>
+<h4 id="修改表-1">修改表</h4>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>变更</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Order</td>
+<td>新增 <code>refund_status</code> String(20),
+default=<code>none</code></td>
+<td>none/pending/partial/refunded/rejected</td>
+</tr>
+<tr>
+<td>OrderItem</td>
+<td><code>refund_status</code> 扩展为 none/pending/partial/refunded</td>
+<td>支持按项部分退款</td>
+</tr>
+<tr>
+<td>FinanceTransaction</td>
+<td>增加 <code>refund_record_id</code> nullable</td>
+<td>关联退款记录</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>注：v1.5 曾提出“无需新增表”，但 v1.7
+的退款动作、订单动作、微信退款回调、按项明细和审计要求已经超过单条
+FinanceTransaction 能可靠表达的范围，因此建议新增
+RefundRecord/RefundRecordItem。</p>
+</blockquote>
+<h3 id="55-api-变更">5.5 API 变更</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/orders/{id}/refunds</code></td>
+<td>创建退款操作，支持 full/partial/item + keep_order/cancel_order</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/orders/{id}/refunds</code></td>
+<td>订单退款记录列表</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/refunds</code></td>
+<td>退款记录列表/审批队列</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/refunds/{id}/approve</code></td>
+<td>审批退款</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/v1/admin/refunds/{id}/reject</code></td>
+<td>拒绝退款</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/v1/admin/refunds/{id}</code></td>
+<td>退款详情</td>
+</tr>
+</tbody>
+</table>
+<h3 id="56-前端变更">5.6 前端变更</h3>
+<table>
+<thead>
+<tr>
+<th>页面</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>订单详情</td>
+<td>新增统一退款弹窗：退款模式、退款金额、订单处理动作、库存处理、原因</td>
+</tr>
+<tr>
+<td>订单详情</td>
+<td>展示退款历史和每次退款影响：金额、订单是否取消、库存是否释放</td>
+</tr>
+<tr>
+<td>退款审批页</td>
+<td>展示高风险标签和二次确认要求</td>
+</tr>
+<tr>
+<td>财务流水</td>
+<td>可跳转到 RefundRecord 详情</td>
+</tr>
+</tbody>
+</table>
+<h3 id="57-异常处理">5.7 异常处理</h3>
+<ul>
+<li>退款金额超过可退金额：拒绝。</li>
+<li>保留订单但全额退款：仅 super_admin 可提交，必须强制备注。</li>
+<li>微信退款申请成功但回调未到：RefundRecord 保持
+processing，由定时任务查询/补偿。</li>
+<li>退款已完成后不得修改 order_action，只能创建新的补充操作。</li>
+</ul>
+<h3 id="58-验收标准">5.8 验收标准</h3>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />管理员可选择全部退款、部分退款、按项退款。</label></li>
+<li><label><input
+type="checkbox" />管理员可选择退款不取消订单。</label></li>
+<li><label><input
+type="checkbox" />管理员可选择退款并取消订单。</label></li>
+<li><label><input
+type="checkbox" />库存释放默认值随订单处理动作正确变化。</label></li>
+<li><label><input
+type="checkbox" />全额退款不取消订单触发高风险确认。</label></li>
+<li><label><input
+type="checkbox" />退款记录能完整追溯金额、订单动作、库存动作和微信退款状态。</label></li>
+</ul>
+<hr />
+<h2 id="需求-6商家小程序版后台p2">需求 6：商家小程序版后台（P2）</h2>
+<h3 id="61-功能描述">6.1 功能描述</h3>
+<p>提供小程序内的商家移动端后台，用于手机上查看订单、核销、基础筛选和轻量处理。该模块优先级不高，不阻塞
+P0 需求上线。</p>
+<h3 id="62-范围">6.2 范围</h3>
+<table>
+<thead>
+<tr>
+<th>范围</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P2 首期包含</td>
+<td>登录态复用、订单列表、订单详情、扫码核销、基础筛选、订单备注</td>
+</tr>
+<tr>
+<td>P2 首期不包含</td>
+<td>批量导出、完整财务、复杂退款审批、高风险操作</td>
+</tr>
+<tr>
+<td>设备适配</td>
+<td>微信小程序端移动布局</td>
+</tr>
+<tr>
+<td>权限</td>
+<td>仅 admin/super_admin/staff 中被授权角色可访问</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-验收标准">6.3 验收标准</h3>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />授权商家账号可从小程序进入商家后台。</label></li>
+<li><label><input type="checkbox" />可查看订单列表与详情。</label></li>
+<li><label><input
+type="checkbox" />可按日期/状态做基础筛选。</label></li>
+<li><label><input type="checkbox" />可扫码核销电子票。</label></li>
+<li><label><input
+type="checkbox" />不开放订单导出和高风险退款操作。</label></li>
+</ul>
+<hr />
+<h2 id="数据一致性与兼容性">数据一致性与兼容性</h2>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>多营地隔离</td>
+<td>所有新增表必须包含 site_id，并通过 <code>X-Site-Id</code> 或解析出的
+site_id 过滤</td>
+</tr>
+<tr>
+<td>软删除</td>
+<td>所有新增业务表继承 Base，使用 is_deleted，不硬删除</td>
+</tr>
+<tr>
+<td>支付兼容</td>
+<td>已有微信支付回调必须补充 pending 入账，但需通过 payment_no/order_no
+幂等防重</td>
+</tr>
+<tr>
+<td>CMS 兼容</td>
+<td>v1.6 CMS 配置结构不变，二维码只引用 page_code</td>
+</tr>
+<tr>
+<td>导出安全</td>
+<td>导出文件不得包含密钥、openid 等非必要敏感信息；手机号按权限脱敏</td>
+</tr>
+<tr>
+<td>退款兼容</td>
+<td>旧 <code>refund-approve</code> 与 <code>partial-refund</code>
+接口可保留兼容层，但新功能以 RefundRecord API 为准</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="验收总览">验收总览</h2>
+<ul class="task-list">
+<li><label><input
+type="checkbox" />商品、分类、活动、自定义页面均可生成小程序码。</label></li>
+<li><label><input
+type="checkbox" />扫码可正确进入目标页并记录扫码日志。</label></li>
+<li><label><input
+type="checkbox" />自定义页面发布后可生成二维码，停用后扫码不展示内容。</label></li>
+<li><label><input
+type="checkbox" />订单页支持高级筛选和导出，导出有权限控制和审计。</label></li>
+<li><label><input
+type="checkbox" />支付成功资金进入不可提现账户，服务完成后自动转可提现账户。</label></li>
+<li><label><input
+type="checkbox" />退款支持全退/部分退/按项退，并可选择是否取消订单。</label></li>
+<li><label><input type="checkbox" />退款、结算、导出、小程序码均遵循
+site_id 隔离。</label></li>
+</ul>
+<hr />
+<h2 id="架构师评审关注点">架构师评审关注点</h2>
+<ol type="1">
+<li>小程序码 scene
+编码是否足以覆盖所有目标类型，并满足微信长度限制。</li>
+<li>QRCode
+目标解析是否会形成开放跳转风险，必须仅允许白名单内部路径。</li>
+<li>订单导出是否需要异步任务队列和文件清理任务，避免大查询拖垮
+API。</li>
+<li><code>pending_amount</code>、<code>available_amount</code>、退款、结算并发时是否需要行级锁和幂等键。</li>
+<li>RefundRecord 是否应作为退款主事实表，逐步替代散落在
+Order/FinanceTransaction 的退款字段。</li>
+<li>全额退款但不取消订单的业务风险是否可接受，是否应默认禁用或仅
+super_admin 可用。</li>
+</ol>
+<hr />
+<h2 id="版本记录">版本记录</h2>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>日期</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v1.7-draft</td>
+<td>2026-06-18</td>
+<td>基于 6
+条新增需求形成产品草案：小程序码、自定义页面二维码、订单筛选导出、商家移动端后台、待确认资金转可提现、退款与取消解耦</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

@@ -95,8 +95,10 @@ function openAssetLibrary(index: number) {
 }
 
 function onAssetSelect(assets: CmsAsset[]) {
-  if (assets.length > 0 && editingIndex.value >= 0) {
-    localItems.value[editingIndex.value].icon = assets[0].file_url
+  const asset = assets[0]
+  const item = localItems.value[editingIndex.value]
+  if (asset && item && editingIndex.value >= 0) {
+    item.icon = asset.file_url
     emitChange()
   }
   assetVisible.value = false
@@ -104,13 +106,14 @@ function onAssetSelect(assets: CmsAsset[]) {
 
 function openLinkPicker(index: number) {
   editingIndex.value = index
-  currentLink.value = { ...(localItems.value[index].link || { type: 'none', target: '', title: '' }) }
+  currentLink.value = { ...(localItems.value[index]?.link || { type: 'none', target: '', title: '' }) }
   linkVisible.value = true
 }
 
 function onLinkChange(link: LinkConfig) {
-  if (editingIndex.value >= 0) {
-    localItems.value[editingIndex.value].link = { ...link }
+  const item = localItems.value[editingIndex.value]
+  if (editingIndex.value >= 0 && item) {
+    item.link = { ...link }
     emitChange()
   }
 }

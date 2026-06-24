@@ -221,8 +221,9 @@ async function fetchDetail() {
     }
 
     // 封面图
-    if (data.images?.length > 0) {
-      coverUrl.value = data.images[0].url
+    const firstImage = data.images?.[0]
+    if (firstImage) {
+      coverUrl.value = firstImage.url
     }
   } catch {}
 }

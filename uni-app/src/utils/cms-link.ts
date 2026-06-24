@@ -3,6 +3,7 @@
  * 统一处理 7 种链接类型的跳转逻辑
  */
 import type { CmsLink } from '@/types/cms'
+import { savePendingCategoryKey } from '@/utils/attribution'
 
 /** tabBar 页面路径列表（switchTab 判断） */
 const TAB_BAR_PAGES = [
@@ -105,7 +106,7 @@ function handleProductLink(target: string): void {
  *       switchTab 不支持传参，需通过全局事件总线传递 category_key
  */
 function handleCategoryLink(target: string): void {
-  // 通过全局事件总线传递分类参数
+  savePendingCategoryKey(target)
   uni.$emit('cms:category-switch', { category_key: target })
   uni.switchTab({ url: '/pages/category/index' })
 }

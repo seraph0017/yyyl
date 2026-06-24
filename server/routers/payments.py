@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from middleware.site import get_site_id
-from services import order_service, wechat_pay_service
+from services import order_service, refund_service, wechat_pay_service
 
 router = APIRouter(tags=["支付"])
 
@@ -52,7 +52,7 @@ async def wechat_refund_notify(
             dict(request.headers),
             site_id=site_id,
         )
-        await order_service.handle_wechat_refund_notification(db, refund)
+        await refund_service.handle_wechat_refund_notification(db, refund)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

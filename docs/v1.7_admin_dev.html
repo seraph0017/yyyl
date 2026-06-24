@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>v1.7 管理后台（admin）开发文档</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+    :root { color-scheme: light; --bg:#f6f3ec; --paper:#fffdf8; --ink:#21352d; --line:#d8d0c2; --accent:#2d4a3e; --accent-2:#c8a872; --soft:#eef3ef; }
+    html { background: var(--bg); color: var(--ink); scroll-behavior: smooth; }
+    body { max-width:1180px; margin:0 auto; padding:32px 28px 64px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; line-height:1.72; background:var(--paper); box-shadow:0 18px 48px rgba(33,53,45,.12); }
+    header#title-block-header { text-align:left; margin:-32px -28px 28px; padding:44px 42px 38px; background:linear-gradient(135deg,#223d33 0%,#2d4a3e 58%,#7a6a42 100%); color:#fffaf0; }
+    header#title-block-header::before { content:"YYYL DEVELOPMENT DOC"; display:block; color:rgba(255,250,240,.72); font-size:12px; letter-spacing:.18em; margin-bottom:14px; font-weight:700; }
+    h1.title { margin:0; font-size:34px; line-height:1.18; letter-spacing:0; }
+    h1,h2,h3,h4 { color:var(--accent); letter-spacing:0; }
+    h1 { font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:12px; }
+    h2 { font-size:24px; margin-top:42px; border-left:5px solid var(--accent-2); padding-left:12px; }
+    h3 { font-size:19px; margin-top:28px; }
+    blockquote { margin:18px 0 24px; padding:14px 18px; border-left:5px solid var(--accent-2); background:#fbf7ec; color:#42534c; border-radius:0 8px 8px 0; }
+    nav#TOC { margin:0 0 32px; padding:18px 20px; background:var(--soft); border:1px solid #dbe4dc; border-radius:8px; columns:2; column-gap:28px; }
+    nav#TOC::before { content:"目录"; display:block; font-weight:800; color:var(--accent); margin-bottom:10px; column-span:all; }
+    nav#TOC ul { margin:0; padding-left:1.1em; } nav#TOC li { break-inside:avoid; margin:4px 0; }
+    table { display:table; width:100%; border-collapse:collapse; margin:18px 0 26px; background:#fff; border:1px solid var(--line); font-size:14px; }
+    thead { background:#edf2ee; } tbody { border-top:none; border-bottom:none; } th,td { border:1px solid var(--line); padding:9px 11px; vertical-align:top; } th { color:var(--accent); font-weight:800; text-align:left; } tr:nth-child(even) td { background:#fffaf1; }
+    code { background:#eef3ef; color:#17392d; border-radius:4px; padding:1px 5px; font-family:Menlo,Monaco,Consolas,"SFMono-Regular",monospace; }
+    pre { background:#20382f; color:#f7f2e8; padding:16px; border-radius:8px; overflow-x:auto; } pre code { background:transparent; color:inherit; padding:0; }
+    @media (max-width:760px){ body{padding:18px 14px 44px; box-shadow:none;} header#title-block-header{margin:-18px -14px 22px; padding:30px 22px;} h1.title{font-size:26px;} nav#TOC{columns:1;} table{display:block; overflow-x:auto; white-space:nowrap;} }
+    @media print { html,body{background:#fff; box-shadow:none;} body{max-width:none; padding:0; font-size:11pt;} header#title-block-header{margin:0 0 18px; color:#000; background:#fff; border-bottom:2px solid #000;} nav#TOC{columns:1; page-break-after:always;} h2,h3{page-break-after:avoid;} table{font-size:9pt;} }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">v1.7 管理后台（admin）开发文档</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#v17-管理后台admin开发文档"
+id="toc-v17-管理后台admin开发文档">v1.7 管理后台（admin）开发文档</a>
+<ul>
+<li><a href="#1-概述" id="toc-1-概述">1. 概述</a></li>
+<li><a href="#2-文件清单" id="toc-2-文件清单">2. 文件清单</a>
+<ul>
+<li><a href="#21-新增文件" id="toc-21-新增文件">2.1 新增文件</a></li>
+<li><a href="#22-修改文件" id="toc-22-修改文件">2.2 修改文件</a></li>
+</ul></li>
+<li><a href="#3-类型定义" id="toc-3-类型定义">3. 类型定义</a>
+<ul>
+<li><a href="#31-小程序码" id="toc-31-小程序码">3.1 小程序码</a></li>
+<li><a href="#32-订单筛选与导出" id="toc-32-订单筛选与导出">3.2
+订单筛选与导出</a></li>
+<li><a href="#33-退款" id="toc-33-退款">3.3 退款</a></li>
+</ul></li>
+<li><a href="#4-api-模块" id="toc-4-api-模块">4. API 模块</a>
+<ul>
+<li><a href="#41-apiqrcodets" id="toc-41-apiqrcodets">4.1
+<code>api/qrcode.ts</code></a></li>
+<li><a href="#42-apiorder-exportts" id="toc-42-apiorder-exportts">4.2
+<code>api/order-export.ts</code></a></li>
+<li><a href="#43-apirefundts" id="toc-43-apirefundts">4.3
+<code>api/refund.ts</code></a></li>
+</ul></li>
+<li><a href="#5-页面设计" id="toc-5-页面设计">5. 页面设计</a>
+<ul>
+<li><a href="#51-小程序码管理页" id="toc-51-小程序码管理页">5.1
+小程序码管理页</a></li>
+<li><a href="#52-cms-页面列表二维码入口"
+id="toc-52-cms-页面列表二维码入口">5.2 CMS 页面列表二维码入口</a></li>
+<li><a href="#53-订单高级筛选" id="toc-53-订单高级筛选">5.3
+订单高级筛选</a></li>
+<li><a href="#54-导出任务抽屉" id="toc-54-导出任务抽屉">5.4
+导出任务抽屉</a></li>
+<li><a href="#55-统一退款弹窗" id="toc-55-统一退款弹窗">5.5
+统一退款弹窗</a></li>
+<li><a href="#56-财务结算展示" id="toc-56-财务结算展示">5.6
+财务结算展示</a></li>
+</ul></li>
+<li><a href="#6-路由与菜单" id="toc-6-路由与菜单">6. 路由与菜单</a></li>
+<li><a href="#7-验证命令" id="toc-7-验证命令">7. 验证命令</a></li>
+<li><a href="#8-验收标准" id="toc-8-验收标准">8. 验收标准</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="v17-管理后台admin开发文档">v1.7 管理后台（admin）开发文档</h1>
+<blockquote>
+<p><strong>版本</strong>：v1.7<br />
+<strong>日期</strong>：2026-06-18<br />
+<strong>基线</strong>：PRD v1.7 + 架构师评审
+<code>CONDITIONAL APPROVED 8.62</code><br />
+<strong>目标读者</strong>：Admin 前端开发 Agent<br />
+<strong>状态</strong>：开发文档草案，待 Admin 开发 Agent 评审</p>
+</blockquote>
+<hr />
+<h2 id="1-概述">1. 概述</h2>
+<p>管理后台本期负责四类 P0 能力：</p>
+<ol type="1">
+<li><strong>小程序码管理</strong>：商品、分类、活动、CMS
+页面生成、查看、下载、停用二维码。</li>
+<li><strong>订单高级筛选与导出</strong>：多条件筛选、筛选摘要、导出任务抽屉、私有下载。</li>
+<li><strong>资金结算展示</strong>：财务概览展示待确认/可提现/结算记录，订单详情展示结算状态。</li>
+<li><strong>退款策略升级交互</strong>：统一退款弹窗、全额/部分/按项退款、保留订单/取消订单、高危确认。</li>
+</ol>
+<p><strong>不在本端范围内</strong>：</p>
+<ul>
+<li>微信小程序码生成服务、导出文件生成、资金结算业务逻辑。</li>
+<li>小程序扫码分发页与来源归因本地存储。</li>
+<li>商家小程序版后台 P2 页面。</li>
+</ul>
+<hr />
+<h2 id="2-文件清单">2. 文件清单</h2>
+<h3 id="21-新增文件">2.1 新增文件</h3>
+<pre class="text"><code>admin/src/
+├── api/
+│   ├── qrcode.ts                       # 小程序码 API
+│   ├── refund.ts                       # 新退款 API
+│   └── order-export.ts                 # 订单导出任务 API
+├── types/
+│   ├── qrcode.ts                       # 二维码类型
+│   ├── refund.ts                       # 退款类型
+│   └── settlement.ts                   # 结算类型
+├── views/
+│   ├── qrcode/
+│   │   └── index.vue                   # 小程序码管理页
+│   └── finance/
+│       └── settlements.vue             # 结算记录页
+├── components/
+│   ├── qrcode/
+│   │   ├── QrcodeCreateDialog.vue      # 生成二维码弹窗
+│   │   └── QrcodePreviewDialog.vue     # 预览/下载弹窗
+│   ├── orders/
+│   │   ├── OrderAdvancedFilter.vue     # 订单高级筛选
+│   │   ├── OrderExportDrawer.vue       # 导出任务抽屉
+│   │   └── RefundDialog.vue            # 统一退款弹窗
+│   └── finance/
+│       └── SettlementStatusTag.vue     # 结算状态标签</code></pre>
+<h3 id="22-修改文件">2.2 修改文件</h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>变更说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>router/index.ts</code></td>
+<td>新增 <code>/qrcodes</code>、<code>/finance/settlements</code>
+路由</td>
+</tr>
+<tr>
+<td><code>layout/index.vue</code></td>
+<td>菜单新增“小程序码”、财务子入口“结算记录”</td>
+</tr>
+<tr>
+<td><code>api/order.ts</code></td>
+<td>增强订单筛选参数，增加导出入口</td>
+</tr>
+<tr>
+<td><code>api/cms.ts</code></td>
+<td>增加 <code>createCmsPageQrcode</code></td>
+</tr>
+<tr>
+<td><code>api/finance.ts</code></td>
+<td>增加结算记录、手动结算接口</td>
+</tr>
+<tr>
+<td><code>types/index.ts</code></td>
+<td>扩展 OrderSearchParams、Order、OrderItem、FinanceTransaction</td>
+</tr>
+<tr>
+<td><code>views/orders/index.vue</code></td>
+<td>高级筛选、导出、来源字段展示</td>
+</tr>
+<tr>
+<td><code>views/orders/detail.vue</code></td>
+<td>退款历史、结算状态、统一退款入口</td>
+</tr>
+<tr>
+<td><code>views/cms/index.vue</code></td>
+<td>页面二维码按钮；未发布页面禁用</td>
+</tr>
+<tr>
+<td><code>views/products/index.vue</code></td>
+<td>商品二维码按钮</td>
+</tr>
+<tr>
+<td><code>views/finance/index.vue</code></td>
+<td>待确认/可提现/结算统计增强</td>
+</tr>
+<tr>
+<td><code>views/system/logs.vue</code></td>
+<td>展示导出、退款、小程序码操作日志标签</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-类型定义">3. 类型定义</h2>
+<h3 id="31-小程序码">3.1 小程序码</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="im">export type</span> QrcodeTargetType <span class="op">=</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="st">&#39;category&#39;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="st">&#39;product&#39;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="st">&#39;activity_product&#39;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="st">&#39;activity_page&#39;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="op">|</span> <span class="st">&#39;custom_page&#39;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> MiniProgramQrcode {</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>  site_id<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>  target_type<span class="op">:</span> QrcodeTargetType</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>  target_key<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>  title<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>  path<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>  scene<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>  short_code<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>  channel<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>  image_url<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="st">&#39;active&#39;</span> <span class="op">|</span> <span class="st">&#39;inactive&#39;</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>  generated_by<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>  generated_at<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>  last_used_at<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>  usage_count<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> QrcodeCreateRequest {</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>  target_type<span class="op">:</span> QrcodeTargetType</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a>  target_key<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>  title<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>  channel<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 id="32-订单筛选与导出">3.2 订单筛选与导出</h3>
+<p>扩展 <code>OrderSearchParams</code>：</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> OrderSearchParams <span class="kw">extends</span> PaginationParams {</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>  keyword<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  status<span class="op">?:</span> OrderStatus</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>  payment_status<span class="op">?:</span> PaymentStatus</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>  refund_status<span class="op">?:</span> <span class="st">&#39;none&#39;</span> <span class="op">|</span> <span class="st">&#39;pending&#39;</span> <span class="op">|</span> <span class="st">&#39;partial&#39;</span> <span class="op">|</span> <span class="st">&#39;refunded&#39;</span> <span class="op">|</span> <span class="st">&#39;rejected&#39;</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  order_type<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  category<span class="op">?:</span> ProductCategory</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  product_id<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>  sku_id<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>  qrcode_id<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>  channel<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>  created_start<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>  created_end<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>  paid_start<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>  paid_end<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>  booking_start<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>  booking_end<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>  amount_min<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>  amount_max<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>  user_id<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>  user_phone<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>  verify_status<span class="op">?:</span> <span class="st">&#39;pending&#39;</span> <span class="op">|</span> <span class="st">&#39;verified&#39;</span> <span class="op">|</span> <span class="st">&#39;expired&#39;</span></span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>  sort_by<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>  sort_order<span class="op">?:</span> <span class="st">&#39;asc&#39;</span> <span class="op">|</span> <span class="st">&#39;desc&#39;</span></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<p>导出任务：</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> OrderExportTask {</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  task_no<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  filters<span class="op">:</span> <span class="bu">Record</span><span class="op">&lt;</span><span class="dt">string</span><span class="op">,</span> <span class="dt">any</span><span class="op">&gt;</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  file_format<span class="op">:</span> <span class="st">&#39;xlsx&#39;</span> <span class="op">|</span> <span class="st">&#39;csv&#39;</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  row_count<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="st">&#39;pending&#39;</span> <span class="op">|</span> <span class="st">&#39;processing&#39;</span> <span class="op">|</span> <span class="st">&#39;completed&#39;</span> <span class="op">|</span> <span class="st">&#39;failed&#39;</span> <span class="op">|</span> <span class="st">&#39;expired&#39;</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>  error_message<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  created_by<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  created_at<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>  completed_at<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>  expires_at<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 id="33-退款">3.3 退款</h3>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="im">export type</span> RefundMode <span class="op">=</span> <span class="st">&#39;full&#39;</span> <span class="op">|</span> <span class="st">&#39;partial&#39;</span> <span class="op">|</span> <span class="st">&#39;item&#39;</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="im">export type</span> RefundOrderAction <span class="op">=</span> <span class="st">&#39;keep_order&#39;</span> <span class="op">|</span> <span class="st">&#39;cancel_order&#39;</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> RefundCreateRequest {</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>  refund_mode<span class="op">:</span> RefundMode</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  order_action<span class="op">:</span> RefundOrderAction</span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  refund_amount<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  release_inventory<span class="op">:</span> <span class="dt">boolean</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a>  reason<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a>  items<span class="op">?:</span> <span class="bu">Array</span><span class="op">&lt;</span>{</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a>    order_item_id<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a>    refund_amount<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a>    quantity<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a>  }<span class="op">&gt;</span></span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a>  confirm_code<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a>  operation_password<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb5-18"><a href="#cb5-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-19"><a href="#cb5-19" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">interface</span> RefundRecord {</span>
+<span id="cb5-20"><a href="#cb5-20" aria-hidden="true" tabindex="-1"></a>  id<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-21"><a href="#cb5-21" aria-hidden="true" tabindex="-1"></a>  order_id<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-22"><a href="#cb5-22" aria-hidden="true" tabindex="-1"></a>  refund_no<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb5-23"><a href="#cb5-23" aria-hidden="true" tabindex="-1"></a>  refund_mode<span class="op">:</span> RefundMode</span>
+<span id="cb5-24"><a href="#cb5-24" aria-hidden="true" tabindex="-1"></a>  order_action<span class="op">:</span> RefundOrderAction</span>
+<span id="cb5-25"><a href="#cb5-25" aria-hidden="true" tabindex="-1"></a>  refund_amount<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-26"><a href="#cb5-26" aria-hidden="true" tabindex="-1"></a>  system_amount<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-27"><a href="#cb5-27" aria-hidden="true" tabindex="-1"></a>  release_inventory<span class="op">:</span> <span class="dt">boolean</span></span>
+<span id="cb5-28"><a href="#cb5-28" aria-hidden="true" tabindex="-1"></a>  reason<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb5-29"><a href="#cb5-29" aria-hidden="true" tabindex="-1"></a>  risk_level<span class="op">:</span> <span class="st">&#39;normal&#39;</span> <span class="op">|</span> <span class="st">&#39;medium&#39;</span> <span class="op">|</span> <span class="st">&#39;high&#39;</span></span>
+<span id="cb5-30"><a href="#cb5-30" aria-hidden="true" tabindex="-1"></a>  status<span class="op">:</span> <span class="st">&#39;pending&#39;</span> <span class="op">|</span> <span class="st">&#39;approved&#39;</span> <span class="op">|</span> <span class="st">&#39;processing&#39;</span> <span class="op">|</span> <span class="st">&#39;completed&#39;</span> <span class="op">|</span> <span class="st">&#39;rejected&#39;</span> <span class="op">|</span> <span class="st">&#39;failed&#39;</span></span>
+<span id="cb5-31"><a href="#cb5-31" aria-hidden="true" tabindex="-1"></a>  requested_by<span class="op">:</span> <span class="dt">number</span></span>
+<span id="cb5-32"><a href="#cb5-32" aria-hidden="true" tabindex="-1"></a>  approved_by<span class="op">?:</span> <span class="dt">number</span></span>
+<span id="cb5-33"><a href="#cb5-33" aria-hidden="true" tabindex="-1"></a>  created_at<span class="op">:</span> <span class="dt">string</span></span>
+<span id="cb5-34"><a href="#cb5-34" aria-hidden="true" tabindex="-1"></a>  completed_at<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb5-35"><a href="#cb5-35" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<hr />
+<h2 id="4-api-模块">4. API 模块</h2>
+<h3 id="41-apiqrcodets">4.1 <code>api/qrcode.ts</code></h3>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> { <span class="kw">get</span><span class="op">,</span> post<span class="op">,</span> patch } <span class="im">from</span> <span class="st">&#39;@/utils/request&#39;</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> <span class="im">type</span> { MiniProgramQrcode<span class="op">,</span> QrcodeCreateRequest } <span class="im">from</span> <span class="st">&#39;@/types/qrcode&#39;</span></span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> <span class="im">type</span> { PaginatedResponse } <span class="im">from</span> <span class="st">&#39;@/types&#39;</span></span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">createQrcode</span>(data<span class="op">:</span> QrcodeCreateRequest) {</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">post</span><span class="op">&lt;</span>{ data<span class="op">:</span> MiniProgramQrcode }<span class="op">&gt;</span>(<span class="st">&#39;/admin/qrcodes&#39;</span><span class="op">,</span> data)</span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">getQrcodes</span>(params<span class="op">:</span> {</span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>  page<span class="op">?:</span> <span class="dt">number</span><span class="op">;</span> page_size<span class="op">?:</span> <span class="dt">number</span><span class="op">;</span> target_type<span class="op">?:</span> <span class="dt">string</span><span class="op">;</span> channel<span class="op">?:</span> <span class="dt">string</span><span class="op">;</span> status<span class="op">?:</span> <span class="dt">string</span></span>
+<span id="cb6-11"><a href="#cb6-11" aria-hidden="true" tabindex="-1"></a>}) {</span>
+<span id="cb6-12"><a href="#cb6-12" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="kw">get</span><span class="op">&lt;</span>{ data<span class="op">:</span> PaginatedResponse<span class="op">&lt;</span>MiniProgramQrcode<span class="op">&gt;</span> }<span class="op">&gt;</span>(<span class="st">&#39;/admin/qrcodes&#39;</span><span class="op">,</span> params)</span>
+<span id="cb6-13"><a href="#cb6-13" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-14"><a href="#cb6-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-15"><a href="#cb6-15" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">regenerateQrcode</span>(id<span class="op">:</span> <span class="dt">number</span>) {</span>
+<span id="cb6-16"><a href="#cb6-16" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">post</span><span class="op">&lt;</span>{ data<span class="op">:</span> MiniProgramQrcode }<span class="op">&gt;</span>(<span class="vs">`/admin/qrcodes/</span><span class="sc">${</span>id<span class="sc">}</span><span class="vs">/regenerate`</span>)</span>
+<span id="cb6-17"><a href="#cb6-17" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-18"><a href="#cb6-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-19"><a href="#cb6-19" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">updateQrcodeStatus</span>(id<span class="op">:</span> <span class="dt">number</span><span class="op">,</span> status<span class="op">:</span> <span class="st">&#39;active&#39;</span> <span class="op">|</span> <span class="st">&#39;inactive&#39;</span>) {</span>
+<span id="cb6-20"><a href="#cb6-20" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">patch</span>(<span class="vs">`/admin/qrcodes/</span><span class="sc">${</span>id<span class="sc">}</span><span class="vs">/status`</span><span class="op">,</span> { status })</span>
+<span id="cb6-21"><a href="#cb6-21" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb6-22"><a href="#cb6-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-23"><a href="#cb6-23" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">getQrcodeDownloadUrl</span>(id<span class="op">:</span> <span class="dt">number</span>) {</span>
+<span id="cb6-24"><a href="#cb6-24" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="vs">`/api/v1/admin/qrcodes/</span><span class="sc">${</span>id<span class="sc">}</span><span class="vs">/download`</span></span>
+<span id="cb6-25"><a href="#cb6-25" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 id="42-apiorder-exportts">4.2 <code>api/order-export.ts</code></h3>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">createOrderExport</span>(data<span class="op">:</span> {</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>  filters<span class="op">:</span> OrderSearchParams</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a>  file_format<span class="op">:</span> <span class="st">&#39;xlsx&#39;</span> <span class="op">|</span> <span class="st">&#39;csv&#39;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a>  include_sensitive<span class="op">?:</span> <span class="dt">boolean</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a>}) {</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">post</span><span class="op">&lt;</span>{ data<span class="op">:</span> OrderExportTask }<span class="op">&gt;</span>(<span class="st">&#39;/admin/orders/export&#39;</span><span class="op">,</span> data)</span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">getOrderExportTasks</span>(params<span class="op">?:</span> { page<span class="op">?:</span> <span class="dt">number</span><span class="op">;</span> page_size<span class="op">?:</span> <span class="dt">number</span><span class="op">;</span> status<span class="op">?:</span> <span class="dt">string</span> }) {</span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="kw">get</span><span class="op">&lt;</span>{ data<span class="op">:</span> PaginatedResponse<span class="op">&lt;</span>OrderExportTask<span class="op">&gt;</span> }<span class="op">&gt;</span>(<span class="st">&#39;/admin/orders/export-tasks&#39;</span><span class="op">,</span> params)</span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">downloadOrderExportTask</span>(id<span class="op">:</span> <span class="dt">number</span>) {</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="kw">get</span>(<span class="vs">`/admin/orders/export-tasks/</span><span class="sc">${</span>id<span class="sc">}</span><span class="vs">/download`</span><span class="op">,</span> <span class="kw">undefined</span><span class="op">,</span> { responseType<span class="op">:</span> <span class="st">&#39;blob&#39;</span> })</span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<h3 id="43-apirefundts">4.3 <code>api/refund.ts</code></h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">createRefund</span>(orderId<span class="op">:</span> <span class="dt">number</span><span class="op">,</span> data<span class="op">:</span> RefundCreateRequest) {</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">post</span><span class="op">&lt;</span>{ data<span class="op">:</span> RefundRecord }<span class="op">&gt;</span>(<span class="vs">`/admin/orders/</span><span class="sc">${</span>orderId<span class="sc">}</span><span class="vs">/refunds`</span><span class="op">,</span> data)</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">getOrderRefunds</span>(orderId<span class="op">:</span> <span class="dt">number</span>) {</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="kw">get</span><span class="op">&lt;</span>{ data<span class="op">:</span> RefundRecord[] }<span class="op">&gt;</span>(<span class="vs">`/admin/orders/</span><span class="sc">${</span>orderId<span class="sc">}</span><span class="vs">/refunds`</span>)</span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">approveRefundRecord</span>(id<span class="op">:</span> <span class="dt">number</span><span class="op">,</span> data<span class="op">:</span> { confirm_code<span class="op">?:</span> <span class="dt">string</span><span class="op">;</span> operation_password<span class="op">?:</span> <span class="dt">string</span> }) {</span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">post</span>(<span class="vs">`/admin/refunds/</span><span class="sc">${</span>id<span class="sc">}</span><span class="vs">/approve`</span><span class="op">,</span> data)</span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a>}</span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">rejectRefundRecord</span>(id<span class="op">:</span> <span class="dt">number</span><span class="op">,</span> data<span class="op">:</span> { reason<span class="op">:</span> <span class="dt">string</span> }) {</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a>  <span class="cf">return</span> <span class="fu">post</span>(<span class="vs">`/admin/refunds/</span><span class="sc">${</span>id<span class="sc">}</span><span class="vs">/reject`</span><span class="op">,</span> data)</span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<hr />
+<h2 id="5-页面设计">5. 页面设计</h2>
+<h3 id="51-小程序码管理页">5.1 小程序码管理页</h3>
+<p>路径：<code>views/qrcode/index.vue</code></p>
+<p>功能：</p>
+<ul>
+<li>筛选：目标类型、状态、渠道、关键词。</li>
+<li>表格列：二维码缩略图、目标类型、标题、渠道、状态、扫码次数、最近扫码、生成时间。</li>
+<li>操作：预览、下载、重新生成、停用/启用。</li>
+<li>新建弹窗：目标类型切换后展示对应选择器。</li>
+</ul>
+<p>目标选择器规则：</p>
+<table>
+<thead>
+<tr>
+<th>target_type</th>
+<th>选择器</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>category</td>
+<td>品类下拉，来源 Product.category 枚举</td>
+</tr>
+<tr>
+<td>product</td>
+<td>商品远程搜索</td>
+</tr>
+<tr>
+<td>activity_product</td>
+<td>活动商品远程搜索</td>
+</tr>
+<tr>
+<td>activity_page/custom_page</td>
+<td>CMS 页面搜索，仅允许 active 且已发布</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-cms-页面列表二维码入口">5.2 CMS 页面列表二维码入口</h3>
+<p>修改 <code>views/cms/index.vue</code>：</p>
+<ul>
+<li>操作列新增“二维码”按钮。</li>
+<li><code>current_version_id</code> 为空时禁用，tooltip
+提示“发布后可生成二维码”。</li>
+<li>点击后调用
+<code>POST /admin/cms/pages/{id}/qrcode</code>，弹出二维码预览。</li>
+</ul>
+<h3 id="53-订单高级筛选">5.3 订单高级筛选</h3>
+<p>组件：<code>components/orders/OrderAdvancedFilter.vue</code></p>
+<p>布局：</p>
+<ul>
+<li>第一行常用条件：关键词、订单状态、支付状态、下单时间、搜索/重置。</li>
+<li>折叠高级区：退款状态、商品分类、商品、SKU、预定日期、支付时间、金额区间、核销状态、二维码渠道。</li>
+<li>底部显示筛选摘要，例如：“已筛选：已支付、2026-06-01 至
+2026-06-18、渠道 poster”。</li>
+<li>保存筛选条件到
+localStorage，key=<code>yyyl:orders:filters:{site_id}</code>。</li>
+</ul>
+<h3 id="54-导出任务抽屉">5.4 导出任务抽屉</h3>
+<p>组件：<code>components/orders/OrderExportDrawer.vue</code></p>
+<p>流程：</p>
+<ol type="1">
+<li>用户点击“导出”。</li>
+<li>弹窗显示当前筛选摘要、预计导出字段、文件格式，默认
+<code>.xlsx</code>。</li>
+<li>勾选“完整手机号”时检查权限，无权限禁用并提示。</li>
+<li>创建任务后打开抽屉，轮询任务状态。</li>
+<li>completed 后通过鉴权接口下载 blob。</li>
+</ol>
+<p>导出下载不得使用公开 URL，不要把下载链接直接拼成静态地址。</p>
+<h3 id="55-统一退款弹窗">5.5 统一退款弹窗</h3>
+<p>组件：<code>components/orders/RefundDialog.vue</code></p>
+<p>字段：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>控件</th>
+<th>规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>refund_mode</td>
+<td>segmented/radio</td>
+<td>full/partial/item</td>
+</tr>
+<tr>
+<td>order_action</td>
+<td>radio</td>
+<td>keep_order/cancel_order</td>
+</tr>
+<tr>
+<td>refund_amount</td>
+<td>input-number</td>
+<td>full 自动填可退金额，partial 可改</td>
+</tr>
+<tr>
+<td>items</td>
+<td>table + input-number</td>
+<td>item 模式展示订单项</td>
+</tr>
+<tr>
+<td>release_inventory</td>
+<td>switch</td>
+<td>cancel_order 默认 true，keep_order 默认 false</td>
+</tr>
+<tr>
+<td>reason</td>
+<td>textarea</td>
+<td>必填</td>
+</tr>
+<tr>
+<td>confirm_code/password</td>
+<td>高危时展示</td>
+<td>≥500、偏差&gt;20%、全额退款不取消</td>
+</tr>
+</tbody>
+</table>
+<p>高危规则：</p>
+<ul>
+<li>全额退款不取消订单：仅 super_admin 可操作，强制 operation
+password。</li>
+<li>自定义金额偏差超过 20%：提示红色风险说明。</li>
+<li>已核销订单取消：默认不释放库存，super_admin 可强制。</li>
+</ul>
+<h3 id="56-财务结算展示">5.6 财务结算展示</h3>
+<p>修改 <code>views/finance/index.vue</code>：</p>
+<ul>
+<li>概览卡增加“不可提现金额”“可提现金额”“本月结算金额”“结算失败数”。</li>
+<li>交易流水增加 <code>settlement</code> 类型筛选。</li>
+</ul>
+<p>新增 <code>views/finance/settlements.vue</code>：</p>
+<ul>
+<li>表格：订单号、结算金额、状态、触发方式、结算时间、失败原因。</li>
+<li>操作：失败记录可手动重试（super_admin）。</li>
+</ul>
+<hr />
+<h2 id="6-路由与菜单">6. 路由与菜单</h2>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode typescript"><code class="sourceCode typescript"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>  path<span class="op">:</span> <span class="st">&#39;qrcodes&#39;</span><span class="op">,</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>  name<span class="op">:</span> <span class="st">&#39;Qrcodes&#39;</span><span class="op">,</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a>  component<span class="op">:</span> () <span class="kw">=&gt;</span> <span class="im">import</span>(<span class="st">&#39;@/views/qrcode/index.vue&#39;</span>)<span class="op">,</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a>  meta<span class="op">:</span> { title<span class="op">:</span> <span class="st">&#39;小程序码&#39;</span><span class="op">,</span> icon<span class="op">:</span> <span class="st">&#39;Grid&#39;</span><span class="op">,</span> roles<span class="op">:</span> [<span class="st">&#39;admin&#39;</span><span class="op">,</span> <span class="st">&#39;super_admin&#39;</span>] }<span class="op">,</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a>}<span class="op">,</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a>{</span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a>  path<span class="op">:</span> <span class="st">&#39;finance/settlements&#39;</span><span class="op">,</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a>  name<span class="op">:</span> <span class="st">&#39;FinanceSettlements&#39;</span><span class="op">,</span></span>
+<span id="cb9-10"><a href="#cb9-10" aria-hidden="true" tabindex="-1"></a>  component<span class="op">:</span> () <span class="kw">=&gt;</span> <span class="im">import</span>(<span class="st">&#39;@/views/finance/settlements.vue&#39;</span>)<span class="op">,</span></span>
+<span id="cb9-11"><a href="#cb9-11" aria-hidden="true" tabindex="-1"></a>  meta<span class="op">:</span> { title<span class="op">:</span> <span class="st">&#39;结算记录&#39;</span><span class="op">,</span> hidden<span class="op">:</span> <span class="kw">true</span><span class="op">,</span> activeMenu<span class="op">:</span> <span class="st">&#39;/finance&#39;</span><span class="op">,</span> roles<span class="op">:</span> [<span class="st">&#39;admin&#39;</span><span class="op">,</span> <span class="st">&#39;super_admin&#39;</span>] }<span class="op">,</span></span>
+<span id="cb9-12"><a href="#cb9-12" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+<hr />
+<h2 id="7-验证命令">7. 验证命令</h2>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /Users/nathan/Projects/yyyl/admin</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span></code></pre></div>
+<p>重点手工验证：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" />未发布 CMS
+页面二维码按钮禁用。</label></li>
+<li><label><input
+type="checkbox" />订单筛选条件刷新后不丢失。</label></li>
+<li><label><input type="checkbox" />导出任务下载走
+blob，不暴露静态文件地址。</label></li>
+<li><label><input
+type="checkbox" />全额退款不取消订单触发高危确认。</label></li>
+<li><label><input
+type="checkbox" />财务页可查看结算状态和失败重试入口。</label></li>
+</ul>
+<hr />
+<h2 id="8-验收标准">8. 验收标准</h2>
+<ul class="task-list">
+<li><p><label><input type="checkbox" />商品、活动、分类、CMS
+页面均有二维码生成入口。</label></p></li>
+<li><p><label><input
+type="checkbox" />二维码管理页可预览、下载、停用、重新生成。</label></p></li>
+<li><p><label><input type="checkbox" />订单列表支持 PRD
+定义的高级筛选。</label></p></li>
+<li><p><label><input
+type="checkbox" />订单导出与当前筛选条件一致，并展示任务状态。</label></p></li>
+<li><p><label><input type="checkbox" />订单详情可创建 full/partial/item
+退款。</label></p></li>
+<li><p><label><input type="checkbox" />退款弹窗能区分
+keep_order/cancel_order。</label></p></li>
+<li><p><label><input type="checkbox" />财务页展示
+pending/available/settlement 信息。</label></p></li>
+</ul>
+</body>
+</html>

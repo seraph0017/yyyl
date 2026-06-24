@@ -165,7 +165,9 @@ from routers import (
     payments,
     performance,
     products,
+    qrcodes,
     reports,
+    refunds,
     seckill,
     tickets,
     users,
@@ -193,3 +195,5 @@ app.include_router(camp_maps.router)
 app.include_router(expenses.router)
 app.include_router(performance.router)
 app.include_router(cms.router)
+app.include_router(qrcodes.router)
+app.include_router(refunds.router)

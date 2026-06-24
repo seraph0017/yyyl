@@ -216,6 +216,8 @@ export interface Order {
   total_amount: number
   paid_amount: number
   refund_amount: number
+  settled_amount?: number
+  settlement_status?: 'unsettled' | 'partial' | 'settled' | 'failed'
   item_count: number
   remark: string | null
   expire_at: string
@@ -248,6 +250,16 @@ export interface OrderSearchParams extends PaginationParams {
   start_date?: string
   end_date?: string
   order_no?: string
+  product_id?: number
+  product_type?: string
+  booking_date_start?: string
+  booking_date_end?: string
+  payment_time_start?: string
+  payment_time_end?: string
+  amount_min?: number
+  amount_max?: number
+  verify_status?: string
+  source_channel?: string
 }
 
 // ==================== 会员 ====================
@@ -357,6 +369,7 @@ export interface MemberSearchParams extends PaginationParams {
 
 export interface FinanceOverview {
   pending_amount: number
+  available_amount?: number
   withdrawable_amount: number
   deposit_amount: number
   today_income: number
@@ -368,7 +381,7 @@ export interface FinanceOverview {
 export interface FinanceTransaction {
   id: number
   transaction_no: string
-  type: 'income' | 'refund' | 'withdraw' | 'deposit_refund'
+  type: 'income' | 'refund' | 'withdraw' | 'deposit_refund' | 'settlement'
   amount: number
   balance_after: number
   related_order_no: string | null
@@ -382,6 +395,55 @@ export interface TransactionSearchParams extends PaginationParams {
   status?: string
   start_date?: string
   end_date?: string
+}
+
+export interface FinanceSettlement {
+  id: number
+  site_id: number
+  order_id: number
+  settlement_no: string
+  amount: number
+  status: 'completed' | 'failed'
+  trigger_type: 'auto' | 'manual'
+  settled_at: string | null
+  error_message: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface SettlementSearchParams extends PaginationParams {}
+
+export interface RefundRecord {
+  id: number
+  site_id: number
+  order_id: number
+  refund_no: string
+  refund_mode: 'full' | 'partial' | 'item'
+  order_action: 'keep_order' | 'cancel_order'
+  refund_amount: number
+  system_amount: number
+  release_inventory: boolean
+  reason: string
+  risk_level: 'normal' | 'medium' | 'high'
+  status: 'pending' | 'approved' | 'processing' | 'completed' | 'rejected' | 'failed'
+  wechat_refund_id: string | null
+  requested_by: number
+  approved_by: number | null
+  approved_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface RefundCreatePayload {
+  refund_mode: 'full' | 'partial' | 'item'
+  order_action: 'keep_order' | 'cancel_order'
+  refund_amount: number
+  release_inventory: boolean
+  reason: string
+  items?: Array<{ order_item_id: number; refund_amount: number; quantity: number }>
+  confirm_code?: string
+  operation_password?: string
 }
 
 // ==================== Dashboard ====================

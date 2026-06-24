@@ -93,8 +93,9 @@ function emitChange() {
 }
 
 function onAssetSelect(assets: CmsAsset[]) {
-  if (assets.length > 0) {
-    localProps.image_url = assets[0].file_url
+  const asset = assets[0]
+  if (asset) {
+    localProps.image_url = asset.file_url
     emitChange()
   }
   assetVisible.value = false

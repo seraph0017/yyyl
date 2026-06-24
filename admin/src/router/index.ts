@@ -94,6 +94,12 @@ const adminRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/orders/detail.vue'),
         meta: { title: '订单详情', hidden: true, activeMenu: '/orders' },
       },
+      {
+        path: 'qrcodes',
+        name: 'Qrcodes',
+        component: () => import('@/views/qrcodes/index.vue'),
+        meta: { title: '二维码管理', icon: 'Grid', roles: ['admin', 'super_admin'] },
+      },
       // 会员管理
       {
         path: 'members',

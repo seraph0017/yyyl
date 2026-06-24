@@ -66,7 +66,7 @@
               <div>
                 <div class="campsite-name">{{ row.name }}</div>
                 <div class="campsite-meta">
-                  <el-tag size="small" :type="row.type === 'daily_camping' ? '' : 'warning'">{{ row.type_label }}</el-tag>
+                  <el-tag size="small" :type="row.type === 'daily_camping' ? 'info' : 'warning'">{{ row.type_label }}</el-tag>
                   <span v-if="row.area" class="area-badge">{{ row.area }}</span>
                   <span v-if="row.position_name" class="position-badge">{{ row.position_name }}</span>
                 </div>

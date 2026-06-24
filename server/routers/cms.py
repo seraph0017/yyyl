@@ -63,7 +63,9 @@ from schemas.cms import (
     CmsVersionListItem,
 )
 from schemas.common import PaginatedResponse, ResponseModel
+from schemas.qrcode import QrcodeResponse
 import services.cms_service as cms_service
+import services.qrcode_service as qrcode_service
 
 router = APIRouter(prefix="/api/v1", tags=["CMS"])
 
@@ -209,6 +211,26 @@ async def get_page_detail(
         )
     return ResponseModel.success(
         data=CmsPageDetail.model_validate(page_obj).model_dump(),
+    )
+
+
+@router.post("/admin/cms/pages/{page_id}/qrcode", summary="为CMS页面创建或获取小程序码")
+async def create_page_qrcode(
+    page_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """为已发布 CMS 页面创建或复用小程序码。"""
+    site_id = get_site_id(request)
+    qrcode = await qrcode_service.create_or_reuse_cms_page_qrcode(
+        db,
+        site_id=site_id,
+        page_id=page_id,
+        generated_by=admin.id,
+    )
+    return ResponseModel.success(
+        data=QrcodeResponse.model_validate(qrcode).model_dump(mode="json")
     )
 
 

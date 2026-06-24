@@ -27,7 +27,7 @@
                 :model-value="component.style.margin_top"
                 :min="0"
                 :max="100"
-                @update:model-value="(v: number) => onStyleChange({ margin_top: v })"
+                @update:model-value="(v: number | undefined) => onStyleChange({ margin_top: v ?? 0 })"
               />
             </el-form-item>
             <el-form-item label="下外边距">
@@ -35,7 +35,7 @@
                 :model-value="component.style.margin_bottom"
                 :min="0"
                 :max="100"
-                @update:model-value="(v: number) => onStyleChange({ margin_bottom: v })"
+                @update:model-value="(v: number | undefined) => onStyleChange({ margin_bottom: v ?? 0 })"
               />
             </el-form-item>
             <el-form-item label="圆角">
@@ -43,14 +43,14 @@
                 :model-value="component.style.border_radius || 0"
                 :min="0"
                 :max="50"
-                @update:model-value="(v: number) => onStyleChange({ border_radius: v })"
+                @update:model-value="(v: number | undefined) => onStyleChange({ border_radius: v ?? 0 })"
               />
             </el-form-item>
             <el-form-item label="背景色">
               <el-color-picker
                 :model-value="component.style.background || ''"
                 show-alpha
-                @update:model-value="(v: string) => onStyleChange({ background: v || undefined })"
+                @update:model-value="(v: string | null) => onStyleChange({ background: v || undefined })"
               />
             </el-form-item>
           </el-form>
@@ -70,19 +70,19 @@
             <el-form-item label="背景色">
               <el-color-picker
                 :model-value="pageSettings.background_color"
-                @update:model-value="(v: string) => onPageSettingsChange({ background_color: v })"
+                @update:model-value="(v: string | null) => onPageSettingsChange({ background_color: v || '' })"
               />
             </el-form-item>
             <el-form-item label="标题栏颜色">
               <el-color-picker
                 :model-value="pageSettings.title_bar_color"
-                @update:model-value="(v: string) => onPageSettingsChange({ title_bar_color: v })"
+                @update:model-value="(v: string | null) => onPageSettingsChange({ title_bar_color: v || '' })"
               />
             </el-form-item>
             <el-form-item label="标题栏文字">
               <el-color-picker
                 :model-value="pageSettings.title_bar_text_color"
-                @update:model-value="(v: string) => onPageSettingsChange({ title_bar_text_color: v })"
+                @update:model-value="(v: string | null) => onPageSettingsChange({ title_bar_text_color: v || '' })"
               />
             </el-form-item>
           </el-form>

@@ -72,6 +72,15 @@
           <el-button type="success" link size="small" @click="showLinkDialog(row)">
             <el-icon><Link /></el-icon>链接
           </el-button>
+          <el-button
+            type="primary"
+            link
+            size="small"
+            :disabled="!row.current_version_id || row.status !== 'active'"
+            @click="handleCreatePageQrcode(row)"
+          >
+            <el-icon><Grid /></el-icon>二维码
+          </el-button>
           <el-button type="warning" link size="small" @click="openSettingDialog(row)">
             <el-icon><Setting /></el-icon>设置
           </el-button>
@@ -115,7 +124,16 @@
     <el-dialog v-model="showCreateDialog" title="新建页面" width="480px" aria-label="新建页面" @closed="resetCreateForm">
       <el-form ref="createFormRef" :model="createForm" :rules="createRules" label-width="90px">
         <el-form-item label="页面标识" prop="page_code">
-          <el-input v-model="createForm.page_code" placeholder="英文标识，如 home / promo_001" />
+          <el-input
+            v-model.trim="createForm.page_code"
+            maxlength="64"
+            placeholder="如 promo_001"
+            @blur="normalizePageCode"
+          />
+          <div class="field-help">
+            页面标识是给系统识别用的英文编号，不是页面路径。请用小写英文开头，可包含数字和下划线，例如
+            <code>home</code>、<code>promo_001</code>。
+          </div>
         </el-form-item>
         <el-form-item label="页面类型" prop="page_type">
           <el-select v-model="createForm.page_type" style="width: 100%">
@@ -215,9 +233,10 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, Plus, Edit, Setting, Delete, Link, RefreshLeft, CopyDocument } from '@element-plus/icons-vue'
+import { Search, Plus, Edit, Setting, Delete, Link, RefreshLeft, CopyDocument, Grid } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getCmsPages, createCmsPage, updateCmsPage, deleteCmsPage, resetCmsPage } from '@/api/cms'
+import { createCmsPageQrcode } from '@/api/qrcode'
 import type { CmsPage } from '@/types/cms'
 import dayjs from 'dayjs'
 
@@ -232,12 +251,12 @@ const pagination = reactive({ page: 1, page_size: 10, total: 0 })
 
 // ---- 页面类型标签映射 ----
 function pageTypeTag(type: string) {
-  const map: Record<string, { label: string; type: '' | 'success' | 'warning' | 'danger' | 'info' }> = {
+  const map: Record<string, { label: string; type: 'success' | 'warning' | 'danger' | 'info' | undefined }> = {
     home: { label: '首页', type: 'success' },
     activity: { label: '活动', type: 'warning' },
     promotion: { label: '促销', type: 'danger' },
     custom: { label: '自定义', type: 'info' },
-    landing: { label: '宣传页', type: '' },
+    landing: { label: '宣传页', type: undefined },
   }
   return map[type] || { label: type, type: 'info' }
 }
@@ -281,7 +300,14 @@ const createForm = reactive({
   description: '',
 })
 const createRules: FormRules = {
-  page_code: [{ required: true, message: '请输入页面标识', trigger: 'blur' }],
+  page_code: [
+    { required: true, message: '请输入页面标识', trigger: 'blur' },
+    {
+      pattern: /^[a-z][a-z0-9_]{1,63}$/,
+      message: '请填写类似 promo_001 的英文编号，不要使用斜杠、空格或中文',
+      trigger: 'blur',
+    },
+  ],
   page_type: [{ required: true, message: '请选择页面类型', trigger: 'change' }],
   title: [{ required: true, message: '请输入页面标题', trigger: 'blur' }],
 }
@@ -294,7 +320,12 @@ function resetCreateForm() {
   createFormRef.value?.clearValidate()
 }
 
+function normalizePageCode() {
+  createForm.page_code = createForm.page_code.trim().toLowerCase()
+}
+
 async function handleCreate() {
+  normalizePageCode()
   const valid = await createFormRef.value?.validate().catch(() => false)
   if (!valid) return
   creating.value = true
@@ -389,6 +420,15 @@ function copyText(text: string) {
   })
 }
 
+async function handleCreatePageQrcode(page: CmsPage) {
+  if (!page.current_version_id || page.status !== 'active') {
+    ElMessage.warning('页面需启用并发布后才能生成二维码')
+    return
+  }
+  await createCmsPageQrcode(page.id)
+  ElMessage.success('页面二维码已生成，可在二维码管理中查看')
+}
+
 // ---- 重置为默认 ----
 async function handleReset(page: CmsPage) {
   try {
@@ -468,5 +508,20 @@ onMounted(() => {
   font-family: monospace;
   font-size: 13px;
   word-break: break-all;
+}
+
+.field-help {
+  margin-top: 6px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+
+  code {
+    padding: 1px 4px;
+    background: var(--el-fill-color-light);
+    border-radius: 3px;
+    color: var(--el-text-color-primary);
+    font-family: monospace;
+  }
 }
 </style>

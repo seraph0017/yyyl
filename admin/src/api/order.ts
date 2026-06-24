@@ -1,5 +1,6 @@
 import { get, post, put } from '@/utils/request'
-import type { Order, OrderSearchParams, PaginatedResponse } from '@/types'
+import type { Order, OrderSearchParams, PaginatedResponse, RefundCreatePayload, RefundRecord } from '@/types'
+import type { OrderExportTask } from '@/types/order-export'
 
 export function getOrders(params: OrderSearchParams) {
   return get<{ data: PaginatedResponse<Order> }>('/admin/orders', params)
@@ -19,6 +20,38 @@ export function partialRefund(orderId: number, data: { item_ids: number[]; reaso
 
 export function getOrderItems(orderId: number) {
   return get(`/orders/${orderId}/items`)
+}
+
+export function createOrderExport(data: { filters: Record<string, any>; file_format: 'csv' | 'xlsx'; include_sensitive: boolean }) {
+  return post<{ data: OrderExportTask }>('/admin/orders/export', data)
+}
+
+export function getOrderExportTasks(params?: { page?: number; page_size?: number }) {
+  return get<{ data: PaginatedResponse<OrderExportTask> }>('/admin/orders/export-tasks', params)
+}
+
+export function downloadOrderExportTask(taskId: number) {
+  return get(`/admin/orders/export-tasks/${taskId}/download`, undefined, { responseType: 'blob' })
+}
+
+export function settleOrder(orderId: number) {
+  return post(`/admin/orders/${orderId}/settle`, {})
+}
+
+export function createRefund(orderId: number, data: RefundCreatePayload) {
+  return post<{ data: RefundRecord }>(`/admin/orders/${orderId}/refunds`, data)
+}
+
+export function getOrderRefunds(orderId: number) {
+  return get<{ data: RefundRecord[] }>(`/admin/orders/${orderId}/refunds`)
+}
+
+export function approveRefundRecord(refundId: number) {
+  return post<{ data: RefundRecord }>(`/admin/refunds/${refundId}/approve`, {})
+}
+
+export function rejectRefundRecord(refundId: number, reason: string) {
+  return post<{ data: RefundRecord }>(`/admin/refunds/${refundId}/reject`, { reason })
 }
 
 // 退票审批队列

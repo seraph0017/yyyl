@@ -106,7 +106,7 @@
             <el-table-column prop="staff_name" label="员工" width="120" />
             <el-table-column label="周期" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.period_type === 'daily' ? '' : 'success'" size="small">
+                <el-tag :type="row.period_type === 'daily' ? 'info' : 'success'" size="small">
                   {{ row.period_type === 'daily' ? '日结' : '月结' }}
                 </el-tag>
               </template>
@@ -219,7 +219,7 @@ import {
   getPerformanceRecords, getPerformanceRanking,
   triggerCalculation, exportPerformance,
 } from '@/api/performance'
-import { formatPrice, formatDate } from '@/utils'
+import { formatPrice, formatDate, downloadFile } from '@/utils'
 import type { PerformanceConfig, PerformanceRecord, PerformanceRanking } from '@/types'
 
 const activeTab = ref('config')
@@ -364,7 +364,7 @@ async function handleExport() {
   try {
     const res = await exportPerformance({
       period_type: activeTab.value === 'ranking' ? rankingParams.period_type : recordParams.period_type || 'monthly',
-      date: activeTab.value === 'ranking' ? rankingParams.date : recordParams.start_date || formatDate(new Date()),
+      date: activeTab.value === 'ranking' ? rankingParams.period_start : recordParams.start_date || formatDate(new Date()),
     })
     downloadFile(res as unknown as Blob, `绩效数据_${formatDate(new Date())}.xlsx`)
     ElMessage.success('导出成功')

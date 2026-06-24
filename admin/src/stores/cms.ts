@@ -98,14 +98,17 @@ export const useCmsStore = defineStore('cms', () => {
   function moveComponent(fromIndex: number, toIndex: number) {
     pushSnapshot()
     const [item] = config.value.components.splice(fromIndex, 1)
-    config.value.components.splice(toIndex, 0, item)
+    if (item) {
+      config.value.components.splice(toIndex, 0, item)
+    }
   }
 
   function duplicateComponent(id: string) {
     pushSnapshot()
     const idx = config.value.components.findIndex(c => c.id === id)
-    if (idx > -1) {
-      const copy: ComponentItem = JSON.parse(JSON.stringify(config.value.components[idx]))
+    const item = config.value.components[idx]
+    if (idx > -1 && item) {
+      const copy: ComponentItem = JSON.parse(JSON.stringify(item))
       copy.id = uuidv4()
       config.value.components.splice(idx + 1, 0, copy)
       selectedComponentId.value = copy.id

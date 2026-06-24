@@ -2,7 +2,7 @@
   <!-- 订单确认页 -->
   <view class="page-confirm">
     <!-- 出行人信息 -->
-    <view class="section card" v-if="product && product.identity_mode !== 'none'">
+    <view class="section card" v-if="product && showIdentitySection">
       <view class="section__header">
         <text class="section__title">👤 出行人信息</text>
         <text class="section__required" v-if="product.identity_mode === 'required'">必填</text>
@@ -55,12 +55,12 @@
         </view>
         <view class="confirm-product__info">
           <text class="confirm-product__name">{{ product.name }}</text>
-          <view class="confirm-product__dates" v-if="dates.length > 0">
+          <view class="confirm-product__dates" v-if="showDates">
             <text class="confirm-product__date" v-for="d in dates" :key="d">📅 {{ d }}</text>
           </view>
           <view class="confirm-product__price-row">
             <PriceTag :price="product.current_price" size="small" />
-            <text class="confirm-product__qty">x{{ quantity }}</text>
+            <text class="confirm-product__qty">x{{ displayQuantity }}</text>
           </view>
         </view>
       </view>
@@ -108,10 +108,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { get, post } from '@/utils/request'
 import { ensureLogin } from '@/utils/auth'
+import { appendAttributionPayload } from '@/utils/attribution'
+import { isCampsiteProduct, normalizeProductCategory } from '@/utils/product-rules'
 import PriceTag from '@/components/price-tag/index.vue'
 import type { IProduct, IIdentity, IAddress } from '@/types'
 
@@ -130,6 +132,14 @@ const discountAmount = ref(0)
 const actualPrice = ref(0)
 const submitting = ref(false)
 const disclaimerSigned = ref(false)
+const showDates = computed(() => !!product.value && isCampsiteProduct(product.value.category) && dates.value.length > 0)
+const showIdentitySection = computed(() => !!product.value && isCampsiteProduct(product.value.category) && product.value.identity_mode !== 'none')
+const displayQuantity = computed(() => {
+  if (product.value && isCampsiteProduct(product.value.category)) {
+    return dates.value.length || 1
+  }
+  return quantity.value
+})
 
 onLoad((options) => {
   productId.value = Number(options?.product_id || 0)
@@ -152,16 +162,14 @@ async function loadData() {
       const raw = await get<Record<string, any>>(`/products/${productId.value}`)
 
       // 映射API原始数据为IProduct结构
-      let category = (raw.category || raw.type || 'daily_camping') as string
-      if (category === 'rental') category = 'equipment_rental'
-      if (category === 'shop') category = 'camp_shop'
+      const category = normalizeProductCategory(raw.type, raw.category)
 
       const price = parseFloat(raw.base_price) || 0
 
       const p: IProduct = {
         id: raw.id,
         name: raw.name || '',
-        category: category as IProduct['category'],
+        category,
         description: raw.description || '',
         cover_image: '',
         images: [],
@@ -183,19 +191,28 @@ async function loadData() {
       product.value = p
       needAddress.value = p.category === 'merchandise'
 
-      const total = p.current_price * (dates.value.length || 1) * quantity.value
-      const discount = dates.value.length >= 2 ? Math.floor(total * 0.2) : 0
+      if (!isCampsiteProduct(p.category)) {
+        dates.value = []
+      }
+
+      const billableUnits = isCampsiteProduct(p.category) ? (dates.value.length || 1) : quantity.value
+      const total = p.current_price * billableUnits
+      const discount = isCampsiteProduct(p.category) && dates.value.length >= 2 ? Math.floor(total * 0.2) : 0
       totalPrice.value = total
       discountAmount.value = discount
       actualPrice.value = total - discount
     }
 
-    // 加载出行人列表
-    const idList = await get<IIdentity[]>('/users/identities')
-    identities.value = idList || []
-    const defaultId = identities.value.find(i => i.is_default)
-    if (defaultId) selectedIdentity.value = defaultId
-    else if (identities.value.length > 0) selectedIdentity.value = identities.value[0]
+    if (showIdentitySection.value) {
+      const idList = await get<IIdentity[]>('/users/identities')
+      identities.value = idList || []
+      const defaultId = identities.value.find(i => i.is_default)
+      if (defaultId) selectedIdentity.value = defaultId
+      else if (identities.value.length > 0) selectedIdentity.value = identities.value[0]
+    } else {
+      identities.value = []
+      selectedIdentity.value = null
+    }
   } catch {
     uni.showToast({ title: '加载数据失败', icon: 'error' })
   }
@@ -225,7 +242,7 @@ async function onSubmitOrder() {
   if (!p && from.value !== 'cart') return
 
   // 验证身份
-  if (p && p.identity_mode === 'required' && !selectedIdentity.value) {
+  if (p && showIdentitySection.value && p.identity_mode === 'required' && !selectedIdentity.value) {
     uni.showToast({ title: '请选择出行人信息', icon: 'none' })
     return
   }
@@ -246,14 +263,15 @@ async function onSubmitOrder() {
     } else {
       const item: Record<string, unknown> = {
         product_id: productId.value,
-        dates: dates.value,
+        dates: p && isCampsiteProduct(p.category) ? dates.value : [],
         quantity: quantity.value,
       }
-      if (selectedIdentity.value) item.identity_ids = [selectedIdentity.value.id]
+      if (showIdentitySection.value && selectedIdentity.value) item.identity_ids = [selectedIdentity.value.id]
       orderData.items = [item]
     }
     orderData.disclaimer_signed = disclaimerSigned.value
     if (address.value) orderData.address_id = address.value.id
+    appendAttributionPayload(orderData)
 
     const result = await post<{ id: number; order_no: string; actual_amount: number }>('/orders', orderData)
     uni.navigateTo({

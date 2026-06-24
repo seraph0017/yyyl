@@ -1,0 +1,506 @@
+<h1 id="v1.7-实施计划">v1.7 实施计划</h1>
+<blockquote>
+<p><strong>版本</strong>：v1.7<br />
+<strong>日期</strong>：2026-06-18<br />
+<strong>输入文档</strong>：PRD、架构评审、三端开发文档与三端评审报告<br />
+<strong>状态</strong>：实现完成，已验证</p>
+</blockquote>
+<hr />
+<h2 id="总览">1. 总览</h2>
+<p>v1.7
+采用“后端基础能力优先、薄垂直切片集成”的实施方式。先建立共享数据模型和
+API 契约，再按二维码、订单导出、资金结算、退款、小程序归因、Admin
+管理界面分批开发。每个阶段必须保持可构建、可测试、可回滚。</p>
+<hr />
+<h2 id="阶段与任务">2. 阶段与任务</h2>
+<h3 id="phase-1后端基础模型与契约">Phase 1：后端基础模型与契约</h3>
+<h4 id="task-1新增-v1.7-数据模型与迁移-已完成">Task 1：新增 v1.7
+数据模型与迁移 ✅ 已完成</h4>
+<p><strong>范围</strong>：新增 qrcode/refund/settlement/export_task
+模型，扩展 order/finance/admin 权限字段。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />Alembic
+迁移包含新增表、索引、唯一约束、账户非负约束。</label></li>
+<li><label><input type="checkbox"
+checked="" /><code>models/__init__.py</code> 导入新模型。</label></li>
+<li><label><input type="checkbox" checked="" />迁移可
+upgrade/downgrade。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_model_imports.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>依赖</strong>：无。</p>
+<h4 id="task-2定义后端-schema-与路由空壳-已完成">Task 2：定义后端 schema
+与路由空壳 ✅ 已完成</h4>
+<p><strong>范围</strong>：新增 qrcode/refund/settlement/order_export
+schema 与路由注册，先返回明确的未实现或最小结构。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />FastAPI
+路由注册成功。</label></li>
+<li><label><input type="checkbox" checked="" />请求/响应 schema 可被
+OpenAPI 加载。</label></li>
+<li><label><input type="checkbox"
+checked="" />不影响现有订单/支付路由。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-c</span> <span class="st">&quot;from main import app; print(len(app.routes))&quot;</span></span></code></pre></div>
+<p><strong>依赖</strong>：Task 1。</p>
+<h3 id="checkpoint-1后端契约">Checkpoint 1：后端契约</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />后端导入无异常。</label></li>
+<li><label><input type="checkbox" checked="" />新路由可在 app.routes
+中看到。</label></li>
+<li><label><input type="checkbox"
+checked="" />迁移结构经过人工检查。</label></li>
+</ul>
+<hr />
+<h3 id="phase-2小程序码与扫码归因">Phase 2：小程序码与扫码归因</h3>
+<h4 id="task-3实现小程序码生成与解析服务-已完成">Task
+3：实现小程序码生成与解析服务 ✅ 已完成</h4>
+<p><strong>范围</strong>：<code>qrcode_service.py</code>、<code>routers/qrcodes.py</code>，含
+access_token 缓存、微信接口错误处理、path 白名单。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />商品/分类/活动/CMS
+页面可创建或复用二维码。</label></li>
+<li><label><input type="checkbox"
+checked="" /><code>GET /qrcodes/resolve</code>
+返回白名单内部路径。</label></li>
+<li><label><input type="checkbox"
+checked="" />停用二维码无法跳转。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_qrcode_service.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li>新增
+<code>server/services/qrcode_service.py</code>，实现目标路径白名单、短码生成、微信小程序
+access_token
+缓存、小程序码图片生成、二维码复用、扫码解析与扫码日志。</li>
+<li><code>server/routers/qrcodes.py</code>
+已接入真实创建、列表、详情、重新生成、状态更新、下载和解析逻辑。</li>
+<li><code>server/routers/cms.py</code> 的
+<code>/admin/cms/pages/{page_id}/qrcode</code> 已接入已发布 CMS
+页面二维码生成逻辑。</li>
+<li>新增 <code>server/tests/test_qrcode_service.py</code>
+覆盖路径白名单、复用、CMS
+未发布拦截、解析统计、停用拒绝、微信图片校验和多营地配置。</li>
+</ul>
+<p><strong>依赖</strong>：Task 1、Task 2。</p>
+<h4 id="task-4小程序扫码分发页与归因缓存-已完成">Task
+4：小程序扫码分发页与归因缓存 ✅ 已完成</h4>
+<p><strong>范围</strong>：<code>pages/qr/landing.vue</code>、<code>api/qrcode.ts</code>、<code>utils/attribution.ts</code>、<code>pages/category/index.vue</code>。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />scene
+解析成功后按目标类型跳转。</label></li>
+<li><label><input type="checkbox" checked="" />分类 tab 使用 storage +
+switchTab 正确筛选。</label></li>
+<li><label><input type="checkbox"
+checked="" />下单请求携带有效来源。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> uni-app</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run type-check</span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li>新增 <code>uni-app/src/pages/qr/landing.vue</code>，解析
+<code>scene</code> 后调用后端
+<code>/qrcodes/resolve</code>，保存来源归因并按内部白名单路径跳转。</li>
+<li>新增
+<code>uni-app/src/api/qrcode.ts</code>、<code>uni-app/src/types/qrcode.ts</code>、<code>uni-app/src/utils/attribution.ts</code>，统一二维码解析类型、归因
+TTL、本地 storage 和分类待跳转参数。</li>
+<li><code>uni-app/src/pages/category/index.vue</code> 支持从 storage
+消费待选分类，适配 <code>switchTab</code> 不支持 query 的限制。</li>
+<li><code>uni-app/src/pages/order-confirm/index.vue</code>
+在创建订单时携带
+<code>source_qrcode_id/source_channel/source_scanned_at</code>。</li>
+<li>后端 <code>order_service.create_order</code>
+与订单路由已接收并写入来源字段，避免前端来源字段丢失。</li>
+</ul>
+<p><strong>依赖</strong>：Task 3。</p>
+<h4 id="task-5admin-二维码管理与业务入口-已完成">Task 5：Admin
+二维码管理与业务入口 ✅ 已完成</h4>
+<p><strong>范围</strong>：<code>views/qrcode/index.vue</code>、二维码弹窗、商品/CMS
+页面入口。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />已发布 CMS
+页面可生成二维码，未发布禁用。</label></li>
+<li><label><input type="checkbox"
+checked="" />二维码可预览、下载、停用、重新生成。</label></li>
+<li><label><input type="checkbox"
+checked="" />商品/活动/分类入口可生成对应二维码。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> admin</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li>新增
+<code>admin/src/api/qrcode.ts</code>、<code>admin/src/types/qrcode.ts</code>、<code>admin/src/views/qrcodes/index.vue</code>，覆盖二维码列表筛选、手动生成、预览、下载、启停和重新生成。</li>
+<li><code>admin/src/router/index.ts</code> 新增 <code>/qrcodes</code>
+二维码管理入口。</li>
+<li><code>admin/src/views/cms/index.vue</code>
+新增已发布且启用页面的“二维码”快捷入口，未发布/停用页面按钮禁用。</li>
+<li><code>admin/src/views/products/index.vue</code>
+新增商品二维码快捷生成入口，按商品类型自动选择
+<code>product/activity_product</code>。</li>
+<li>验证：<code>cd admin &amp;&amp; npm run build</code>
+已通过。期间顺手修复 CMS 属性面板、CMS props、CMS
+store、营地/日历/仪表盘/费用统计/绩效等历史 TypeScript
+严格类型错误，解除全量构建阻塞。</li>
+</ul>
+<p><strong>依赖</strong>：Task 3。</p>
+<h3 id="checkpoint-2二维码端到端">Checkpoint 2：二维码端到端</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />后端二维码测试通过。</label></li>
+<li><label><input type="checkbox"
+checked="" />小程序扫码分发类型检查通过。</label></li>
+<li><label><input type="checkbox" checked="" />Admin
+二维码管理代码已实现，Admin 全量构建通过。</label></li>
+</ul>
+<hr />
+<h3 id="phase-3订单高级筛选与导出">Phase 3：订单高级筛选与导出</h3>
+<h4 id="task-6后端订单高级筛选-已完成">Task 6：后端订单高级筛选 ✅
+已完成</h4>
+<p><strong>范围</strong>：扩展
+<code>OrderListParams</code>、<code>order_service.list_orders</code>，支持
+PRD 筛选项和来源字段。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />商品、分类、预定日期、支付时间、金额、核销状态、二维码渠道可筛选。</label></li>
+<li><label><input type="checkbox"
+checked="" />关键词支持订单号、用户昵称、手机号、商品名。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_order_filters.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li>新增
+<code>order_service.build_order_list_query()</code>，统一构造列表/导出可复用筛选条件。</li>
+<li><code>OrderListParams</code>
+扩展商品、品类、预定日期、支付时间、金额区间、核销状态、二维码渠道筛选。</li>
+<li>管理端订单列表已接入新增筛选参数，Admin
+订单页增加对应筛选控件。</li>
+<li>新增 <code>server/tests/test_order_filters.py</code> 覆盖 SQL
+查询条件和关键词跨订单号/用户/手机号/商品名搜索。</li>
+</ul>
+<p><strong>依赖</strong>：Task 1。</p>
+<h4 id="task-7后端订单导出任务-已完成">Task 7：后端订单导出任务 ✅
+已完成</h4>
+<p><strong>范围</strong>：<code>order_export_service.py</code>、私有文件目录、导出任务
+API、Celery 清理任务。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />5000
+行以内可同步完成，超过转异步。</label></li>
+<li><label><input type="checkbox"
+checked="" />下载必须鉴权，文件不在公开目录。</label></li>
+<li><label><input type="checkbox" checked="" />操作日志记录 filters 和
+row_count。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_order_export_service.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li>新增
+<code>server/services/order_export_service.py</code>，导出文件落在
+<code>server/private/exports/orders/{site_id}</code>，不挂载公开静态目录。</li>
+<li>5000 行以内同步生成 CSV 文件；超过阈值保留 <code>pending</code>
+任务，供后续 Celery 异步任务接管。</li>
+<li><code>routers/orders.py</code>
+的导出任务创建、列表、详情、下载接口已接入真实服务。</li>
+<li>导出完成写入 <code>OperationLog</code>，包含
+<code>filters</code>、<code>row_count</code>、<code>task_no</code>、<code>file_format</code>。</li>
+<li>新增 <code>server/tests/test_order_export_service.py</code>
+覆盖私有文件、任务状态、下载校验和操作日志。</li>
+</ul>
+<p><strong>依赖</strong>：Task 6。</p>
+<h4 id="task-8admin-高级筛选与导出任务抽屉-已完成">Task 8：Admin
+高级筛选与导出任务抽屉 ✅ 已完成</h4>
+<p><strong>范围</strong>：订单列表筛选组件、导出弹窗、任务抽屉、blob
+下载。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />筛选条件与列表请求一致。</label></li>
+<li><label><input type="checkbox"
+checked="" />导出使用当前筛选条件。</label></li>
+<li><label><input type="checkbox" checked="" />下载走 blob
+鉴权接口。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> admin</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li><code>admin/src/views/orders/index.vue</code>
+已增加商品、品类、预定日期、支付时间、金额、核销状态、二维码渠道等高级筛选项。</li>
+<li>新增订单导出弹窗，导出请求使用当前筛选条件。</li>
+<li>新增导出任务抽屉，支持任务列表刷新和 completed 任务 blob 下载。</li>
+<li>新增
+<code>admin/src/types/order-export.ts</code>，<code>admin/src/api/order.ts</code>
+接入导出任务创建、列表和下载接口。</li>
+<li>验证：<code>cd admin &amp;&amp; npm run build</code>
+已通过。订单高级筛选、导出任务抽屉和 blob
+下载参与全量类型检查与生产构建。</li>
+</ul>
+<p><strong>依赖</strong>：Task 6、Task 7。</p>
+<h3 id="checkpoint-3订单导出">Checkpoint 3：订单导出</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />订单筛选测试通过。</label></li>
+<li><label><input type="checkbox"
+checked="" />导出文件权限和脱敏经过服务测试覆盖。</label></li>
+<li><label><input type="checkbox" checked="" />Admin
+筛选和导出流程代码已实现，Admin 全量构建通过。</label></li>
+</ul>
+<hr />
+<h3 id="phase-4资金结算">Phase 4：资金结算</h3>
+<h4 id="task-9支付成功-pending-入账-已完成">Task 9：支付成功 pending
+入账 ✅ 已完成</h4>
+<p><strong>范围</strong>：支付回调、模拟支付、FinanceTransaction
+幂等。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />微信回调重复不会重复入账。</label></li>
+<li><label><input type="checkbox" checked="" />支付成功进入
+<code>pending_amount</code>。</label></li>
+<li><label><input type="checkbox"
+checked="" />年卡/次数卡/积分兑换不进入 pending。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_payment_routes.py tests/test_settlement_service.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>实现记录</strong>：</p>
+<ul>
+<li>新增
+<code>server/services/settlement_service.py</code>，支付成功时以
+<code>order_id + site_id + income/pending</code> 查询幂等流水。</li>
+<li>现金类支付方式 <code>wechat_pay/mock_pay</code> 进入
+<code>FinanceAccount.pending_amount</code>，同步增加
+<code>total_income</code>，非现金方式跳过。</li>
+<li><code>order_service.mark_order_paid()</code> 已调用
+<code>record_payment_pending_income()</code>，微信回调和模拟支付共用同一入口。</li>
+<li>新增 <code>server/tests/test_settlement_service.py</code>
+覆盖入账、幂等、非现金跳过。</li>
+</ul>
+<p><strong>依赖</strong>：Task 1。</p>
+<h4 id="task-10订单-completed-自动结算-已完成">Task 10：订单 completed
+自动结算 ✅ 已完成</h4>
+<p><strong>状态</strong>：已完成。</p>
+<p><strong>范围</strong>：<code>settlement_service.py</code>、手动结算
+API、Celery 补偿任务。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />completed 订单从 pending
+转 available。</label></li>
+<li><label><input type="checkbox"
+checked="" />重复完成/重复补偿不重复结算。</label></li>
+<li><label><input type="checkbox" checked="" />pending
+不足时失败且不扣成负数。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_settlement_service.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>依赖</strong>：Task 9。</p>
+<h4 id="task-11admin-财务结算展示-已完成">Task 11：Admin 财务结算展示 ✅
+已完成</h4>
+<p><strong>状态</strong>：已完成。</p>
+<p><strong>范围</strong>：财务概览、结算记录页、订单详情结算状态。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />可查看
+pending/available/settlement 统计。</label></li>
+<li><label><input type="checkbox"
+checked="" />可查看结算记录和失败原因。</label></li>
+<li><label><input type="checkbox" checked="" />super_admin
+可手动重试失败结算。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb11"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> admin</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span></code></pre></div>
+<p><strong>依赖</strong>：Task 10。</p>
+<h3 id="checkpoint-4资金闭环">Checkpoint 4：资金闭环</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />支付入账、订单完成、自动结算、手动重试都可验证。</label></li>
+<li><label><input type="checkbox"
+checked="" />账户余额无负数。</label></li>
+</ul>
+<hr />
+<h3 id="phase-5退款策略升级">Phase 5：退款策略升级</h3>
+<h4 id="task-12后端-refundrecord-主流程-已完成">Task 12：后端
+RefundRecord 主流程 ✅ 已完成</h4>
+<p><strong>状态</strong>：已完成。</p>
+<p><strong>范围</strong>：新退款
+API、RefundRecord/Item、全额/部分/按项退款、keep_order/cancel_order
+状态机。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />退款创建记录完整。</label></li>
+<li><label><input type="checkbox" checked="" />keep_order
+不改变服务状态。</label></li>
+<li><label><input type="checkbox" checked="" />cancel_order
+作废电子票并按规则释放库存。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_refund_service.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>依赖</strong>：Task 1、Task 9。</p>
+<h4 id="task-13微信退款回调与补偿-已完成">Task 13：微信退款回调与补偿 ✅
+已完成</h4>
+<p><strong>状态</strong>：已完成。</p>
+<p><strong>范围</strong>：退款申请、退款通知、主动查询补偿、Finance
+扣减。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />微信退款成功回调幂等更新
+RefundRecord。</label></li>
+<li><label><input type="checkbox" checked="" />未结算订单从 pending
+扣，已结算订单从 available 扣。</label></li>
+<li><label><input type="checkbox" checked="" />available
+不足时审批失败。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb13"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_refund_service.py tests/test_payment_routes.py <span class="at">-v</span></span></code></pre></div>
+<p><strong>依赖</strong>：Task 10、Task 12。</p>
+<h4 id="task-14admin-统一退款弹窗与退款历史-已完成">Task 14：Admin
+统一退款弹窗与退款历史 ✅ 已完成</h4>
+<p><strong>状态</strong>：已完成。</p>
+<p><strong>范围</strong>：订单详情退款弹窗、退款历史、退款审批/拒绝，高危确认。</p>
+<p><strong>验收</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />full/partial/item
+三种模式可提交。</label></li>
+<li><label><input type="checkbox" checked="" />keep_order/cancel_order
+默认库存策略正确。</label></li>
+<li><label><input type="checkbox"
+checked="" />全额退款不取消订单强确认。</label></li>
+</ul>
+<p><strong>验证</strong>：</p>
+<div class="sourceCode" id="cb14"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> admin</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span></code></pre></div>
+<p><strong>依赖</strong>：Task 12、Task 13。</p>
+<h3 id="checkpoint-5退款闭环">Checkpoint 5：退款闭环</h3>
+<ul class="task-list">
+<li><label><input type="checkbox"
+checked="" />微信退款、订单状态、库存、电子票、资金账户一致。</label></li>
+<li><label><input type="checkbox" checked="" />Admin
+高危操作权限正确。</label></li>
+</ul>
+<hr />
+<h2 id="最终验收">3. 最终验收</h2>
+<div class="sourceCode" id="cb15"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest <span class="dt">\</span></span>
+<span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>  tests/test_qrcode_service.py <span class="dt">\</span></span>
+<span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>  tests/test_order_filters.py <span class="dt">\</span></span>
+<span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  tests/test_order_export_service.py <span class="dt">\</span></span>
+<span id="cb15-6"><a href="#cb15-6" aria-hidden="true" tabindex="-1"></a>  tests/test_settlement_service.py <span class="dt">\</span></span>
+<span id="cb15-7"><a href="#cb15-7" aria-hidden="true" tabindex="-1"></a>  tests/test_refund_service.py <span class="dt">\</span></span>
+<span id="cb15-8"><a href="#cb15-8" aria-hidden="true" tabindex="-1"></a>  tests/test_payment_routes.py <span class="dt">\</span></span>
+<span id="cb15-9"><a href="#cb15-9" aria-hidden="true" tabindex="-1"></a>  tests/test_v17_contracts.py <span class="dt">\</span></span>
+<span id="cb15-10"><a href="#cb15-10" aria-hidden="true" tabindex="-1"></a>  tests/test_order_routes.py <span class="at">-v</span></span>
+<span id="cb15-11"><a href="#cb15-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-12"><a href="#cb15-12" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> ../admin</span>
+<span id="cb15-13"><a href="#cb15-13" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build</span>
+<span id="cb15-14"><a href="#cb15-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> ../uni-app</span>
+<span id="cb15-16"><a href="#cb15-16" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run type-check</span>
+<span id="cb15-17"><a href="#cb15-17" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build:wx:xijiao</span>
+<span id="cb15-18"><a href="#cb15-18" aria-hidden="true" tabindex="-1"></a><span class="ex">npm</span> run build:wx:dalonggu</span></code></pre></div>
+<p><strong>2026-06-18 验证记录</strong>：</p>
+<ul class="task-list">
+<li><label><input type="checkbox" checked="" />后端 v1.7 回归：35 tests
+passed。</label></li>
+<li><label><input type="checkbox"
+checked="" />Admin：<code>npm run build</code> passed，仅保留 Vite 大
+chunk 警告。</label></li>
+<li><label><input type="checkbox"
+checked="" />小程序：<code>npm run type-check</code>
+passed。</label></li>
+<li><label><input type="checkbox"
+checked="" />小程序构建：<code>npm run build:wx:xijiao</code>、<code>npm run build:wx:dalonggu</code>
+passed，仅保留 uni-app/Sass 既有弃用警告。</label></li>
+</ul>
+<hr />
+<h2 id="风险与缓解">4. 风险与缓解</h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>风险</th>
+<th>影响</th>
+<th>缓解</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>资金并发导致余额错误</td>
+<td>高</td>
+<td>行级锁、唯一约束、账户非负约束、幂等流水</td>
+</tr>
+<tr>
+<td>退款状态影响旧订单列表</td>
+<td>高</td>
+<td>状态分层，旧接口兼容层只做桥接</td>
+</tr>
+<tr>
+<td>导出泄露敏感数据</td>
+<td>高</td>
+<td>私有目录、鉴权下载、手机号默认脱敏</td>
+</tr>
+<tr>
+<td>小程序码微信接口限流</td>
+<td>中</td>
+<td>access_token 缓存、按错误码重试、批量生成异步化</td>
+</tr>
+<tr>
+<td>分类 tabBar 参数传递失效</td>
+<td>中</td>
+<td>storage + switchTab + onShow 消费</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="上线前检查">5. 上线前检查</h2>
+<p>v1.7 已完成实现与本地验证。进入发布前，按以下顺序做生产前检查：</p>
+<ul>
+<li>审阅并执行 Alembic
+迁移，确认新增表、索引、唯一约束和账户非负约束符合生产数据库状态。</li>
+<li>配置微信小程序码生成所需的各营地
+AppID/AppSecret，确认二维码图片目录可写且不暴露私有导出目录。</li>
+<li>发布后优先验证二维码解析、订单导出下载、支付入账、订单完成结算、退款回调五条闭环。</li>
+</ul>

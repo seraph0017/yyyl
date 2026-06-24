@@ -27,13 +27,93 @@ from models.order import Order, OrderItem, Ticket
 from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product
 from models.user import User
 from redis_client import get_redis
-from services import inventory_service, wechat_pay_service
+from services import inventory_service, settlement_service, wechat_pay_service
 from utils.helpers import generate_order_no, generate_qr_token, generate_ticket_code
 
 logger = logging.getLogger(__name__)
 
+CAMPSITE_PRODUCT_TYPES = {"daily_camping", "event_camping"}
+
 # 排序字段白名单
 ALLOWED_SORT_FIELDS = {"id", "created_at", "actual_amount", "status"}
+
+
+def build_order_list_query(
+    *,
+    site_id: Optional[int] = None,
+    user_id: Optional[int] = None,
+    order_status: Optional[str] = None,
+    order_type: Optional[str] = None,
+    date_start: Optional[date] = None,
+    date_end: Optional[date] = None,
+    payment_time_start: Optional[datetime] = None,
+    payment_time_end: Optional[datetime] = None,
+    amount_min: Optional[Decimal | float | int] = None,
+    amount_max: Optional[Decimal | float | int] = None,
+    keyword: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    product_id: Optional[int] = None,
+    product_type: Optional[str] = None,
+    booking_date_start: Optional[date] = None,
+    booking_date_end: Optional[date] = None,
+    verify_status: Optional[str] = None,
+    source_channel: Optional[str] = None,
+) -> Any:
+    """构造订单列表基础查询，供列表和导出复用。"""
+    query = (
+        select(Order)
+        .options(selectinload(Order.items))
+        .join(Order.user)
+        .join(Order.items)
+        .join(Product, Product.id == OrderItem.product_id)
+        .outerjoin(Ticket, Ticket.order_item_id == OrderItem.id)
+        .where(Order.is_deleted.is_(False))
+    )
+
+    if site_id is not None:
+        query = query.where(Order.site_id == site_id)
+    if user_id:
+        query = query.where(Order.user_id == user_id)
+    if order_status:
+        query = query.where(Order.status == order_status)
+    if order_type:
+        query = query.where(Order.order_type == order_type)
+    if date_start:
+        query = query.where(func.date(Order.created_at) >= date_start)
+    if date_end:
+        query = query.where(func.date(Order.created_at) <= date_end)
+    if payment_time_start:
+        query = query.where(Order.payment_time >= payment_time_start)
+    if payment_time_end:
+        query = query.where(Order.payment_time <= payment_time_end)
+    if amount_min is not None:
+        query = query.where(Order.actual_amount >= Decimal(str(amount_min)))
+    if amount_max is not None:
+        query = query.where(Order.actual_amount <= Decimal(str(amount_max)))
+    if payment_status:
+        query = query.where(Order.payment_status == payment_status)
+    if product_id:
+        query = query.where(OrderItem.product_id == product_id)
+    if product_type:
+        query = query.where(Product.type == product_type)
+    if booking_date_start:
+        query = query.where(OrderItem.date >= booking_date_start)
+    if booking_date_end:
+        query = query.where(OrderItem.date <= booking_date_end)
+    if verify_status:
+        query = query.where(Ticket.verify_status == verify_status)
+    if source_channel:
+        query = query.where(Order.source_channel == source_channel)
+    if keyword:
+        query = query.where(
+            or_(
+                Order.order_no.ilike(f"%{keyword}%"),
+                User.nickname.ilike(f"%{keyword}%"),
+                User.phone.ilike(f"%{keyword}%"),
+                Product.name.ilike(f"%{keyword}%"),
+            )
+        )
+    return query
 
 
 async def create_order(
@@ -47,6 +127,9 @@ async def create_order(
     remark: Optional[str] = None,
     payment_method: str = "wechat_pay",
     times_card_id: Optional[int] = None,
+    source_qrcode_id: Optional[int] = None,
+    source_channel: Optional[str] = None,
+    source_scanned_at: Optional[datetime] = None,
 ) -> Order:
     """创建普通订单
 
@@ -62,6 +145,9 @@ async def create_order(
         remark: 备注
         payment_method: 支付方式
         times_card_id: 次数卡ID
+        source_qrcode_id: 来源小程序码ID
+        source_channel: 来源渠道
+        source_scanned_at: 来源扫码时间
 
     Returns:
         创建的 Order 实例
@@ -99,6 +185,15 @@ async def create_order(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={"code": 40401, "message": f"商品不存在或已下架: id={product_id}"},
                 )
+
+            is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
+            if is_campsite_product and not dates:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": 40916, "message": "营位商品请选择预约日期"},
+                )
+            if not is_campsite_product:
+                dates = []
 
             # 确定订单类型（取第一个商品类型）
             if not order_type:
@@ -145,6 +240,23 @@ async def create_order(
                 })
                 total_amount += actual_price
 
+            # 非营位商品不按日期拆单，直接按购买数量生成一个无日期订单项
+            if not is_campsite_product:
+                unit_price = product.base_price or Decimal("0")
+                actual_price = unit_price * quantity
+                order_items.append({
+                    "product_id": product_id,
+                    "sku_id": sku_id,
+                    "date": None,
+                    "time_slot": time_slot,
+                    "quantity": quantity,
+                    "unit_price": unit_price,
+                    "actual_price": actual_price,
+                    "identity_ids": identity_ids,
+                    "parent_item_id": item_data.get("parent_order_item_id"),
+                })
+                total_amount += actual_price
+
             # 押金（租赁类）
             if product.ext_rental and product.ext_rental.deposit_amount > 0:
                 deposit_amount += product.ext_rental.deposit_amount * quantity
@@ -175,6 +287,9 @@ async def create_order(
             address_id=address_id,
             remark=remark,
             expire_at=datetime.now(timezone.utc) + timedelta(seconds=payment_timeout),
+            source_qrcode_id=source_qrcode_id,
+            source_channel=source_channel,
+            source_scanned_at=source_scanned_at,
         )
         db.add(order)
         await db.flush()
@@ -567,9 +682,29 @@ async def mark_order_paid(
                 order.id, item.sku_id, item.time_slot,
             )
 
+    await settlement_service.record_payment_pending_income(db, order)
     await _generate_tickets(db, order)
     await db.flush()
     return order
+
+
+async def settle_completed_order(
+    db: AsyncSession,
+    order: Order,
+    *,
+    trigger_type: str = "manual",
+):
+    """手动或补偿触发 completed 订单资金结算。"""
+    if order.status != "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40931, "message": "仅已完成订单可结算"},
+        )
+    return await settlement_service.settle_completed_order(
+        db,
+        order,
+        trigger_type=trigger_type,
+    )
 
 
 async def handle_wechat_payment_notification(
@@ -759,6 +894,16 @@ async def list_orders(
     date_end: Optional[date] = None,
     keyword: Optional[str] = None,
     payment_status: Optional[str] = None,
+    product_id: Optional[int] = None,
+    product_type: Optional[str] = None,
+    booking_date_start: Optional[date] = None,
+    booking_date_end: Optional[date] = None,
+    payment_time_start: Optional[datetime] = None,
+    payment_time_end: Optional[datetime] = None,
+    amount_min: Optional[Decimal] = None,
+    amount_max: Optional[Decimal] = None,
+    verify_status: Optional[str] = None,
+    source_channel: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
     sort_by: Optional[str] = None,
@@ -784,32 +929,26 @@ async def list_orders(
     Returns:
         (订单列表, 总数)
     """
-    query = (
-        select(Order)
-        .options(selectinload(Order.items))
-        .where(Order.is_deleted.is_(False))
+    query = build_order_list_query(
+        site_id=site_id,
+        user_id=user_id,
+        order_status=order_status,
+        order_type=order_type,
+        date_start=date_start,
+        date_end=date_end,
+        keyword=keyword,
+        payment_status=payment_status,
+        product_id=product_id,
+        product_type=product_type,
+        booking_date_start=booking_date_start,
+        booking_date_end=booking_date_end,
+        payment_time_start=payment_time_start,
+        payment_time_end=payment_time_end,
+        amount_min=amount_min,
+        amount_max=amount_max,
+        verify_status=verify_status,
+        source_channel=source_channel,
     )
-
-    if site_id is not None:
-        query = query.where(Order.site_id == site_id)
-    if user_id:
-        query = query.where(Order.user_id == user_id)
-    if order_status:
-        query = query.where(Order.status == order_status)
-    if order_type:
-        query = query.where(Order.order_type == order_type)
-    if date_start:
-        query = query.where(func.date(Order.created_at) >= date_start)
-    if date_end:
-        query = query.where(func.date(Order.created_at) <= date_end)
-    if keyword:
-        query = query.where(
-            or_(
-                Order.order_no.ilike(f"%{keyword}%"),
-            )
-        )
-    if payment_status:
-        query = query.where(Order.payment_status == payment_status)
 
     # 总数
     count_query = select(func.count()).select_from(query.subquery())

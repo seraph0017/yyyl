@@ -19,6 +19,7 @@ B端 /api/v1/admin/orders：
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +30,7 @@ from models.admin import AdminUser
 from models.order import Ticket
 from models.user import User
 from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
+from schemas.order_export import OrderExportCreateRequest, OrderExportTaskResponse
 from schemas.order import (
     MockPayRequest,
     OrderCancelRequest,
@@ -43,6 +45,7 @@ from schemas.order import (
     TicketResponse,
 )
 from services import order_service
+from services import order_export_service
 
 router = APIRouter(tags=["订单"])
 
@@ -67,6 +70,9 @@ async def create_order(
         remark=body.remark,
         payment_method=body.payment_method,
         times_card_id=body.times_card_id,
+        source_qrcode_id=body.source_qrcode_id,
+        source_channel=body.source_channel,
+        source_scanned_at=body.source_scanned_at,
     )
     order_detail = await order_service.get_order_detail(db, order.id, user_id=user.id)
     result = OrderResponse.model_validate(order_detail)
@@ -90,6 +96,16 @@ async def list_orders(
         date_end=params.date_end,
         keyword=params.keyword,
         payment_status=params.payment_status,
+        product_id=params.product_id,
+        product_type=params.product_type,
+        booking_date_start=params.booking_date_start,
+        booking_date_end=params.booking_date_end,
+        payment_time_start=params.payment_time_start,
+        payment_time_end=params.payment_time_end,
+        amount_min=params.amount_min,
+        amount_max=params.amount_max,
+        verify_status=params.verify_status,
+        source_channel=params.source_channel,
         page=pagination.page,
         page_size=pagination.page_size,
     )
@@ -243,6 +259,16 @@ async def admin_list_orders(
         date_end=params.date_end,
         keyword=params.keyword,
         payment_status=params.payment_status,
+        product_id=params.product_id,
+        product_type=params.product_type,
+        booking_date_start=params.booking_date_start,
+        booking_date_end=params.booking_date_end,
+        payment_time_start=params.payment_time_start,
+        payment_time_end=params.payment_time_end,
+        amount_min=params.amount_min,
+        amount_max=params.amount_max,
+        verify_status=params.verify_status,
+        source_channel=params.source_channel,
         page=pagination.page,
         page_size=pagination.page_size,
     )
@@ -302,3 +328,108 @@ async def update_shipping(
     )
     result = OrderResponse.model_validate(order)
     return ResponseModel.success(data=result, message="物流信息已更新")
+
+
+@router.post("/api/v1/admin/orders/export", summary="创建订单导出任务")
+async def create_order_export(
+    body: OrderExportCreateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """创建订单导出任务。"""
+    site_id = get_site_id(request)
+    task = await order_export_service.create_order_export_task(
+        db,
+        site_id=site_id,
+        filters=body.filters,
+        file_format=body.file_format,
+        include_sensitive=body.include_sensitive,
+        created_by=admin.id,
+    )
+    return ResponseModel.success(
+        data=OrderExportTaskResponse.model_validate(task).model_dump(mode="json"),
+        message="订单导出任务已创建",
+    )
+
+
+@router.get("/api/v1/admin/orders/export-tasks", summary="订单导出任务列表")
+async def list_order_export_tasks(
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    site_id = get_site_id(request)
+    tasks, total = await order_export_service.list_export_tasks(
+        db,
+        site_id=site_id,
+        page=page,
+        page_size=page_size,
+    )
+    return PaginatedResponse.create(
+        items=[OrderExportTaskResponse.model_validate(task).model_dump(mode="json") for task in tasks],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/api/v1/admin/orders/export-tasks/{task_id}", summary="订单导出任务详情")
+async def get_order_export_task(
+    task_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    site_id = get_site_id(request)
+    task = await order_export_service.get_export_task(db, site_id=site_id, task_id=task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail={"code": "ORDER_EXPORT_NOT_FOUND", "message": "导出任务不存在"})
+    return ResponseModel.success(data=OrderExportTaskResponse.model_validate(task).model_dump(mode="json"))
+
+
+@router.get("/api/v1/admin/orders/export-tasks/{task_id}/download", summary="下载订单导出文件")
+async def download_order_export_task(
+    task_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    site_id = get_site_id(request)
+    file_path = await order_export_service.get_export_download_path(db, site_id=site_id, task_id=task_id)
+    return FileResponse(
+        path=str(file_path),
+        filename=file_path.name,
+        media_type="text/csv",
+    )
+
+
+@router.post("/api/v1/admin/orders/{order_id}/settle", summary="手动触发订单结算")
+async def settle_order(
+    order_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    site_id = get_site_id(request)
+    if not admin.role or admin.role.role_code != "super_admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40301, "message": "仅超级管理员可手动触发结算"},
+        )
+    order = await order_service.get_order_detail(db, order_id)
+    if order.site_id != site_id:
+        raise HTTPException(status_code=404, detail={"code": 40401, "message": "订单不存在"})
+    settlement = await order_service.settle_completed_order(db, order, trigger_type="manual")
+    return ResponseModel.success(
+        data={
+            "site_id": site_id,
+            "order_id": order_id,
+            "status": settlement.status,
+            "amount": str(settlement.amount),
+            "settlement_no": settlement.settlement_no,
+        },
+        message="订单结算已完成",
+    )

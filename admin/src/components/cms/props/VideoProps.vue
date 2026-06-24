@@ -68,16 +68,18 @@ function emitChange() {
 }
 
 function onVideoSelect(assets: CmsAsset[]) {
-  if (assets.length > 0) {
-    localProps.url = assets[0].file_url
+  const asset = assets[0]
+  if (asset) {
+    localProps.url = asset.file_url
     emitChange()
   }
   videoAssetVisible.value = false
 }
 
 function onPosterSelect(assets: CmsAsset[]) {
-  if (assets.length > 0) {
-    localProps.poster = assets[0].file_url
+  const asset = assets[0]
+  if (asset) {
+    localProps.poster = asset.file_url
     emitChange()
   }
   posterAssetVisible.value = false

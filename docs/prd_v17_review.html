@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>一月一露 PRD v1.7 架构师评审报告</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+    :root {
+      color-scheme: light;
+      --bg: #f7f4ed;
+      --paper: #fffdf8;
+      --ink: #20332c;
+      --muted: #66736d;
+      --line: #d9d1c1;
+      --accent: #2d4a3e;
+      --accent-2: #c8a872;
+      --soft: #eef3ef;
+      --danger: #8c3d3d;
+      --warn: #8a5b18;
+    }
+    html { background: var(--bg); color: var(--ink); scroll-behavior: smooth; }
+    body {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 28px 64px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      line-height: 1.75;
+      background: var(--paper);
+      box-shadow: 0 18px 48px rgba(32, 51, 44, 0.12);
+    }
+    header#title-block-header {
+      text-align: left;
+      margin: -32px -28px 28px;
+      padding: 44px 42px 38px;
+      background: linear-gradient(135deg, #243c33 0%, #2d4a3e 58%, #8a7448 100%);
+      color: #fffaf0;
+    }
+    header#title-block-header::before {
+      content: "YYYL ARCHITECT REVIEW";
+      display: block;
+      color: rgba(255, 250, 240, 0.72);
+      font-size: 12px;
+      letter-spacing: 0.18em;
+      margin-bottom: 14px;
+      font-weight: 700;
+    }
+    h1.title { margin: 0; font-size: 34px; line-height: 1.18; letter-spacing: 0; }
+    h1, h2, h3, h4 { color: var(--accent); letter-spacing: 0; }
+    h1 { font-size: 30px; border-bottom: 2px solid var(--accent); padding-bottom: 12px; }
+    h2 { font-size: 24px; margin-top: 42px; border-left: 5px solid var(--accent-2); padding-left: 12px; }
+    h3 { font-size: 19px; margin-top: 28px; }
+    p { margin: 0.78em 0; }
+    a { color: var(--accent); }
+    blockquote {
+      margin: 18px 0 24px;
+      padding: 14px 18px;
+      border-left: 5px solid var(--accent-2);
+      background: #fbf7ec;
+      color: #42534c;
+      border-radius: 0 8px 8px 0;
+    }
+    nav#TOC {
+      margin: 0 0 32px;
+      padding: 18px 20px;
+      background: var(--soft);
+      border: 1px solid #dbe4dc;
+      border-radius: 8px;
+      columns: 2;
+      column-gap: 28px;
+    }
+    nav#TOC::before {
+      content: "目录";
+      display: block;
+      font-weight: 800;
+      color: var(--accent);
+      margin-bottom: 10px;
+      column-span: all;
+    }
+    nav#TOC ul { margin: 0; padding-left: 1.1em; }
+    nav#TOC li { break-inside: avoid; margin: 4px 0; }
+    table {
+      display: table;
+      width: 100%;
+      border-collapse: collapse;
+      margin: 18px 0 26px;
+      background: #fff;
+      border: 1px solid var(--line);
+      font-size: 14px;
+    }
+    thead { background: #edf2ee; }
+    tbody { border-top: none; border-bottom: none; }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 9px 11px;
+      vertical-align: top;
+    }
+    th { color: var(--accent); font-weight: 800; text-align: left; }
+    tr:nth-child(even) td { background: #fffaf1; }
+    code {
+      background: #eef3ef;
+      color: #17392d;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: Menlo, Monaco, Consolas, "SFMono-Regular", monospace;
+    }
+    pre {
+      background: #20382f;
+      color: #f7f2e8;
+      padding: 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    pre code { background: transparent; color: inherit; padding: 0; }
+    strong { color: #233b31; }
+    .line-block { display: none; }
+    @media (max-width: 760px) {
+      body { padding: 18px 14px 44px; box-shadow: none; }
+      header#title-block-header { margin: -18px -14px 22px; padding: 30px 22px; }
+      h1.title { font-size: 26px; }
+      nav#TOC { columns: 1; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+    }
+    @media print {
+      html, body { background: #fff; box-shadow: none; }
+      body { max-width: none; padding: 0; font-size: 11pt; }
+      header#title-block-header { margin: 0 0 18px; color: #000; background: #fff; border-bottom: 2px solid #000; }
+      nav#TOC { columns: 1; page-break-after: always; }
+      h2, h3 { page-break-after: avoid; }
+      table { font-size: 9pt; }
+    }
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">一月一露 PRD v1.7 架构师评审报告</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#一月一露--prd-v17-架构师评审报告"
+id="toc-一月一露--prd-v17-架构师评审报告">一月一露 — PRD v1.7
+架构师评审报告</a>
+<ul>
+<li><a href="#1-总体结论" id="toc-1-总体结论">1. 总体结论</a></li>
+<li><a href="#2-评分明细" id="toc-2-评分明细">2. 评分明细</a></li>
+<li><a href="#3-high-问题" id="toc-3-high-问题">3. HIGH 问题</a>
+<ul>
+<li><a href="#high-01资金结算需要明确并发锁幂等键和负数保护的开发约束"
+id="toc-high-01资金结算需要明确并发锁幂等键和负数保护的开发约束">HIGH-01：资金结算需要明确并发锁、幂等键和负数保护的开发约束</a></li>
+<li><a
+href="#high-02退款状态机需要收敛避免-cancelledrefundedpartial_refunded-语义冲突"
+id="toc-high-02退款状态机需要收敛避免-cancelledrefundedpartial_refunded-语义冲突">HIGH-02：退款状态机需要收敛，避免
+<code>cancelled/refunded/partial_refunded</code> 语义冲突</a></li>
+<li><a href="#high-03二维码渠道归因链路缺少从扫码到下单的持久化规则"
+id="toc-high-03二维码渠道归因链路缺少从扫码到下单的持久化规则">HIGH-03：二维码渠道归因链路缺少从扫码到下单的持久化规则</a></li>
+<li><a href="#high-04订单导出文件的下载权限和生命周期需要更严格"
+id="toc-high-04订单导出文件的下载权限和生命周期需要更严格">HIGH-04：订单导出文件的下载权限和生命周期需要更严格</a></li>
+<li><a href="#high-05小程序码生成需补充微信接口限流失败重试和路径白名单"
+id="toc-high-05小程序码生成需补充微信接口限流失败重试和路径白名单">HIGH-05：小程序码生成需补充微信接口限流、失败重试和路径白名单</a></li>
+</ul></li>
+<li><a href="#4-medium-建议" id="toc-4-medium-建议">4. MEDIUM
+建议</a></li>
+<li><a href="#5-兼容性评估" id="toc-5-兼容性评估">5. 兼容性评估</a></li>
+<li><a href="#6-安全评估" id="toc-6-安全评估">6. 安全评估</a></li>
+<li><a href="#7-结论与下一步" id="toc-7-结论与下一步">7.
+结论与下一步</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="一月一露--prd-v17-架构师评审报告">一月一露 — PRD v1.7
+架构师评审报告</h1>
+<blockquote>
+<p><strong>评审对象</strong>：<code>prd/yyyl_prd_v1.7_increment.html</code>
+/ <code>prd/yyyl_prd_v1.7_increment.md</code><br />
+<strong>评审日期</strong>：2026-06-18<br />
+<strong>评审角色</strong>：架构师 Agent<br />
+<strong>评审结论</strong>：CONDITIONAL APPROVED<br />
+<strong>加权总分</strong>：8.62 / 10<br />
+<strong>状态说明</strong>：可进入三端开发文档拆分，但开发文档必须吸收
+HIGH 问题的约束；CRITICAL 问题为 0。</p>
+</blockquote>
+<hr />
+<h2 id="1-总体结论">1. 总体结论</h2>
+<p>v1.7 PRD 已覆盖用户确认的 6 条需求，并且与现有 v1.6
+CMS、订单、财务、退款、微信支付能力基本衔接。核心方向正确：</p>
+<ol type="1">
+<li>小程序码统一走服务端生成与短码解析，规避微信 scene 长度限制。</li>
+<li>自定义页面二维码复用 v1.6 CMS
+<code>page_code</code>，避免新建重复页面系统。</li>
+<li>订单筛选与导出从同步列表能力升级为可审计导出任务，符合运营规模增长预期。</li>
+<li>资金从 <code>pending_amount</code> 到 <code>available_amount</code>
+的结算流转与现有财务模型匹配。</li>
+<li>退款与取消订单解耦，补足 v1.5 退款增强未覆盖的真实运营场景。</li>
+<li>商家小程序版后台被降为 P2，不阻塞 P0 主链路，优先级合理。</li>
+</ol>
+<p>本轮没有 CRITICAL 阻塞。存在 5 个 HIGH
+问题，主要集中在资金并发一致性、退款状态机、二维码归因链路、导出权限模型和全额退款保留订单的风险边界。建议
+PRD 可进入开发文档拆分，但三端开发文档必须把这些 HIGH
+问题转成可执行技术约束和验收项。</p>
+<hr />
+<h2 id="2-评分明细">2. 评分明细</h2>
+<table>
+<thead>
+<tr>
+<th>评审维度</th>
+<th>权重</th>
+<th>得分</th>
+<th>加权分</th>
+<th>评价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>数据模型完备性</td>
+<td>20%</td>
+<td>8.6</td>
+<td>1.72</td>
+<td>新增 QRCode、ScanLog、ExportTask、Settlement、RefundRecord
+模型方向正确；还需补足唯一约束、金额幂等键、退款状态枚举细节</td>
+</tr>
+<tr>
+<td>API 设计合理性</td>
+<td>20%</td>
+<td>8.5</td>
+<td>1.70</td>
+<td>路径分层清晰，C/B 端边界明确；导出、退款、二维码解析仍需补充响应
+schema 与错误码</td>
+</tr>
+<tr>
+<td>前端架构可行性</td>
+<td>15%</td>
+<td>8.8</td>
+<td>1.32</td>
+<td>Admin 和小程序变更可落地，复用 CMS 合理；移动商家后台 P2
+范围控制得当</td>
+</tr>
+<tr>
+<td>安全性</td>
+<td>20%</td>
+<td>8.3</td>
+<td>1.66</td>
+<td>已考虑导出脱敏、二维码停用、内部路径白名单；仍需加强小程序码开放跳转、导出文件访问控制、退款高危确认</td>
+</tr>
+<tr>
+<td>业务规则严密性</td>
+<td>15%</td>
+<td>8.7</td>
+<td>1.305</td>
+<td>资金、退款、订单取消场景覆盖完整；全额退款不取消订单需更明确默认限制</td>
+</tr>
+<tr>
+<td>系统兼容性</td>
+<td>10%</td>
+<td>9.1</td>
+<td>0.91</td>
+<td>与现有 v1.6
+CMS、FinanceAccount、订单支付回调、软删除、多营地隔离兼容性较好</td>
+</tr>
+<tr>
+<td><strong>总分</strong></td>
+<td><strong>100%</strong></td>
+<td>—</td>
+<td><strong>8.615</strong></td>
+<td><strong>8.62 / 10，CONDITIONAL APPROVED</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-high-问题">3. HIGH 问题</h2>
+<h3
+id="high-01资金结算需要明确并发锁幂等键和负数保护的开发约束">HIGH-01：资金结算需要明确并发锁、幂等键和负数保护的开发约束</h3>
+<p><strong>位置</strong>：需求 4，订单资金结算账户流转。</p>
+<p><strong>问题</strong>：PRD
+已提出“事务锁”“幂等”“账户不得为负”，但还没有明确开发文档必须采用的约束组合。支付回调、退款审批、订单完成结算、Celery
+补偿可能并发操作同一 <code>FinanceAccount</code> 和同一
+<code>Order</code>。如果只靠应用层判断，存在重复入账、重复结算、pending/available
+扣成负数的风险。</p>
+<p><strong>必须修补到开发文档</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入账幂等</td>
+<td>以 <code>payment_no</code> 或微信 <code>transaction_id</code>
+建唯一约束；同一支付通知只能生成一笔 income/pending 流水</td>
+</tr>
+<tr>
+<td>结算幂等</td>
+<td><code>FinanceSettlement(order_id, settlement_no)</code> 或
+<code>order_id + settlement_type</code>
+唯一；<code>Order.settled_amount</code> 更新必须在同一事务内</td>
+</tr>
+<tr>
+<td>行级锁</td>
+<td>资金账户更新使用 <code>SELECT ... FOR UPDATE</code> 锁定
+<code>FinanceAccount</code>；订单结算/退款同时锁定
+<code>Order</code></td>
+</tr>
+<tr>
+<td>非负约束</td>
+<td>数据库层增加
+<code>pending_amount &gt;= 0</code>、<code>available_amount &gt;= 0</code>
+检查约束，或在迁移中给出等价保护</td>
+</tr>
+<tr>
+<td>补偿任务</td>
+<td>Celery 只能处理
+<code>settlement_status in ('unsettled','failed')</code>
+且未完成幂等记录的订单</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3
+id="high-02退款状态机需要收敛避免-cancelledrefundedpartial_refunded-语义冲突">HIGH-02：退款状态机需要收敛，避免
+<code>cancelled/refunded/partial_refunded</code> 语义冲突</h3>
+<p><strong>位置</strong>：需求 5，退款策略升级。</p>
+<p><strong>问题</strong>：PRD 同时出现订单状态
+<code>refunded</code>、<code>cancelled</code>、<code>partial_refunded</code>，并提出“全额退款不取消订单”时订单仍可保持
+<code>paid/verified/completed</code>。这符合业务诉求，但开发文档必须清晰拆分“服务状态”和“支付/退款状态”，否则前端筛选、电子票有效性、库存释放和财务报表会互相打架。</p>
+<p><strong>必须修补到开发文档</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>状态分层</td>
+<td><code>Order.status</code>
+表示服务生命周期，<code>payment_status</code> 表示支付状态，新增/使用
+<code>refund_status</code> 表示退款流程</td>
+</tr>
+<tr>
+<td>保留订单</td>
+<td><code>keep_order</code> 不应把 <code>Order.status</code> 改为
+<code>refunded</code>；只更新 <code>payment_status/refund_status</code>
+和退款记录</td>
+</tr>
+<tr>
+<td>取消订单</td>
+<td><code>cancel_order</code> 才允许更新
+<code>Order.status=cancelled</code> 或指定终态，并作废电子票</td>
+</tr>
+<tr>
+<td>全额退款保留订单</td>
+<td>默认仅 super_admin
+可操作，且电子票是否继续有效必须作为显式字段或强规则写入</td>
+</tr>
+<tr>
+<td>前端筛选</td>
+<td>订单筛选必须同时支持服务状态、支付状态、退款状态，避免一个“状态”字段承载所有语义</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3
+id="high-03二维码渠道归因链路缺少从扫码到下单的持久化规则">HIGH-03：二维码渠道归因链路缺少从扫码到下单的持久化规则</h3>
+<p><strong>位置</strong>：需求 1、需求 3。</p>
+<p><strong>问题</strong>：PRD
+提到扫码日志、<code>Order.source_qrcode_id</code>、<code>source_channel</code>，但没有明确扫码后如何把二维码来源带到后续下单。如果只在解析时记录
+ScanLog，用户跳转商品页后再下单，订单不一定能关联二维码渠道，导出中的
+qrcode/channel 筛选会不准确。</p>
+<p><strong>必须修补到开发文档</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>客户端存储</td>
+<td>小程序扫码解析成功后，把 <code>qrcode_id/channel/scanned_at</code>
+写入本地短期 attribution storage</td>
+</tr>
+<tr>
+<td>TTL</td>
+<td>来源归因默认 TTL 建议 24 小时；同一用户重复扫码以后一次为准</td>
+</tr>
+<tr>
+<td>下单传参</td>
+<td><code>POST /api/v1/orders</code>
+请求体或请求头携带来源；后端校验二维码仍有效后写入 Order</td>
+</tr>
+<tr>
+<td>未登录用户</td>
+<td>未登录扫码也应保留本地来源，登录/下单时补写</td>
+</tr>
+<tr>
+<td>导出字段</td>
+<td>订单导出明确包含来源二维码标题、渠道、扫码时间或归因时间</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3
+id="high-04订单导出文件的下载权限和生命周期需要更严格">HIGH-04：订单导出文件的下载权限和生命周期需要更严格</h3>
+<p><strong>位置</strong>：需求 3，订单高级筛选与导出。</p>
+<p><strong>问题</strong>：PRD 已提出导出文件保存 7
+天、敏感字段脱敏、审计日志，但缺少下载 URL
+的授权方式。若导出文件直接放在 <code>/images</code>
+或可公开访问目录，可能绕过后台权限下载包含订单和手机号的数据。</p>
+<p><strong>必须修补到开发文档</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>存储目录</td>
+<td>导出文件不得放在公开静态目录；应放私有目录，通过认证接口流式下载</td>
+</tr>
+<tr>
+<td>下载鉴权</td>
+<td><code>GET /admin/orders/export-tasks/{id}/download</code> 校验当前
+admin、site_id、导出权限</td>
+</tr>
+<tr>
+<td>链接有效期</td>
+<td>如生成临时下载 token，TTL 不超过 10 分钟，且绑定
+admin_id/export_task_id</td>
+</tr>
+<tr>
+<td>敏感字段</td>
+<td>完整手机号、openid、身份证等默认不导出；完整手机号需单独权限</td>
+</tr>
+<tr>
+<td>清理任务</td>
+<td>Celery 清理过期文件同时更新任务状态或
+<code>file_url=null</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h3
+id="high-05小程序码生成需补充微信接口限流失败重试和路径白名单">HIGH-05：小程序码生成需补充微信接口限流、失败重试和路径白名单</h3>
+<p><strong>位置</strong>：需求 1，小程序码统一生成与管理。</p>
+<p><strong>问题</strong>：PRD
+说明了生成、复用、停用，但没有明确微信接口失败和非法路径的处理策略。二维码生成属于外部
+API 调用，容易受 token
+过期、微信限流、网络失败影响；路径解析如果不做白名单，会形成内部开放跳转风险。</p>
+<p><strong>必须修补到开发文档</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AccessToken</td>
+<td>微信 access_token 必须缓存并在失效时刷新，不可每次生成都获取</td>
+</tr>
+<tr>
+<td>限流重试</td>
+<td>微信接口失败按错误码区分：限流/网络错误可重试，参数错误直接失败</td>
+</tr>
+<tr>
+<td>白名单</td>
+<td>解析返回 path 只能来自后端枚举模板，不接受数据库中的任意 path
+直接跳转</td>
+</tr>
+<tr>
+<td>图片校验</td>
+<td>微信返回图片后校验 Content-Type 和文件大小，防止把错误 JSON
+当图片保存</td>
+</tr>
+<tr>
+<td>批量生成</td>
+<td>若后续支持批量生成，必须走异步任务，避免后台请求超时</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-medium-建议">4. MEDIUM 建议</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>建议</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>M01</td>
+<td>将“活动”命名拆成 <code>activity_product</code> 与
+<code>cms_activity_page</code></td>
+<td>当前 <code>activity_page</code>
+可理解，但开发接口中建议更明确，避免和 Product.type 混淆</td>
+</tr>
+<tr>
+<td>M02</td>
+<td>订单导出建议首期只做 <code>.xlsx</code></td>
+<td>CSV 容易出现编码、换行和手机号科学计数法问题；CSV
+可作为后续扩展</td>
+</tr>
+<tr>
+<td>M03</td>
+<td>FinanceSettlement 增加 <code>trigger_type</code></td>
+<td>区分
+order_completed、celery_compensation、manual_retry，便于审计</td>
+</tr>
+<tr>
+<td>M04</td>
+<td>RefundRecord 增加 <code>risk_level</code></td>
+<td>普通、较高、高危，前端和审计都更清楚</td>
+</tr>
+<tr>
+<td>M05</td>
+<td>商家小程序版后台建议独立路由分包</td>
+<td>P2 实现时避免增加主包体积</td>
+</tr>
+<tr>
+<td>M06</td>
+<td>二维码统计后续可独立报表</td>
+<td>本期只记录 scan log，不必立即做复杂归因分析</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-兼容性评估">5. 兼容性评估</h2>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>评估</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>v1.6 CMS</td>
+<td>兼容。自定义页面二维码基于
+<code>CmsPage.page_code</code>，不破坏现有 CMS 配置结构</td>
+</tr>
+<tr>
+<td>订单模型</td>
+<td>基本兼容。需要新增来源字段、结算字段、退款状态字段，注意与现有枚举同步</td>
+</tr>
+<tr>
+<td>财务模型</td>
+<td>兼容。现有
+<code>pending_amount</code>、<code>available_amount</code>
+可承接新结算语义</td>
+</tr>
+<tr>
+<td>微信支付</td>
+<td>兼容。支付回调增加 pending 入账，退款流程增加 RefundRecord
+主事实表</td>
+</tr>
+<tr>
+<td>多营地隔离</td>
+<td>兼容。PRD 已要求新增表包含
+<code>site_id</code>，开发文档需保持所有查询过滤</td>
+</tr>
+<tr>
+<td>软删除</td>
+<td>兼容。新增表继承 Base 即可</td>
+</tr>
+<tr>
+<td>前端路由</td>
+<td>兼容。小程序新增扫码分发页和 CMS 渲染页 query，Admin
+新增管理入口</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-安全评估">6. 安全评估</h2>
+<table>
+<thead>
+<tr>
+<th>风险</th>
+<th>当前 PRD 覆盖</th>
+<th>评审要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>二维码开放跳转</td>
+<td>部分覆盖</td>
+<td>必须使用后端白名单模板生成 path</td>
+</tr>
+<tr>
+<td>导出敏感信息泄露</td>
+<td>部分覆盖</td>
+<td>文件私有存储 + 下载鉴权 + 短期 token</td>
+</tr>
+<tr>
+<td>高危退款滥用</td>
+<td>部分覆盖</td>
+<td>全额退款保留订单仅 super_admin，强制备注和二次确认</td>
+</tr>
+<tr>
+<td>财务重复入账</td>
+<td>部分覆盖</td>
+<td>唯一约束 + 行级锁 + 幂等流水</td>
+</tr>
+<tr>
+<td>多营地数据串读</td>
+<td>覆盖</td>
+<td>所有新增 API 必须强制 site_id 过滤</td>
+</tr>
+<tr>
+<td>扫码日志隐私</td>
+<td>部分覆盖</td>
+<td>openid/user_id 仅用于归因，不导出给普通 admin</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-结论与下一步">7. 结论与下一步</h2>
+<p>评审结论：<strong>CONDITIONAL APPROVED，8.62 / 10</strong>。</p>
+<p>v1.7 PRD 可以进入三端开发文档拆分阶段。拆分时必须把 5 个 HIGH
+问题转写为后端、管理后台、小程序三端的开发约束：</p>
+<ol type="1">
+<li>后端开发文档重点补资金锁、幂等、退款状态机、导出私有下载、小程序码微信接口封装。</li>
+<li>管理后台开发文档重点补订单多状态筛选、导出权限、退款高危确认、二维码管理状态展示。</li>
+<li>小程序开发文档重点补扫码分发页、归因本地存储、CMS
+页面跳转、错误页。</li>
+</ol>
+<p>若开发文档吸收上述 HIGH 问题，预计三端文档可达到 APPROVED
+标准；若忽略 HIGH 问题，则资金与退款模块存在生产级风险。</p>
+</body>
+</html>

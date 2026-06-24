@@ -20,6 +20,9 @@ class OrderRouteTest(unittest.IsolatedAsyncioTestCase):
             remark=None,
             payment_method="wechat_pay",
             times_card_id=None,
+            source_qrcode_id=9,
+            source_channel="poster",
+            source_scanned_at="2026-06-18T14:00:00Z",
         )
 
         with (
@@ -39,6 +42,9 @@ class OrderRouteTest(unittest.IsolatedAsyncioTestCase):
             remark=None,
             payment_method="wechat_pay",
             times_card_id=None,
+            source_qrcode_id=9,
+            source_channel="poster",
+            source_scanned_at="2026-06-18T14:00:00Z",
         )
         get_order_detail.assert_awaited_once_with(db, 12, user_id=7)
         model_validate.assert_called_once_with(order_detail)

@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>v1.7 管理后台开发文档评审报告</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    html {
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      overflow-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 12px;
+      }
+      h1 {
+        font-size: 1.8em;
+      }
+    }
+    @media print {
+      html {
+        background-color: white;
+      }
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    svg {
+      height: auto;
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      white-space: pre-wrap;
+      font-family: Menlo, Monaco, Consolas, 'Lucida Console', monospace;
+      font-size: 85%;
+      margin: 0;
+      hyphens: manual;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+      overflow-wrap: normal;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #1a1a1a;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC ul {
+      padding-left: 1.3em;
+    }
+    #TOC > ul {
+      padding-left: 0;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+
+    :root { color-scheme: light; --bg:#f7f4ed; --paper:#fffdf8; --ink:#20332c; --line:#d9d1c1; --accent:#2d4a3e; --accent-2:#c8a872; --soft:#eef3ef; }
+    html{background:var(--bg); color:var(--ink);} body{max-width:1100px; margin:0 auto; padding:32px 28px 64px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; line-height:1.72; background:var(--paper); box-shadow:0 18px 48px rgba(32,51,44,.12);} header#title-block-header{text-align:left; margin:-32px -28px 28px; padding:44px 42px 38px; background:linear-gradient(135deg,#243c33 0%,#2d4a3e 58%,#8a7448 100%); color:#fffaf0;} header#title-block-header::before{content:"YYYL DEVELOPMENT REVIEW"; display:block; color:rgba(255,250,240,.72); font-size:12px; letter-spacing:.18em; margin-bottom:14px; font-weight:700;} h1.title{margin:0; font-size:34px; line-height:1.18;} h1,h2,h3{color:var(--accent);} h1{font-size:30px; border-bottom:2px solid var(--accent); padding-bottom:12px;} h2{font-size:24px; margin-top:42px; border-left:5px solid var(--accent-2); padding-left:12px;} h3{font-size:19px; margin-top:28px;} blockquote{margin:18px 0 24px; padding:14px 18px; border-left:5px solid var(--accent-2); background:#fbf7ec; color:#42534c; border-radius:0 8px 8px 0;} nav#TOC{margin:0 0 32px; padding:18px 20px; background:var(--soft); border:1px solid #dbe4dc; border-radius:8px;} nav#TOC::before{content:"目录"; display:block; font-weight:800; color:var(--accent); margin-bottom:10px;} table{display:table; width:100%; border-collapse:collapse; margin:18px 0 26px; background:#fff; border:1px solid var(--line); font-size:14px;} thead{background:#edf2ee;} tbody{border-top:none; border-bottom:none;} th,td{border:1px solid var(--line); padding:9px 11px; vertical-align:top;} th{color:var(--accent); font-weight:800; text-align:left;} tr:nth-child(even) td{background:#fffaf1;} code{background:#eef3ef; color:#17392d; border-radius:4px; padding:1px 5px; font-family:Menlo,Monaco,Consolas,"SFMono-Regular",monospace;} pre{background:#20382f; color:#f7f2e8; padding:16px; border-radius:8px; overflow-x:auto;} pre code{background:transparent; color:inherit; padding:0;} @media(max-width:760px){body{padding:18px 14px 44px; box-shadow:none;} header#title-block-header{margin:-18px -14px 22px; padding:30px 22px;} table{display:block; overflow-x:auto; white-space:nowrap;}}
+
+  </style>
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">v1.7 管理后台开发文档评审报告</h1>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#v17-管理后台开发文档评审报告"
+id="toc-v17-管理后台开发文档评审报告">v1.7 管理后台开发文档评审报告</a>
+<ul>
+<li><a href="#1-评分明细" id="toc-1-评分明细">1. 评分明细</a></li>
+<li><a href="#2-结论" id="toc-2-结论">2. 结论</a></li>
+<li><a href="#3-实现阶段注意" id="toc-3-实现阶段注意">3.
+实现阶段注意</a></li>
+<li><a href="#4-验收建议" id="toc-4-验收建议">4. 验收建议</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="v17-管理后台开发文档评审报告">v1.7 管理后台开发文档评审报告</h1>
+<blockquote>
+<p><strong>评审对象</strong>：<code>docs/v1.7_admin_dev.html</code> /
+<code>docs/v1.7_admin_dev.md</code><br />
+<strong>评审日期</strong>：2026-06-18<br />
+<strong>评审角色</strong>：Admin 开发 Agent<br />
+<strong>评审结论</strong>：APPROVED<br />
+<strong>加权总分</strong>：8.66 / 10</p>
+</blockquote>
+<hr />
+<h2 id="1-评分明细">1. 评分明细</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>权重</th>
+<th>得分</th>
+<th>加权分</th>
+<th>评价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>API 接口完整性</td>
+<td>25%</td>
+<td>8.6</td>
+<td>2.15</td>
+<td>API 模块覆盖二维码、导出、退款；结算 API 写法需实现时与后端 schema
+对齐</td>
+</tr>
+<tr>
+<td>数据模型可执行性</td>
+<td>20%</td>
+<td>8.5</td>
+<td>1.70</td>
+<td>类型定义覆盖核心字段；部分字段可在后端 schema 确定后微调</td>
+</tr>
+<tr>
+<td>技术方案兼容性</td>
+<td>25%</td>
+<td>8.8</td>
+<td>2.20</td>
+<td>符合 Vue3 + Element Plus + Pinia/本地状态现有模式</td>
+</tr>
+<tr>
+<td>业务规则严密性</td>
+<td>15%</td>
+<td>8.7</td>
+<td>1.305</td>
+<td>高级筛选、导出脱敏、高危退款确认、CMS 未发布禁用二维码均覆盖</td>
+</tr>
+<tr>
+<td>可开发性</td>
+<td>15%</td>
+<td>8.7</td>
+<td>1.305</td>
+<td>页面、组件、路由、验证项清晰</td>
+</tr>
+<tr>
+<td><strong>总分</strong></td>
+<td><strong>100%</strong></td>
+<td>—</td>
+<td><strong>8.66</strong></td>
+<td><strong>8.66 / 10</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-结论">2. 结论</h2>
+<p>Admin 开发文档达到可开发标准。文档清楚区分了：</p>
+<ul>
+<li>二维码管理页与业务页面快捷入口。</li>
+<li>订单列表筛选与导出任务抽屉。</li>
+<li>退款创建弹窗与退款审批接口。</li>
+<li>财务概览与结算记录页。</li>
+</ul>
+<h2 id="3-实现阶段注意">3. 实现阶段注意</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AD-01</td>
+<td>导出下载必须使用 blob 鉴权接口，不能使用静态 URL</td>
+</tr>
+<tr>
+<td>AD-02</td>
+<td>全额退款不取消订单必须隐藏给非 super_admin</td>
+</tr>
+<tr>
+<td>AD-03</td>
+<td><code>pages/category/index</code> 是小程序
+tabBar，二维码说明里不要展示不可用的 redirectTo 路径</td>
+</tr>
+<tr>
+<td>AD-04</td>
+<td>高级筛选条件较多，移动宽度下应折叠，不要撑破页面</td>
+</tr>
+<tr>
+<td>AD-05</td>
+<td>CMS 页面二维码按钮必须以 <code>current_version_id</code>
+判断发布状态</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-验收建议">4. 验收建议</h2>
+<ul>
+<li><code>npm run build</code></li>
+<li>手工覆盖二维码、筛选、导出、退款、结算 5 条主流程。</li>
+</ul>
+</body>
+</html>

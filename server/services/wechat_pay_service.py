@@ -121,10 +121,16 @@ async def create_jsapi_prepay(order: Any, site_id: int = 1) -> Dict[str, Any]:
     return build_mini_program_pay_params(config, prepay_id)
 
 
-async def create_refund(order: Any, refund_amount: Decimal, reason: str | None = None, site_id: int = 1) -> Dict[str, Any]:
+async def create_refund(
+    order: Any,
+    refund_amount: Decimal,
+    reason: str | None = None,
+    site_id: int = 1,
+    out_refund_no: str | None = None,
+) -> Dict[str, Any]:
     """申请微信支付退款。"""
     config = get_wechat_pay_config(site_id)
-    out_refund_no = f"R{order.order_no}{_utc_timestamp()}"
+    out_refund_no = out_refund_no or f"R{order.order_no}{_utc_timestamp()}"
     payload = {
         "out_trade_no": order.order_no,
         "out_refund_no": out_refund_no,

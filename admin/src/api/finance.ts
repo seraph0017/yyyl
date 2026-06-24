@@ -1,5 +1,12 @@
 import { get, post } from '@/utils/request'
-import type { FinanceOverview, FinanceTransaction, TransactionSearchParams, PaginatedResponse } from '@/types'
+import type {
+  FinanceOverview,
+  FinanceSettlement,
+  FinanceTransaction,
+  PaginatedResponse,
+  SettlementSearchParams,
+  TransactionSearchParams,
+} from '@/types'
 
 export function getFinanceOverview() {
   return get<{ data: FinanceOverview }>('/admin/finance/overview')
@@ -19,4 +26,8 @@ export function getDepositRecords(params?: { page?: number; page_size?: number }
 
 export function refundDeposit(depositId: number, data: { amount: number; reason: string }) {
   return post(`/admin/finance/deposits/${depositId}/refund`, data)
+}
+
+export function getSettlements(params: SettlementSearchParams) {
+  return get<{ data: PaginatedResponse<FinanceSettlement> }>('/admin/finance/settlements', params)
 }

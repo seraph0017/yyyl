@@ -64,6 +64,9 @@ from models.finance import (  # noqa: F401
     FinanceTransaction,
 )
 
+# v1.7 资金结算模块 (1张表)
+from models.settlement import FinanceSettlement  # noqa: F401
+
 # 管理模块 (7张表)
 from models.admin import (  # noqa: F401
     AdminPermission,
@@ -115,4 +118,15 @@ from models.cms import (  # noqa: F401
     CmsPageVersion,
 )
 
-# 所有模型总计: 4 + 11 + 3 + 5 + 9 + 3 + 7 + 5 + 1 + 3 + 2 + 3 + 4 = 60 张表
+# v1.7 小程序码/退款/导出模块 (5张表)
+from models.export_task import OrderExportTask  # noqa: F401
+from models.qrcode import (  # noqa: F401
+    MiniProgramQRCode,
+    MiniProgramQRCodeScanLog,
+)
+from models.refund import (  # noqa: F401
+    RefundRecord,
+    RefundRecordItem,
+)
+
+# 所有模型总计: 60 + 6 = 66 张表

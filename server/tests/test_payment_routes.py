@@ -38,7 +38,7 @@ class PaymentRouteTest(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(payments.wechat_pay_service, "parse_notification_body", AsyncMock(return_value=refund)) as parse_body,
-            patch.object(payments.order_service, "handle_wechat_refund_notification", AsyncMock()) as handle_notify,
+            patch.object(payments.refund_service, "handle_wechat_refund_notification", AsyncMock()) as handle_notify,
         ):
             result = await payments.wechat_refund_notify(request, db=db)
 

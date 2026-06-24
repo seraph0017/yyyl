@@ -11,11 +11,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 
 from celery_app import celery_app
-from models.order import Order, OrderItem, Ticket
-from models.product import Inventory, InventoryLog
-from models.finance import FinanceAccount, FinanceTransaction
-from tasks.helpers import get_sync_db, get_sync_redis, task_monitor
-from utils.helpers import generate_transaction_no
+from models.order import Order, Ticket
+from services import settlement_service
+from tasks.helpers import get_sync_db, task_monitor
 
 logger = logging.getLogger("celery.tasks.order")
 
@@ -87,7 +85,7 @@ def task_auto_complete_orders(self):
     逻辑：
     - 扫描 status='verified' 且验票日期已过1天的订单
     - 流转为 completed
-    - 生成收入确认交易流水
+    - 通过 settlement_service 幂等结算到可提现账户
     """
     now = datetime.now(timezone.utc)
     threshold = now - timedelta(days=1)
@@ -127,30 +125,11 @@ def task_auto_complete_orders(self):
                 # 订单完成
                 order.status = "completed"
 
-                # 创建收入确认流水
-                tx = FinanceTransaction(
-                    transaction_no=generate_transaction_no("IC"),
-                    type="income",
-                    amount=order.actual_amount,
-                    account_type="pending",
-                    from_account="pending",
-                    to_account="available",
-                    status="confirmed",
-                    remark=f"订单自动完成确认收入 order_id={order.id}",
-                    order_id=order.id,
-                    site_id=1,
+                settlement_service.settle_completed_order_sync(
+                    db,
+                    order,
+                    trigger_type="auto",
                 )
-                db.add(tx)
-
-                # 更新财务账户
-                account = db.execute(
-                    select(FinanceAccount).where(FinanceAccount.site_id == 1)
-                ).scalar_one_or_none()
-
-                if account:
-                    account.pending_amount -= order.actual_amount
-                    account.available_amount += order.actual_amount
-
                 completed += 1
                 logger.info(f"[订单完成] order_id={order.id}")
 
