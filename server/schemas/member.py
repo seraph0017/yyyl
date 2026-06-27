@@ -10,9 +10,71 @@
 import re
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+
+# ---- 统一会员卡 ----
+
+class MembershipCardConfigSchema(BaseModel):
+    """统一会员卡配置"""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int = Field(description="配置ID")
+    card_kind: Literal["annual", "times"] = Field(description="卡类型")
+    usage_mode: Literal["unlimited", "limited_times"] = Field(description="使用模式")
+    config_name: str = Field(description="配置名称")
+    status: str = Field(description="状态")
+
+    start_date: Optional[date] = Field(default=None, description="开始日期")
+    end_date: Optional[date] = Field(default=None, description="结束日期")
+    remaining_days: Optional[int] = Field(default=None, description="剩余天数")
+    total_times: Optional[int] = Field(default=None, description="总次数")
+    remaining_times: Optional[int] = Field(default=None, description="剩余次数")
+    daily_limit: Optional[int] = Field(default=None, description="每日限额")
+    applicable_products: List[int] = Field(default_factory=list, description="适用商品")
+
+    # 兼容旧配置字段
+    card_name: Optional[str] = Field(default=None, description="旧字段：卡名称")
+    price: Optional[Decimal] = Field(default=None, description="旧字段：价格")
+    duration_days: Optional[int] = Field(default=None, description="旧字段：有效天数")
+    privileges: Dict[Any, Any] = Field(default_factory=dict, description="旧字段：权益说明")
+    daily_limit_position: Optional[int] = Field(default=None, description="旧字段：按位置每日限额")
+    daily_limit_quantity: Optional[int] = Field(default=None, description="旧字段：按人数每日限额")
+    max_consecutive_days: Optional[int] = Field(default=None, description="旧字段：最大连续天数")
+    gap_days: Optional[int] = Field(default=None, description="旧字段：中断天数")
+    refund_days: Optional[int] = Field(default=None, description="旧字段：退款期（天）")
+    validity_days: Optional[int] = Field(default=None, description="旧字段：有效天数")
+
+
+class MembershipCardInfo(BaseModel):
+    """统一会员卡实例"""
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: int = Field(description="卡ID")
+    user_id: int = Field(description="用户ID")
+    config_id: int = Field(description="配置ID")
+    card_kind: Literal["annual", "times"] = Field(description="卡类型")
+    usage_mode: Literal["unlimited", "limited_times"] = Field(description="使用模式")
+    config_name: str = Field(description="配置名称")
+    status: str = Field(description="状态")
+    start_date: date = Field(description="开始日期")
+    end_date: date = Field(description="结束日期")
+    remaining_days: Optional[int] = Field(default=None, description="剩余天数")
+    total_times: Optional[int] = Field(default=None, description="总次数")
+    remaining_times: Optional[int] = Field(default=None, description="剩余次数")
+    daily_limit: Optional[int] = Field(default=None, description="每日限额")
+    applicable_products: List[int] = Field(default_factory=list, description="适用商品")
+
+    # 兼容旧字段
+    order_id: Optional[int] = Field(default=None, description="旧字段：订单ID")
+    activated_at: Optional[datetime] = Field(default=None, description="旧字段：激活时间")
+    real_name: Optional[str] = Field(default=None, description="旧字段：实名")
+    id_card_masked: Optional[str] = Field(default=None, description="旧字段：身份证号脱敏")
+    created_at: Optional[datetime] = Field(default=None, description="创建时间")
 
 
 # ---- 年卡配置 ----
@@ -82,6 +144,14 @@ class AnnualCardPurchaseRequest(BaseModel):
         v = v.strip()
         if not re.match(r"^\d{17}[\dXx]$", v):
             raise ValueError("身份证号格式不正确")
+        return v.upper()
+
+    @field_validator("payment_method")
+    @classmethod
+    def validate_payment_method(cls, v: str) -> str:
+        allowed = {"wechat_pay", "mock_pay"}
+        if v not in allowed:
+            raise ValueError(f"支付方式必须为 {allowed} 之一")
         return v
 
 

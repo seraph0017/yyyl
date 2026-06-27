@@ -43,7 +43,7 @@
     <!-- 价格信息 -->
     <view class="detail-price card">
       <view class="detail-price__row">
-        <PriceTag :price="product.current_price" :originalPrice="product.original_price" size="large" unit="/晚" />
+        <PriceTag :price="product.current_price" :originalPrice="product.original_price" size="large" :unit="priceUnit" />
         <view class="detail-price__tags">
           <text class="tag tag--orange" v-for="tag in product.tags" :key="tag">{{ tag }}</text>
         </view>
@@ -107,6 +107,21 @@
         <text class="detail-date__weather-rain" v-if="selectedWeather.precipitation_probability">
           降水{{ selectedWeather.precipitation_probability }}%
         </text>
+      </view>
+    </view>
+
+    <!-- 规格选择 -->
+    <view class="detail-sku card" v-if="skuOptions.length > 0">
+      <view class="detail-section-title">选择规格</view>
+      <view class="detail-sku__list">
+        <view
+          v-for="sku in skuOptions"
+          :key="sku.id"
+          :class="['detail-sku__item', selectedSkuId === sku.id ? 'detail-sku__item--active' : '', isSkuOptionDisabled(sku) ? 'detail-sku__item--disabled' : '']"
+          @tap.stop="onSelectSku(sku.id)"
+        >
+          <text>{{ formatSkuLabel(sku.spec_values) || sku.sku_code }}</text>
+        </view>
       </view>
     </view>
 
@@ -198,7 +213,7 @@
               item.isSelected ? 'calendar-day--selected' : '',
               item.isToday ? 'calendar-day--today' : '',
               (item.isCheckIn && checkOutDate) ? 'calendar-day--has-checkout' : '',
-              !item.isAvailable || item.isPast ? 'calendar-day--disabled' : ''
+              (!item.isAvailable && !canUseAsCheckoutDate(item)) || item.isPast ? 'calendar-day--disabled' : ''
             ]"
             @tap="onSelectDate(item)"
           >
@@ -209,7 +224,7 @@
             <text class="calendar-day__tag" v-if="item.isCheckIn && item.isCurrentMonth">入住</text>
             <text class="calendar-day__tag" v-else-if="item.isCheckOut && item.isCurrentMonth">离店</text>
             <text class="calendar-day__price" v-else-if="item.isCurrentMonth && item.isAvailable && item.price > 0">¥{{ item.price }}</text>
-            <text class="calendar-day__label" v-if="item.isCurrentMonth && !item.isAvailable && !item.isPast">售罄</text>
+            <text class="calendar-day__label" v-if="item.isCurrentMonth && !item.isAvailable && !item.isPast && !canUseAsCheckoutDate(item)">售罄</text>
           </view>
         </view>
 
@@ -271,12 +286,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
-import { get, resolveImageUrl } from '@/utils/request'
+import { get, post, resolveImageUrl } from '@/utils/request'
 import { isCampsiteProduct, isRetailProduct, normalizeProductCategory } from '@/utils/product-rules'
+import { recordPageView } from '@/utils/analytics'
 import { brandConfig } from '@/config/sites'
 import PriceTag from '@/components/price-tag/index.vue'
 import Countdown from '@/components/countdown/index.vue'
-import type { IProduct, IProductAttribute, IWeatherForecast, IWeatherForecastResponse, ProductCategory } from '@/types'
+import type {
+  IPriceCalendarItem,
+  IProduct,
+  IProductAttribute,
+  IProductSku,
+  IWeatherForecast,
+  IWeatherForecastResponse,
+  ProductCategory,
+} from '@/types'
 
 /** 状态栏 + 导航栏高度 */
 const systemInfo = uni.getSystemInfoSync()
@@ -289,6 +313,8 @@ interface ICalendarDay {
   price: number
   dateType: string
   stock: number
+  inventorySource?: string
+  inventoryPoolId?: number | null
   isAvailable: boolean
   isSelected: boolean
   isToday: boolean
@@ -300,6 +326,15 @@ interface ICalendarDay {
 }
 
 const product = ref<IProduct | null>(null)
+const selectedSkuId = ref<number | null>(null)
+const skuOptions = computed(() => product.value?.skus || [])
+const selectedSku = computed(() => skuOptions.value.find(item => item.id === selectedSkuId.value) || null)
+const priceUnit = computed(() => {
+  if (!product.value) return ''
+  if (isCampsiteProduct(product.value.category)) return '/晚'
+  if (isRetailProduct(product.value.category)) return '/件'
+  return ''
+})
 const swiperCurrent = ref(0)
 const selectedDates = ref<string[]>([])       // 住宿日期（入住~离店前一天）
 const checkInDate = ref<string | null>(null)   // 入住日期
@@ -319,6 +354,8 @@ const loading = ref(true)
 const isFavorite = ref(false)
 const notStarted = ref(false)
 const weatherForecasts = ref<IWeatherForecast[]>([])
+const priceCalendarMap = ref<Record<string, IPriceCalendarItem>>({})
+const loadedCalendarMonths = ref<Record<string, boolean>>({})
 const disclaimerLines = computed(() => disclaimerText.value.split('\n').filter(line => line.trim()))
 const selectedWeather = computed(() => {
   if (checkInDate.value) {
@@ -403,26 +440,184 @@ async function loadProduct(id: number) {
       status: detail.status || 'on_sale',
       tags,
       attributes,
-      stock: 0,
+      stock: Number(detail.stock || 0),
       sales_count: 0,
       ticket_start_time: detail.sale_start_at || null,
       is_seckill: detail.is_seckill || false,
       has_disclaimer: detail.require_disclaimer !== false,
       identity_mode: 'optional',
       deposit_amount: detail.ext_rental?.deposit_amount || 0,
+      skus: (detail.skus || []).map((sku: any): IProductSku => ({
+        id: Number(sku.id),
+        product_id: Number(sku.product_id || detail.id),
+        sku_code: sku.sku_code || '',
+        spec_values: sku.spec_values || {},
+        price: Number(sku.price || 0),
+        stock: Number(sku.stock || 0),
+        status: sku.status || 'active',
+        image_url: sku.image_url || null,
+      })),
+    }
+    const firstActiveSku = p.skus?.find(sku => sku.status === 'active' && sku.stock > 0) || p.skus?.find(sku => sku.status === 'active')
+    if (firstActiveSku) {
+      selectedSkuId.value = firstActiveSku.id
+      p.current_price = firstActiveSku.price || p.current_price
+      p.stock = firstActiveSku.stock
     }
 
     disclaimerText.value = '1. 参与者确认已充分了解户外露营活动的风险性，自愿参加本次露营活动。\n2. 参与者应遵守营地管理规定，爱护公共设施，保持环境整洁。\n3. 参与者对自身及随行人员的安全负有责任。\n4. 如遇极端天气或不可抗力因素，营地有权调整或取消活动。\n5. 参与者应妥善管理个人财物，营地对个人财物遗失不承担赔偿责任。\n6. 未成年人须在监护人陪同下参加露营活动。\n7. 禁止在非指定区域使用明火，违规产生的一切后果由参与者自行承担。'
 
     product.value = p
+    recordPageView(`product:${p.id}`, p.name)
     notStarted.value = !!p.ticket_start_time && new Date(p.ticket_start_time).getTime() > Date.now()
-    loading.value = false
-
+    if (isCampsiteProduct(p.category)) {
+      await loadPriceCalendarForCurrentMonth()
+    }
     generateCalendar()
+    loading.value = false
   } catch (err) {
     console.error('加载商品详情失败:', err)
     loading.value = false
     uni.showToast({ title: '加载失败', icon: 'none' })
+  }
+}
+
+function formatDateParts(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+function parseCalendarItem(item: Record<string, any>): IPriceCalendarItem {
+  return {
+    date: String(item.date),
+    date_type: item.date_type || '',
+    price: Number(item.price || 0),
+    available: Number(item.available || 0),
+    status: item.status || 'closed',
+    inventory_source: item.inventory_source || 'inventory',
+    inventory_pool_id: item.inventory_pool_id ?? null,
+  }
+}
+
+async function loadPriceCalendarForCurrentMonth(force = false) {
+  const p = product.value
+  if (!p || !isCampsiteProduct(p.category)) return
+
+  const year = calendarYear.value
+  const month = calendarMonth.value
+  const monthKey = `${year}-${String(month).padStart(2, '0')}`
+  if (!force && loadedCalendarMonths.value[monthKey]) return
+
+  const lastDay = new Date(year, month, 0).getDate()
+  const dateStart = formatDateParts(year, month, 1)
+  const dateEnd = formatDateParts(year, month, lastDay)
+
+  const rows = await get<Record<string, any>[]>(
+    `/products/${p.id}/price-calendar`,
+    {
+      date_start: dateStart,
+      date_end: dateEnd,
+      ...(selectedSkuId.value ? { sku_id: selectedSkuId.value } : {}),
+    },
+    { needAuth: false, showError: false },
+  )
+  const nextMap = { ...priceCalendarMap.value }
+  for (const row of rows || []) {
+    const item = parseCalendarItem(row)
+    nextMap[item.date] = item
+  }
+  priceCalendarMap.value = nextMap
+  loadedCalendarMonths.value = { ...loadedCalendarMonths.value, [monthKey]: true }
+  updateProductCalendarSummary(dateStart, dateEnd)
+}
+
+async function ensurePriceCalendarForDate(dateStr: string) {
+  const [yearStr, monthStr] = dateStr.split('-')
+  const originalYear = calendarYear.value
+  const originalMonth = calendarMonth.value
+  calendarYear.value = Number(yearStr)
+  calendarMonth.value = Number(monthStr)
+  await loadPriceCalendarForCurrentMonth()
+  calendarYear.value = originalYear
+  calendarMonth.value = originalMonth
+}
+
+function isDateAvailable(dateStr: string): boolean {
+  const item = priceCalendarMap.value[dateStr]
+  return !!item && item.status === 'open' && Number(item.available || 0) > 0
+}
+
+function getCalendarPriceForDate(dateStr: string): number {
+  return Number(priceCalendarMap.value[dateStr]?.price || 0)
+}
+
+function formatSkuLabel(specValues: Record<string, string>): string {
+  return Object.values(specValues || {}).filter(Boolean).join(' / ')
+}
+
+function isSkuOptionDisabled(sku: IProductSku): boolean {
+  return sku.status !== 'active' || (isRetailProduct(product.value?.category) && sku.stock <= 0)
+}
+
+async function onSelectSku(skuId: number) {
+  const sku = skuOptions.value.find(item => item.id === skuId)
+  if (!sku || isSkuOptionDisabled(sku)) {
+    uni.showToast({ title: '该规格暂无库存', icon: 'none' })
+    return
+  }
+  selectedSkuId.value = sku.id
+  if (product.value) {
+    product.value = {
+      ...product.value,
+      current_price: sku.price || product.value.current_price,
+      stock: sku.stock,
+    }
+  }
+  if (quantity.value > sku.stock) quantity.value = Math.max(1, sku.stock)
+  selectedDates.value = []
+  checkInDate.value = null
+  checkOutDate.value = null
+  loadedCalendarMonths.value = {}
+  priceCalendarMap.value = {}
+  try {
+    await loadPriceCalendarForCurrentMonth(true)
+  } catch {
+    uni.showToast({ title: '规格日历加载失败，请稍后重试', icon: 'none' })
+  }
+  generateCalendar()
+  calcPrice()
+}
+
+async function validateSelectedDateRange(startDate: string, endDate: string): Promise<boolean> {
+  const start = parseLocalDate(startDate)
+  const end = parseLocalDate(endDate)
+  const cursor = new Date(start)
+
+  while (cursor < end) {
+    const dateStr = formatDateParts(cursor.getFullYear(), cursor.getMonth() + 1, cursor.getDate())
+    await ensurePriceCalendarForDate(dateStr)
+    if (!isDateAvailable(dateStr)) {
+      uni.showToast({ title: `${formatDateShort(dateStr)} 已售罄或不可预定`, icon: 'none' })
+      return false
+    }
+    cursor.setDate(cursor.getDate() + 1)
+  }
+  return true
+}
+
+function updateProductCalendarSummary(dateStart: string, dateEnd: string) {
+  const p = product.value
+  if (!p) return
+
+  const items = Object.values(priceCalendarMap.value).filter(item => (
+    item.date >= dateStart && item.date <= dateEnd && item.status === 'open'
+  ))
+  const availableItems = items.filter(item => item.available > 0)
+  const firstAvailable = availableItems.sort((a, b) => a.date.localeCompare(b.date))[0]
+  const stock = availableItems.reduce((sum, item) => sum + item.available, 0)
+  product.value = {
+    ...p,
+    current_price: firstAvailable ? Number(firstAvailable.price || p.base_price) : p.current_price,
+    stock,
   }
 }
 
@@ -465,7 +660,7 @@ function generateCalendar() {
     const d = prevMonthLastDay - i
     const m = month === 1 ? 12 : month - 1
     const y = month === 1 ? year - 1 : year
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const dateStr = formatDateParts(y, m, d)
     days.push({
       date: dateStr, day: d, price: 0, dateType: '', stock: 0,
       isAvailable: false, isSelected: false, isToday: false, isPast: true, isCurrentMonth: false,
@@ -475,10 +670,13 @@ function generateCalendar() {
 
   // 当月日期
   for (let d = 1; d <= lastDay.getDate(); d++) {
-    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const dateStr = formatDateParts(year, month, d)
     const dayOfWeek = new Date(year, month - 1, d).getDay()
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 6
     const isPast = dateStr < todayStr
+    const calendarItem = priceCalendarMap.value[dateStr]
+    const available = isPast ? 0 : Number(calendarItem?.available || 0)
+    const status = calendarItem?.status || 'closed'
 
     const isCheckIn = dateStr === ciDate
     const isCheckOut = dateStr === coDate
@@ -488,10 +686,12 @@ function generateCalendar() {
     days.push({
       date: dateStr,
       day: d,
-      price: isWeekend ? 168 : 128,
-      dateType: isWeekend ? '周末' : '工作日',
-      stock: isPast ? 0 : Math.floor(Math.random() * 8) + 1,
-      isAvailable: !isPast,
+      price: Number(calendarItem?.price || product.value?.current_price || 0),
+      dateType: calendarItem?.date_type || (isWeekend ? 'weekend' : 'weekday'),
+      stock: available,
+      inventorySource: calendarItem?.inventory_source,
+      inventoryPoolId: calendarItem?.inventory_pool_id,
+      isAvailable: !isPast && status === 'open' && available > 0,
       isSelected,
       isToday: dateStr === todayStr,
       isPast,
@@ -507,7 +707,7 @@ function generateCalendar() {
   for (let d = 1; d <= remaining; d++) {
     const m = month === 12 ? 1 : month + 1
     const y = month === 12 ? year + 1 : year
-    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    const dateStr = formatDateParts(y, m, d)
     days.push({
       date: dateStr, day: d, price: 0, dateType: '', stock: 0,
       isAvailable: false, isSelected: false, isToday: false, isPast: false, isCurrentMonth: false,
@@ -527,13 +727,14 @@ function onSwiperChange(e: any) {
 }
 
 /** 打开/关闭日历 */
-function onOpenCalendar() {
+async function onOpenCalendar() {
   if (!checkInDate.value) {
     const { year, month } = getTodayInfo()
     calendarYear.value = year
     calendarMonth.value = month
-    generateCalendar()
   }
+  await loadPriceCalendarForCurrentMonth()
+  generateCalendar()
   showCalendar.value = true
 }
 
@@ -542,30 +743,33 @@ function onCloseCalendar() {
 }
 
 /** 上个月 */
-function onPrevMonth() {
+async function onPrevMonth() {
   if (calendarMonth.value === 1) {
     calendarYear.value--
     calendarMonth.value = 12
   } else {
     calendarMonth.value--
   }
+  await loadPriceCalendarForCurrentMonth()
   generateCalendar()
 }
 
 /** 下个月 */
-function onNextMonth() {
+async function onNextMonth() {
   if (calendarMonth.value === 12) {
     calendarYear.value++
     calendarMonth.value = 1
   } else {
     calendarMonth.value++
   }
+  await loadPriceCalendarForCurrentMonth()
   generateCalendar()
 }
 
 /** 选择日期 — 范围模式（入住→离店） */
-function onSelectDate(item: ICalendarDay) {
-  if (!item.isAvailable || item.isPast) return
+async function onSelectDate(item: ICalendarDay) {
+  if (item.isPast) return
+  if (!item.isAvailable && !canUseAsCheckoutDate(item)) return
 
   const date = item.date
 
@@ -595,6 +799,9 @@ function onSelectDate(item: ICalendarDay) {
         })
         return
       }
+      if (!(await validateSelectedDateRange(checkInDate.value, date))) {
+        return
+      }
       // 设置离店日，自动生成入住~离店前一天的日期范围
       checkOutDate.value = date
       fillDateRange()
@@ -608,6 +815,10 @@ function onSelectDate(item: ICalendarDay) {
 
   generateCalendar()
   calcPrice()
+}
+
+function canUseAsCheckoutDate(item: ICalendarDay): boolean {
+  return !!checkInDate.value && !checkOutDate.value && item.date > checkInDate.value
 }
 
 /** 计算两个日期之间的天数 */
@@ -650,10 +861,7 @@ function onConfirmCalendar() {
 function calcPrice() {
   let total = 0
   selectedDates.value.forEach(date => {
-    const day = calendarDays.value.find(d => d.date === date)
-    if (day) {
-      total += day.price
-    }
+    total += getCalendarPriceForDate(date)
   })
   totalPrice.value = total * quantity.value
 }
@@ -688,7 +896,7 @@ function onAgreeDisclaimer() {
 }
 
 /** 加入购物车 */
-function onAddToCart() {
+async function onAddToCart() {
   const p = product.value
   if (!p) return
 
@@ -696,7 +904,24 @@ function onAddToCart() {
     uni.showToast({ title: '该商品不支持加入购物车，请直接预定', icon: 'none' })
     return
   }
+  if (selectedSku.value && isSkuOptionDisabled(selectedSku.value)) {
+    uni.showToast({ title: '该规格暂无库存', icon: 'none' })
+    return
+  }
+  if (isRetailProduct(p.category) && p.stock <= 0) {
+    uni.showToast({ title: '该商品已售罄', icon: 'none' })
+    return
+  }
 
+  try {
+    await post<unknown>('/cart/items', {
+      product_id: p.id,
+      sku_id: selectedSkuId.value,
+      quantity: quantity.value,
+    })
+  } catch {
+    return
+  }
   uni.showToast({ title: '已加入购物车', icon: 'success' })
 }
 
@@ -707,6 +932,16 @@ function onBook() {
 
   if (notStarted.value) {
     uni.showToast({ title: '尚未开票，请等待', icon: 'none' })
+    return
+  }
+
+  if (selectedSku.value && isSkuOptionDisabled(selectedSku.value)) {
+    uni.showToast({ title: '该规格暂无库存', icon: 'none' })
+    return
+  }
+
+  if (isRetailProduct(p.category) && p.stock <= 0) {
+    uni.showToast({ title: '该商品已售罄', icon: 'none' })
     return
   }
 
@@ -721,8 +956,9 @@ function onBook() {
   }
 
   const dateQuery = isCampsiteProduct(p.category) ? selectedDates.value.join(',') : ''
+  const skuQuery = selectedSkuId.value ? `&sku_id=${selectedSkuId.value}` : ''
   uni.navigateTo({
-    url: `/pages/order-confirm/index?product_id=${p.id}&dates=${dateQuery}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
+    url: `/pages/order-confirm/index?product_id=${p.id}${skuQuery}&dates=${dateQuery}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
   })
 }
 
@@ -1143,14 +1379,58 @@ function onGoBack() {
   margin: 0 24rpx 16rpx;
   padding: 24rpx;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 22rpx;
 
   &__control {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 4rpx;
   }
+}
+
+.detail-sku {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx;
+}
+
+.detail-sku__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14rpx;
+}
+
+.detail-sku__item {
+  min-height: 56rpx;
+  max-width: 100%;
+  padding: 0 22rpx;
+  display: inline-flex;
+  align-items: center;
+  border: 1rpx solid rgba(45, 74, 62, 0.18);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-light);
+  color: var(--color-text);
+
+  text {
+    max-width: 560rpx;
+    font-size: var(--font-size-sm);
+    line-height: 1.4;
+    word-break: break-all;
+  }
+}
+
+.detail-sku__item--active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-bg);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.detail-sku__item--disabled {
+  opacity: 0.45;
+  color: var(--color-text-placeholder);
 }
 
 .qty-btn {

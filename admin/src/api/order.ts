@@ -1,5 +1,14 @@
 import { get, post, put } from '@/utils/request'
-import type { Order, OrderSearchParams, PaginatedResponse, RefundCreatePayload, RefundRecord } from '@/types'
+import type {
+  Order,
+  OrderSearchParams,
+  PaginatedResponse,
+  RefundCreatePayload,
+  RefundRecord,
+  TemporaryOrderCodePayResult,
+  TemporaryOrderCreatePayload,
+  TemporaryOrderCreateResult,
+} from '@/types'
 import type { OrderExportTask } from '@/types/order-export'
 
 export function getOrders(params: OrderSearchParams) {
@@ -20,6 +29,14 @@ export function partialRefund(orderId: number, data: { item_ids: number[]; reaso
 
 export function getOrderItems(orderId: number) {
   return get(`/orders/${orderId}/items`)
+}
+
+export function createTemporaryOrder(data: TemporaryOrderCreatePayload) {
+  return post<{ data: TemporaryOrderCreateResult }>('/admin/orders/temporary', data)
+}
+
+export function queryTemporaryCodePay(sessionId: number) {
+  return post<{ data: TemporaryOrderCodePayResult }>(`/admin/orders/temporary/${sessionId}/query-codepay`, {})
 }
 
 export function createOrderExport(data: { filters: Record<string, any>; file_format: 'csv' | 'xlsx'; include_sensitive: boolean }) {
@@ -56,5 +73,5 @@ export function rejectRefundRecord(refundId: number, reason: string) {
 
 // 退票审批队列
 export function getRefundQueue(params?: { page?: number; page_size?: number }) {
-  return get<{ data: PaginatedResponse<Order> }>('/admin/orders', { ...params, status: 'refunding' })
+  return get<{ data: PaginatedResponse<RefundRecord> }>('/admin/refunds', { ...params, status: 'pending' })
 }

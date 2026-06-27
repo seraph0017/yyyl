@@ -13,7 +13,10 @@ export const useUserStore = defineStore('user', () => {
   const refreshToken = ref('')
 
   const isLoggedIn = computed(() => !!token.value)
-  const isStaff = computed(() => userInfo.value?.is_staff || false)
+  const isStaff = computed(() => {
+    const role = userInfo.value?.role
+    return Boolean(userInfo.value?.is_staff || role === 'staff' || role === 'admin' || role === 'super_admin')
+  })
   const isMember = computed(() => userInfo.value?.is_annual_member || false)
 
   function setUser(user: IUserInfo) {

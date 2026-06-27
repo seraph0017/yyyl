@@ -9,6 +9,11 @@ export interface IUserInfo {
   nickname: string
   avatar_url: string
   phone: string
+  role?: 'user' | 'staff' | 'admin' | 'super_admin' | string
+  is_member?: boolean
+  member_level?: string
+  points_balance?: number
+  status?: string
   is_annual_member: boolean
   annual_card_expire_date: string
   points: number
@@ -20,7 +25,8 @@ export interface IUserInfo {
 export interface ILoginResult {
   access_token: string
   refresh_token: string
-  user: IUserInfo
+  user?: IUserInfo
+  user_info?: IUserInfo
 }
 
 /** API通用响应 */
@@ -63,6 +69,18 @@ export interface IProductAttribute {
   icon: string
 }
 
+/** 商品 SKU */
+export interface IProductSku {
+  id: number
+  product_id: number
+  sku_code: string
+  spec_values: Record<string, string>
+  price: number
+  stock: number
+  status: string
+  image_url?: string | null
+}
+
 /** 商品 */
 export interface IProduct {
   id: number
@@ -84,14 +102,28 @@ export interface IProduct {
   has_disclaimer: boolean
   identity_mode: 'required' | 'optional' | 'none'
   deposit_amount: number
+  skus?: IProductSku[]
+}
+
+/** 商品价格/库存日历项 */
+export interface IPriceCalendarItem {
+  date: string
+  date_type: 'weekday' | 'weekend' | 'holiday' | 'custom' | string
+  price: number
+  available: number
+  status: 'open' | 'closed' | string
+  inventory_source?: 'inventory' | 'inventory_pool' | 'none' | string
+  inventory_pool_id?: number | null
 }
 
 /** 购物车项 */
 export interface ICartItem {
   id: number
   product_id: number
+  sku_id?: number | null
   product_name: string
   cover_image: string
+  sku_spec_values?: Record<string, string> | null
   price: number
   quantity: number
   selected: boolean
@@ -138,6 +170,52 @@ export interface IOrderItem {
   unit_price: number
   actual_price: number
   identity_id: number | null
+  inventory_pool_id?: number | null
+}
+
+/** 订单报价项 */
+export interface IOrderQuoteItem {
+  product_id: number
+  sku_id?: number | null
+  product_name: string
+  date?: string | null
+  quantity: number
+  unit_price: number
+  actual_price: number
+  inventory_source: 'inventory' | 'inventory_pool' | 'none' | string
+  inventory_pool_id?: number | null
+  available?: number | null
+}
+
+/** 订单报价响应 */
+export interface IOrderQuoteResponse {
+  items: IOrderQuoteItem[]
+  total_amount: number
+  discount_amount: number
+  actual_amount: number
+  deposit_amount: number
+  discount_type?: string | null
+  discount_detail?: Record<string, unknown> | null
+  has_shared_inventory: boolean
+}
+
+/** 智能客服回答来源 */
+export interface ICustomerServiceSource {
+  id: number
+  title: string
+  source_type: 'manual' | 'faq' | 'txt' | 'md' | 'pdf' | 'docx' | string
+  source_name?: string | null
+}
+
+/** 智能客服问答响应 */
+export interface ICustomerServiceAskResult {
+  answer: string
+  sources: ICustomerServiceSource[]
+  matched_article_ids: number[]
+  confidence: number
+  needs_human: boolean
+  log_id: number
+  feedback_token: string
 }
 
 /** 地址 */
@@ -170,9 +248,186 @@ export interface ITicket {
   product_name: string
   date: string
   status: 'unused' | 'used' | 'expired' | 'refunded'
+  qr_token?: string
   qrcode_token: string
+  qr_token_expires_at?: string | null
+  qr_matrix?: boolean[][]
   verified_at: string | null
 }
+
+/** 员工端待核销票券 */
+export interface IStaffPendingTicket {
+  ticket_id: number
+  ticket_no: string
+  ticket_type: string
+  order_id: number
+  order_no: string
+  order_item_id?: number | null
+  user_id: number
+  user_nickname?: string | null
+  user_phone_masked?: string | null
+  product_name?: string | null
+  quantity: number
+  date?: string | null
+  time_slot?: string | null
+  verify_date?: string | null
+  verify_status: string
+  current_verify_count: number
+  total_verify_count: number
+  can_verify: boolean
+  actual_amount: number
+  remark?: string | null
+}
+
+/** 员工端今日订单行 */
+export interface IStaffTodayOrder {
+  order_id: number
+  order_no: string
+  status: string
+  payment_status: string
+  payment_time?: string | null
+  actual_amount: number
+  user_id: number
+  user_nickname?: string | null
+  user_phone_masked?: string | null
+  order_item_id: number
+  product_id: number
+  product_name?: string | null
+  quantity: number
+  date?: string | null
+  time_slot?: string | null
+  verify_status: string
+  ticket_id?: number | null
+  ticket_no?: string | null
+  can_verify: boolean
+  remark?: string | null
+}
+
+/** 员工端核销历史 */
+export interface IStaffTicketLog {
+  id: number
+  ticket_id?: number | null
+  ticket_no?: string | null
+  order_id?: number | null
+  order_no?: string | null
+  order_item_id?: number | null
+  product_name?: string | null
+  verify_date?: string | null
+  quantity?: number | null
+  time_slot?: string | null
+  user_nickname?: string | null
+  user_phone_masked?: string | null
+  staff_id: number
+  verify_result: 'success' | 'failed' | 'duplicate' | string
+  failure_reason?: string | null
+  device_info?: string | null
+  remark?: string | null
+  created_at: string
+}
+
+export interface IStaffTicketSummary {
+  ticket_id: number
+  ticket_no: string
+  ticket_type: string
+  verify_status: string
+  verify_date?: string | null
+  verified_at?: string | null
+  verified_by?: number | null
+  current_verify_count: number
+  total_verify_count: number
+  can_verify: boolean
+}
+
+export interface IStaffOrderItem {
+  order_item_id: number
+  product_id: number
+  sku_id?: number | null
+  product_name?: string | null
+  product_image?: string | null
+  quantity: number
+  date?: string | null
+  time_slot?: string | null
+  unit_price: number
+  actual_price: number
+  tickets: IStaffTicketSummary[]
+}
+
+/** 员工端订单详情 */
+export interface IStaffOrderDetail {
+  order_id: number
+  order_no: string
+  user_id: number
+  user_nickname?: string | null
+  user_phone_masked?: string | null
+  status: string
+  payment_status: string
+  payment_method: string
+  payment_time?: string | null
+  total_amount: number
+  actual_amount: number
+  discount_amount: number
+  remark?: string | null
+  created_at: string
+  items: IStaffOrderItem[]
+}
+
+/** 员工扫码核销响应 */
+export interface IStaffScanResponse {
+  session_id: string
+  ticket_id: number
+  ticket_no: string
+  ticket_type: string
+  product_name?: string | null
+  verify_date?: string | null
+  needs_verification_code: boolean
+  verification_code?: string | null
+}
+
+export interface ITemporaryOrderCreatePayload {
+  payment_flow: 'customer_scan_qr' | 'merchant_scan_code'
+  mode?: 'custom_amount' | 'product'
+  product_id?: number
+  sku_id?: number
+  quantity: number
+  booking_date?: string
+  time_slot?: string
+  item_name?: string
+  amount?: number
+  remark?: string
+  auth_code?: string
+  device_id?: string
+}
+
+export interface ITemporaryOrderSession {
+  id: number
+  session_no: string
+  token?: string | null
+  status: string
+  payment_flow: 'customer_scan_qr' | 'merchant_scan_code'
+  mode: 'custom_amount' | 'product'
+  product_id?: number | null
+  sku_id?: number | null
+  quantity: number
+  booking_date?: string | null
+  time_slot?: string | null
+  item_name?: string | null
+  amount?: number | string | null
+  remark?: string | null
+  order_id?: number | null
+  expire_at: string
+  miniapp_path?: string | null
+  qrcode_image_url?: string | null
+}
+
+export interface ITemporaryOrderCodePayResult {
+  session: ITemporaryOrderSession
+  order: IOrder
+  trade_state?: string | null
+  transaction_id?: string | null
+  requires_query?: boolean
+}
+
+export type ITemporaryOrderCreateResult = ITemporaryOrderSession | ITemporaryOrderCodePayResult
 
 /** 年卡 */
 export interface IAnnualCard {
@@ -201,6 +456,35 @@ export interface ITimesCard {
   status: 'active' | 'expired'
   applicable_products: number[]
 }
+
+/** 统一会员卡 */
+export interface IMembershipCard {
+  card_type: 'annual' | 'times'
+  card_type_label: string
+  usage_mode: 'unlimited' | 'limited'
+  usage_mode_label: string
+  status: 'active' | 'expired' | 'cancelled' | 'inactive'
+  status_label: string
+  start_date: string
+  end_date: string
+  valid_range_label: string
+  remaining_days: number | null
+  remaining_days_label: string
+  remaining_times: number | null
+  remaining_times_label: string
+  applicable_products: Array<string | number>
+  applicable_products_label: string
+  activation_mode: 'code' | 'auto'
+}
+
+/** 旧会员接口聚合响应 */
+export interface IMembershipCardLegacyResponse {
+  current_card: IAnnualCard | null
+  times_cards?: ITimesCard[]
+}
+
+/** 统一会员卡接口响应 */
+export type IMembershipCardApiResponse = IMembershipCard | IMembershipCardLegacyResponse
 
 /** 通知 */
 export interface INotification {
@@ -337,6 +621,11 @@ export interface ICampMapZone {
   coordinates: { x: number; y: number; width: number; height: number }
   product_ids: number[]
   description: string
+  sort_order?: number
+  link_type?: 'product' | 'cms' | 'h5' | null
+  link_target?: string | null
+  link_label?: string | null
+  click_count?: number
   available_count?: number
   total_count?: number
 }

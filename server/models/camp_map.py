@@ -8,10 +8,13 @@
 from __future__ import annotations
 
 import enum
+from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
     BigInteger,
+    Date,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -117,6 +120,18 @@ class CampMapZone(Base):
         Integer, nullable=False, default=0, server_default="0",
         comment="排序",
     )
+    link_type: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="热区链接类型: product/cms/h5/none"
+    )
+    link_target: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, comment="热区链接目标"
+    )
+    link_label: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, comment="热区链接按钮文案"
+    )
+    click_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0", comment="点击次数"
+    )
 
     # 关系
     camp_map: Mapped["CampMap"] = relationship(
@@ -161,4 +176,37 @@ class MiniGame(Base):
     )
     points_reward: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True, comment="积分奖励(预留)",
+    )
+
+
+class PageViewStat(Base):
+    """页面浏览统计聚合表"""
+
+    __tablename__ = "page_view_stat"
+    __table_args__ = (
+        Index("idx_pvs_site_page_date", "site_id", "page_key", "stat_date", unique=True),
+        Index("idx_pvs_site_date", "site_id", "stat_date"),
+        {"comment": "页面浏览统计聚合表"},
+    )
+
+    site_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1", comment="营地ID"
+    )
+    page_key: Mapped[str] = mapped_column(
+        String(100), nullable=False, comment="页面标识"
+    )
+    page_title: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, comment="页面标题"
+    )
+    stat_date: Mapped[date] = mapped_column(
+        Date, nullable=False, comment="统计日期"
+    )
+    view_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0", comment="浏览次数"
+    )
+    user_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0", comment="登录用户访问次数"
+    )
+    last_viewed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, comment="最近访问时间"
     )

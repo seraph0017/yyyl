@@ -48,6 +48,7 @@
 <script setup lang="ts">
 import { ref, reactive, nextTick } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
 const props = defineProps<{
@@ -91,8 +92,8 @@ async function handleLogin() {
     ElMessage.success('登录成功')
     emit('update:visible', false)
     emit('success')
-  } catch {
-    // 错误由拦截器处理
+  } catch (error: any) {
+    ElMessage.error(error?.message || '登录失败，请检查用户名和密码')
   } finally {
     loading.value = false
   }

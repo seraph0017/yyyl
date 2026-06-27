@@ -5,6 +5,7 @@
 - Cart（购物车表）
 - CartItem（购物车项表）
 - Ticket（电子票表）
+- TicketVerifyLog（核销日志表）
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from sqlalchemy import (
     String,
     Text,
 )
+import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -74,11 +76,15 @@ class OrderType(str, enum.Enum):
     MERCHANDISE = "merchandise"
     ANNUAL_CARD = "annual_card"
     BUNDLE_ADDON = "bundle_addon"
+    TEMPORARY = "temporary"
 
 
 class RefundStatus(str, enum.Enum):
     NONE = "none"
+    PENDING = "pending"
+    PARTIAL = "partial"
     REFUNDED = "refunded"
+    REJECTED = "rejected"
 
 
 class DiscountType(str, enum.Enum):
@@ -100,6 +106,12 @@ class VerifyStatus(str, enum.Enum):
     EXPIRED = "expired"
 
 
+class VerifyResult(str, enum.Enum):
+    SUCCESS = "success"
+    FAILED = "failed"
+    DUPLICATE = "duplicate"
+
+
 # ---- 模型 ----
 
 class Order(Base):
@@ -108,6 +120,18 @@ class Order(Base):
     __tablename__ = "order"
     __table_args__ = (
         Index("idx_order_user_status", "user_id", "status"),
+        Index(
+            "uq_order_annual_pending_active",
+            "user_id",
+            "site_id",
+            unique=True,
+            postgresql_where=sa.text(
+                "order_type = 'annual_card' "
+                "AND status = 'pending_payment' "
+                "AND payment_status = 'unpaid' "
+                "AND is_deleted = false"
+            ),
+        ),
         Index(
             "idx_order_expire", "expire_at",
             postgresql_where="status = 'pending_payment'",
@@ -157,6 +181,9 @@ class Order(Base):
     )
     discount_detail: Mapped[Optional[dict]] = mapped_column(
         JSONB, nullable=True, comment="优惠明细"
+    )
+    biz_data: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True, comment="业务扩展数据，会员卡/临时单等非商品订单使用"
     )
     payment_method: Mapped[str] = mapped_column(
         String(30), nullable=False,
@@ -253,6 +280,83 @@ class Order(Base):
     )
 
 
+class TemporaryOrderSession(Base):
+    """现场临时订单/收款会话。
+
+    会话先记录现场商品或自定义金额，用户扫码认领后再转正式订单；
+    付款码场景也通过该会话记录操作人、金额与支付审计。
+    """
+
+    __tablename__ = "temporary_order_session"
+    __table_args__ = (
+        Index("idx_temp_order_session_site_status", "site_id", "status"),
+        Index("idx_temp_order_session_token", "site_id", "token_hash"),
+        Index("idx_temp_order_session_order", "order_id"),
+        Index("uq_temp_order_session_no", "session_no", unique=True),
+        {"comment": "现场临时订单/收款会话"},
+    )
+
+    site_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1", comment="营地ID"
+    )
+    session_no: Mapped[str] = mapped_column(
+        String(32), nullable=False, unique=True, comment="临时会话号"
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, comment="扫码认领 Token 摘要"
+    )
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="draft", server_default="draft",
+        comment="状态: draft/pending_payment/paid/expired/cancelled/refunded"
+    )
+    payment_flow: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="customer_scan_qr", server_default="customer_scan_qr",
+        comment="收款方式: customer_scan_qr/merchant_scan_code"
+    )
+    mode: Mapped[str] = mapped_column(
+        String(30), nullable=False, comment="临时单模式: product/custom_amount"
+    )
+    product_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="商品ID"
+    )
+    sku_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, nullable=True, comment="SKU ID"
+    )
+    quantity: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1", comment="数量"
+    )
+    booking_date: Mapped[Optional[date]] = mapped_column(
+        Date, nullable=True, comment="预约日期"
+    )
+    time_slot: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, comment="场次"
+    )
+    item_name: Mapped[Optional[str]] = mapped_column(
+        String(80), nullable=True, comment="自定义收款项名称"
+    )
+    amount: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 2), nullable=True, comment="自定义收款金额"
+    )
+    remark: Mapped[Optional[str]] = mapped_column(
+        String(200), nullable=True, comment="现场收款备注"
+    )
+    created_by_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="创建人ID"
+    )
+    created_by_source: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="创建来源: admin/user"
+    )
+    order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("order.id"), nullable=True, comment="转化后的正式订单ID"
+    )
+    expire_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, comment="会话过期时间"
+    )
+    audit_data: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True, comment="现场收款审计数据"
+    )
+
+
 class OrderItem(Base):
     """订单项表（多日票按天拆分）"""
 
@@ -260,6 +364,7 @@ class OrderItem(Base):
     __table_args__ = (
         Index("idx_order_item_order", "order_id"),
         Index("idx_order_item_product", "product_id"),
+        Index("idx_order_item_inventory_pool", "inventory_pool_id"),
         {"comment": "订单项表"},
     )
 
@@ -271,6 +376,10 @@ class OrderItem(Base):
     )
     sku_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, nullable=True, comment="SKU ID"
+    )
+    inventory_pool_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("inventory_pool.id"), nullable=True,
+        comment="v1.8 订单锁定的共享库存池ID"
     )
     date: Mapped[Optional[date]] = mapped_column(
         Date, nullable=True, comment="日期(多日票每天一条)"
@@ -377,12 +486,17 @@ class Ticket(Base):
 
     __tablename__ = "ticket"
     __table_args__ = (
+        Index("idx_ticket_site", "site_id"),
         Index("idx_ticket_order", "order_id"),
         Index("idx_ticket_user", "user_id"),
         Index("idx_ticket_verify_date", "verify_date"),
+        Index("idx_ticket_qr_token_hash", "qr_token_hash"),
         {"comment": "电子票表"},
     )
 
+    site_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1", comment="营地ID"
+    )
     order_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("order.id"), nullable=False, comment="订单ID"
     )
@@ -399,8 +513,8 @@ class Ticket(Base):
         String(20), nullable=False,
         comment="票类型: camping/rental/activity"
     )
-    qr_token: Mapped[str] = mapped_column(
-        String(128), nullable=False, comment="二维码Token(30秒刷新)"
+    qr_token_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="二维码Token摘要(仅保存SHA256)"
     )
     qr_token_expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, comment="二维码Token过期时间"
@@ -433,4 +547,49 @@ class Ticket(Base):
     order: Mapped["Order"] = relationship(back_populates="tickets")
     order_item: Mapped[Optional["OrderItem"]] = relationship(
         back_populates="ticket"
+    )
+
+
+class TicketVerifyLog(Base):
+    """票券核销日志表"""
+
+    __tablename__ = "ticket_verify_log"
+    __table_args__ = (
+        Index("idx_ticket_verify_log_ticket", "ticket_id"),
+        Index("idx_ticket_verify_log_staff", "staff_id"),
+        Index("idx_ticket_verify_log_staff_source", "site_id", "staff_source", "staff_id", "created_at"),
+        Index("idx_ticket_verify_log_site_created", "site_id", "created_at"),
+        {"comment": "票券核销日志表"},
+    )
+
+    site_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1", comment="营地ID"
+    )
+    ticket_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("ticket.id"), nullable=True, comment="票券ID"
+    )
+    order_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("order.id"), nullable=True, comment="订单ID"
+    )
+    order_item_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("order_item.id"), nullable=True, comment="订单项ID"
+    )
+    staff_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, comment="核销员工ID"
+    )
+    staff_source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="user", server_default="user",
+        comment="核销员工来源: user/admin"
+    )
+    verify_result: Mapped[str] = mapped_column(
+        String(20), nullable=False, comment="核销结果: success/failed/duplicate"
+    )
+    failure_reason: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, comment="失败原因"
+    )
+    device_info: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, comment="设备信息"
+    )
+    qr_token_hash: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, comment="二维码 token 摘要"
     )

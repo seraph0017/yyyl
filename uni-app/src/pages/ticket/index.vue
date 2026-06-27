@@ -17,12 +17,20 @@
         <view class="ticket-divider__line"></view>
         <view class="ticket-divider__circle ticket-divider__circle--right"></view>
       </view>
-      <view class="ticket-qr" @tap="onPreviewQr(item.qrcode_token)">
-        <view class="ticket-qr__placeholder">
-          <text class="ticket-qr__icon">📱</text>
-          <text class="ticket-qr__text">出示此二维码验票</text>
-          <text class="ticket-qr__refresh">每30秒自动刷新</text>
+      <view class="ticket-qr">
+        <view class="ticket-qr__box" v-if="item.status === 'unused' && item.qr_matrix?.length">
+          <view class="ticket-qr__row" v-for="(row, rowIndex) in item.qr_matrix" :key="rowIndex">
+            <view
+              v-for="(cell, cellIndex) in row"
+              :key="cellIndex"
+              :class="['ticket-qr__cell', cell ? 'ticket-qr__cell--dark' : '']"
+            ></view>
+          </view>
         </view>
+        <view class="ticket-qr__empty" v-else>
+          <text>{{ item.status === 'unused' ? '票码加载中' : '票券已核销' }}</text>
+        </view>
+        <text class="ticket-qr__refresh" v-if="item.status === 'unused'" @tap="refreshTicketQr(item)">刷新票码</text>
       </view>
     </view>
 
@@ -37,6 +45,7 @@ import { ref, onUnmounted } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { get, post } from '@/utils/request'
 import { ensureLogin } from '@/utils/auth'
+import { generateQrMatrix } from '@/utils/qrcode'
 import type { ITicket } from '@/types'
 
 const tickets = ref<ITicket[]>([])
@@ -60,7 +69,7 @@ async function loadTickets(orderId: string) {
       return
     }
     const list = await get<ITicket[]>(`/orders/${orderId}/tickets`)
-    tickets.value = list || []
+    tickets.value = (list || []).map(withQrMatrix)
     loading.value = false
     startQrRefresh()
   } catch {
@@ -71,23 +80,39 @@ async function loadTickets(orderId: string) {
 }
 
 function startQrRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer)
   // 每30秒刷新二维码token
   refreshTimer = setInterval(async () => {
     for (const ticket of tickets.value) {
       if (ticket.status === 'unused') {
-        try {
-          const data = await post<{ qrcode_token: string }>(`/tickets/${ticket.id}/refresh-qr`)
-          ticket.qrcode_token = data.qrcode_token
-        } catch {
-          // 静默失败，下次重试
-        }
+        await refreshTicketQr(ticket, true)
       }
     }
   }, 30000)
 }
 
-function onPreviewQr(token: string) {
-  uni.showToast({ title: `票码：${token.substring(0, 10)}...`, icon: 'none' })
+function withQrMatrix(ticket: ITicket): ITicket {
+  const token = ticket.qrcode_token || ticket.qr_token || ''
+  return {
+    ...ticket,
+    qrcode_token: token,
+    qr_matrix: token ? generateQrMatrix(token) : [],
+  }
+}
+
+async function refreshTicketQr(ticket: ITicket, silent = false) {
+  try {
+    const data = await post<{ qrcode_token: string; qr_token?: string }>(`/tickets/${ticket.id}/refresh-qr`)
+    ticket.qrcode_token = data.qrcode_token || data.qr_token || ''
+    ticket.qr_matrix = generateQrMatrix(data.qrcode_token || data.qr_token || '')
+    if (!silent) {
+      uni.showToast({ title: '票码已刷新', icon: 'success' })
+    }
+  } catch {
+    if (!silent) {
+      uni.showToast({ title: '刷新失败，请稍后重试', icon: 'none' })
+    }
+  }
 }
 </script>
 
@@ -100,14 +125,16 @@ function onPreviewQr(token: string) {
 
 .ticket-info {
   flex: 1;
+  min-width: 0;
+  padding-right: 18rpx;
 }
 
-.ticket-name { font-size: var(--font-size-lg); font-weight: 700; color: var(--color-text); display: block; }
+.ticket-name { font-size: var(--font-size-lg); font-weight: 700; color: var(--color-text); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ticket-date { font-size: var(--font-size-base); color: var(--color-text-secondary); display: block; margin-top: 8rpx; }
-.ticket-no { font-size: var(--font-size-sm); color: var(--color-text-placeholder); display: block; margin-top: 4rpx; }
+.ticket-no { font-size: var(--font-size-sm); color: var(--color-text-placeholder); display: block; margin-top: 4rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .ticket-status {
-  padding: 6rpx 16rpx; border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: 500;
+  flex-shrink: 0; padding: 6rpx 16rpx; border-radius: var(--radius-sm); font-size: var(--font-size-xs); font-weight: 500;
   &--unused { background-color: var(--color-primary-bg); text { color: var(--color-primary); } }
   &--used { background-color: var(--color-bg-grey); text { color: var(--color-text-placeholder); } }
   &--expired { background-color: rgba(229,57,53,0.08); text { color: var(--color-red); } }
@@ -123,11 +150,15 @@ function onPreviewQr(token: string) {
 }
 
 .ticket-qr {
-  padding: 32rpx; display: flex; justify-content: center;
-  &__placeholder { display: flex; flex-direction: column; align-items: center; padding: 40rpx; background-color: var(--color-bg-light); border-radius: var(--radius-lg); width: 350rpx; }
-  &__icon { font-size: 80rpx; margin-bottom: 16rpx; }
-  &__text { font-size: var(--font-size-base); color: var(--color-text); font-weight: 500; }
-  &__refresh { font-size: var(--font-size-xs); color: var(--color-text-placeholder); margin-top: 8rpx; }
+  padding: 32rpx; display: flex; flex-direction: column; align-items: center;
+  &__box { width: 396rpx; height: 396rpx; padding: 48rpx; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; box-shadow: 0 0 0 1rpx rgba(45, 74, 62, 0.12); }
+  &__row { display: flex; height: 12rpx; }
+  &__cell { width: 12rpx; height: 12rpx; flex: 0 0 12rpx; background: #fff; }
+  &__cell--dark { background: #111; }
+  &__empty { width: 364rpx; height: 364rpx; display: flex; align-items: center; justify-content: center; background-color: var(--color-bg-light); border-radius: 8rpx;
+    text { font-size: var(--font-size-base); color: var(--color-text-secondary); }
+  }
+  &__refresh { margin-top: 18rpx; min-width: 188rpx; height: 88rpx; line-height: 88rpx; text-align: center; border-radius: 8rpx; background: var(--color-primary); color: #fff; font-size: var(--font-size-sm); font-weight: 600; }
 }
 
 .ticket-tip {

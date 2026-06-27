@@ -10,6 +10,7 @@
 
 
 from functools import wraps
+from types import SimpleNamespace
 from typing import Callable, List, Optional
 
 from fastapi import Depends, HTTPException, Request, status
@@ -286,6 +287,97 @@ async def get_current_admin(
         )
 
     return admin_user
+
+
+async def get_current_staff_principal(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取员工端主体。
+
+    员工移动端在小程序内使用 C 端用户 token，管理后台使用 admin token。
+    该依赖统一返回带 id、site_id、role 的轻量对象，供核销接口使用。
+    """
+    try:
+        payload = verify_token(token)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40102, "message": "Token无效"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if payload.get("token_type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40102, "message": "Token类型无效"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    role = payload.get("role", "")
+    if role not in ("staff", "admin", "super_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 40302, "message": "需要员工权限"},
+        )
+
+    sub = payload.get("sub", "")
+    if isinstance(sub, str) and sub.startswith("admin:"):
+        admin_id = int(sub.replace("admin:", ""))
+        result = await db.execute(
+            select(AdminUser).where(
+                AdminUser.id == admin_id,
+                AdminUser.is_deleted.is_(False),
+            )
+        )
+        admin = result.scalar_one_or_none()
+        if admin is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": 40403, "message": "管理员不存在"},
+            )
+        if admin.status != "active":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 40301, "message": "管理员账号已被禁用"},
+            )
+        db_role = getattr(getattr(admin, "role", None), "role_code", None)
+        if db_role not in ("staff", "admin", "super_admin"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": 40302, "message": "需要员工权限"},
+            )
+        return SimpleNamespace(id=admin.id, site_id=admin.site_id, role=db_role, source="admin")
+
+    try:
+        user_id = int(sub)
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": 40101, "message": "未登录或Token过期"},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    result = await db.execute(
+        select(User).where(User.id == user_id, User.is_deleted.is_(False))
+    )
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40403, "message": "用户不存在"},
+        )
+    if user.status != "active":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 40301, "message": f"用户状态异常：{user.status}"},
+        )
+    if user.role not in ("staff", "admin", "super_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": 40302, "message": "需要员工权限"},
+        )
+    return SimpleNamespace(id=user.id, site_id=user.site_id, role=user.role, source="user")
 
 
 def require_admin_role(*roles: str) -> Callable:

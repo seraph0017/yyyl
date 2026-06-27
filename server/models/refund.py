@@ -10,6 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -24,6 +25,12 @@ class RefundRecord(Base):
         Index("idx_refund_site_status", "site_id", "status"),
         Index("idx_refund_order", "order_id"),
         Index("idx_refund_no", "refund_no", unique=True),
+        Index(
+            "uq_refund_record_active_order",
+            "order_id",
+            unique=True,
+            postgresql_where=sa.text("status IN ('pending', 'processing') AND is_deleted = false"),
+        ),
         {"comment": "退款主记录"},
     )
 
@@ -51,6 +58,10 @@ class RefundRecord(Base):
     release_inventory: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true",
         comment="是否释放库存"
+    )
+    inventory_released: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+        comment="库存是否已实际释放，保障退款回补幂等"
     )
     reason: Mapped[str] = mapped_column(
         String(500), nullable=False, comment="退款原因"

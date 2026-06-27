@@ -14,11 +14,15 @@
 - GET /calendar — 营地日历
 """
 
+import hashlib
+import json
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from typing import List, Optional
+from typing import Any, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from jose import JWTError
 from sqlalchemy import func, or_, select, and_, case, cast, Date as SADate
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,13 +33,19 @@ from models.admin import AdminPermission, AdminRole, AdminUser, OperationLog
 from models.content import (
     DisclaimerTemplate, FaqCategory, FaqItem, PageConfig,
 )
+from models.customer_service import CustomerServiceAskLog, CustomerServiceKnowledgeArticle
+from models.enterprise_wechat import (
+    EnterpriseWechatRobotConfig,
+    EnterpriseWechatRobotMessageLog,
+)
+from models.inventory_pool import InventoryPool, InventoryPoolBinding
 from models.member import (
     ActivationCode, AnnualCard, AnnualCardConfig,
     PointsExchangeConfig, TimesCard, TimesCardConfig,
 )
 from models.notification import Notification
 from models.order import Order, OrderItem
-from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product
+from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product, SKU
 from models.user import User
 from schemas.admin import (
     AdminUserCreate,
@@ -50,9 +60,196 @@ from schemas.admin import (
     TrendDataResponse,
 )
 from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
-from utils.security import hash_password
+from schemas.member import MembershipCardConfigSchema
+from services.enterprise_wechat_robot_service import (
+    send_text_message,
+    validate_enterprise_wechat_webhook_url,
+)
+from services.customer_service_knowledge_service import (
+    build_ask_log_payload,
+    extract_text_from_knowledge_file,
+    now_if_published,
+    read_upload_file_limited,
+    select_knowledge_answer,
+    serialize_article,
+    serialize_ask_log,
+    validate_knowledge_payload,
+)
+from services.inventory_pool_service import (
+    normalize_initial_pool_numbers,
+    validate_binding_target_site,
+    validate_exactly_one_binding_target,
+)
+from services import inventory_calendar_service, inventory_pool_service, refund_service, member_service
+from utils.security import create_access_token, decrypt_sensitive, encrypt_sensitive, hash_password, verify_password, verify_token
 
 router = APIRouter(prefix="/api/v1/admin", tags=["管理后台"])
+
+
+def _serialize_inventory_pool(pool: InventoryPool, binding_count: int = 0) -> dict:
+    return {
+        "id": pool.id,
+        "site_id": pool.site_id,
+        "pool_code": pool.pool_code,
+        "name": pool.name,
+        "pool_type": pool.pool_type,
+        "total": pool.total,
+        "available": pool.available,
+        "locked": pool.locked,
+        "sold": pool.sold,
+        "status": pool.status,
+        "binding_count": binding_count,
+        "created_at": pool.created_at,
+        "updated_at": pool.updated_at,
+    }
+
+
+def _serialize_inventory_record(inv: Inventory) -> dict:
+    return {
+        "id": inv.id,
+        "product_id": inv.product_id,
+        "sku_id": inv.sku_id,
+        "date": inv.date,
+        "time_slot": inv.time_slot,
+        "total": inv.total,
+        "available": inv.available,
+        "locked": inv.locked,
+        "sold": inv.sold,
+        "status": inv.status,
+    }
+
+
+def _serialize_inventory_pool_binding(
+    binding: InventoryPoolBinding,
+    product_names: Optional[dict[int, str]] = None,
+    sku_labels: Optional[dict[int, str]] = None,
+    sku_product_ids: Optional[dict[int, int]] = None,
+) -> dict:
+    product_names = product_names or {}
+    sku_labels = sku_labels or {}
+    sku_product_ids = sku_product_ids or {}
+    binding_product_id = binding.product_id
+    if binding.sku_id and not binding_product_id:
+        binding_product_id = sku_product_ids.get(binding.sku_id)
+    target_type = "product"
+    target_id = binding_product_id
+    target_name = product_names.get(binding_product_id or 0)
+    if binding.sku_id:
+        target_type = "sku"
+        target_id = binding.sku_id
+        target_name = sku_labels.get(binding.sku_id)
+    elif binding.activity_session_id:
+        target_type = "unsupported"
+        target_id = binding.activity_session_id
+        target_name = "暂不支持的绑定目标"
+    elif binding.rental_asset_id:
+        target_type = "unsupported"
+        target_id = binding.rental_asset_id
+        target_name = "暂不支持的绑定目标"
+
+    return {
+        "id": binding.id,
+        "inventory_pool_id": binding.inventory_pool_id,
+        "site_id": binding.site_id,
+        "product_id": binding_product_id,
+        "sku_id": binding.sku_id,
+        "activity_session_id": binding.activity_session_id,
+        "rental_asset_id": binding.rental_asset_id,
+        "target_type": target_type,
+        "target_id": target_id,
+        "target_name": target_name,
+        "priority": binding.priority,
+        "status": binding.status,
+        "created_at": binding.created_at,
+        "updated_at": binding.updated_at,
+    }
+
+
+def _serialize_enterprise_wechat_robot(robot: EnterpriseWechatRobotConfig) -> dict:
+    return {
+        "id": robot.id,
+        "site_id": robot.site_id,
+        "name": robot.name,
+        "has_webhook_url": bool(robot.webhook_url_ciphertext),
+        "has_secret": bool(robot.secret_ciphertext),
+        "status": robot.status,
+        "created_by": robot.created_by,
+        "updated_by": robot.updated_by,
+        "created_at": robot.created_at,
+        "updated_at": robot.updated_at,
+    }
+
+
+def _mask_mobile(value: str) -> str:
+    if len(value) == 11 and value.isdigit():
+        return f"{value[:3]}****{value[-4:]}"
+    return "***"
+
+
+def _redact_enterprise_wechat_log_value(value: Any, *, key_name: str = "") -> Any:
+    """企业微信发送日志出库前脱敏，避免 webhook、密钥和手机号进入前端。"""
+    sensitive_key_parts = (
+        "webhook",
+        "webhook_url",
+        "secret",
+        "sign",
+        "key",
+        "token",
+        "authorization",
+        "password",
+    )
+    normalized_key = key_name.lower()
+    if any(part in normalized_key for part in sensitive_key_parts):
+        return "***"
+    if normalized_key == "mentioned_mobile_list" and isinstance(value, list):
+        return [_mask_mobile(str(item)) for item in value]
+    if isinstance(value, dict):
+        return {
+            item_key: _redact_enterprise_wechat_log_value(item_value, key_name=str(item_key))
+            for item_key, item_value in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _redact_enterprise_wechat_log_value(item, key_name=key_name)
+            for item in value
+        ]
+    if isinstance(value, str):
+        redacted = re.sub(
+            r"(https://qyapi\.weixin\.qq\.com/cgi-bin/webhook/send\?)([^ \n\r\t]+)",
+            r"\1***",
+            value,
+        )
+        redacted = re.sub(
+            r"(?i)(key|sign|token|secret|password|authorization)=([^&\s]+)",
+            r"\1=***",
+            redacted,
+        )
+        redacted = re.sub(r"\b1[3-9]\d{9}\b", lambda match: _mask_mobile(match.group(0)), redacted)
+        return redacted
+    return value
+
+
+def _serialize_enterprise_wechat_robot_log(log: EnterpriseWechatRobotMessageLog) -> dict:
+    return {
+        "id": log.id,
+        "robot_config_id": log.robot_config_id,
+        "site_id": log.site_id,
+        "message_type": log.message_type,
+        "request_payload": _redact_enterprise_wechat_log_value(log.request_payload),
+        "response_code": log.response_code,
+        "response_body": _redact_enterprise_wechat_log_value(log.response_body),
+        "send_status": log.send_status,
+        "error_message": _redact_enterprise_wechat_log_value(log.error_message),
+        "created_at": log.created_at,
+    }
+
+
+def _serialize_membership_card_config(config: Any) -> dict:
+    return member_service.serialize_membership_card_config(config)
+
+
+def _serialize_membership_card_info(card: Any, config: Any = None) -> dict:
+    return member_service.serialize_membership_card_info(card, config)
 
 
 def _ensure_super_admin(admin: AdminUser) -> None:
@@ -60,7 +257,24 @@ def _ensure_super_admin(admin: AdminUser) -> None:
     if not admin.role or admin.role.role_code != "super_admin":
         raise HTTPException(
             status_code=403,
-            detail={"code": "FORBIDDEN", "message": "仅超级管理员可操作管理员账号"},
+            detail={"code": "FORBIDDEN", "message": "仅超级管理员可执行此操作"},
+        )
+
+
+def _ensure_customer_service_admin(admin: AdminUser, *, target_site_id: int) -> None:
+    """客服知识库会影响公开回答，限制为管理员及以上，普通管理员只能操作本站。"""
+    role_code = admin.role.role_code if admin.role else ""
+    if role_code == "super_admin":
+        return
+    if role_code != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "需要管理员权限"},
+        )
+    if int(getattr(admin, "site_id", 0) or 0) != int(target_site_id):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "FORBIDDEN", "message": "无权操作其他营地客服知识库"},
         )
 
 
@@ -605,6 +819,7 @@ async def list_members(
     user_ids = [u.id for u in users]
     annual_cards_map: dict = {}
     times_cards_map: dict = {}
+    membership_cards_map: dict = {}
 
     if user_ids:
         # 年卡：每个用户的有效年卡
@@ -623,6 +838,9 @@ async def list_members(
                 "end_date": str(ac.end_date),
                 "status": ac.status,
             })
+            membership_cards_map.setdefault(ac.user_id, []).append(
+                _serialize_membership_card_info(ac)
+            )
 
         # 次数卡：每个用户的有效次数卡
         tc_result = await db.execute(
@@ -642,11 +860,15 @@ async def list_members(
                 "end_date": str(tc.end_date),
                 "status": tc.status,
             })
+            membership_cards_map.setdefault(tc.user_id, []).append(
+                _serialize_membership_card_info(tc)
+            )
 
     items = []
     for u in users:
         user_annual = annual_cards_map.get(u.id, [])
         user_times = times_cards_map.get(u.id, [])
+        user_membership_cards = membership_cards_map.get(u.id, [])
         items.append({
             "id": u.id,
             "nickname": u.nickname,
@@ -655,7 +877,11 @@ async def list_members(
             "member_level": u.member_level,
             "points_balance": u.points_balance,
             "status": u.status,
+            "has_membership_card": len(user_membership_cards) > 0,
+            "membership_card_count": len(user_membership_cards),
+            "membership_cards": user_membership_cards,
             "has_annual_card": len(user_annual) > 0,
+            "annual_card": user_annual[0] if user_annual else None,
             "annual_cards": user_annual,
             "times_cards_count": len(user_times),
             "times_cards": user_times,
@@ -669,6 +895,62 @@ async def list_members(
         page=pagination.page,
         page_size=pagination.page_size,
     )
+
+
+@router.get("/membership-cards", summary="统一会员卡列表")
+async def list_membership_cards(
+    request: Request,
+    pagination: PaginationParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """获取统一会员卡列表。"""
+    site_id = get_site_id(request)
+    annual_result = await db.execute(
+        select(AnnualCard).where(AnnualCard.is_deleted.is_(False), AnnualCard.site_id == site_id)
+    )
+    times_result = await db.execute(
+        select(TimesCard).where(TimesCard.is_deleted.is_(False), TimesCard.site_id == site_id)
+    )
+    annual_cards = list(annual_result.scalars().all())
+    times_cards = list(times_result.scalars().all())
+    config_map: dict[int, Any] = {}
+
+    if annual_cards:
+        annual_config_ids = sorted({card.config_id for card in annual_cards})
+        annual_cfg_result = await db.execute(
+            select(AnnualCardConfig).where(AnnualCardConfig.id.in_(annual_config_ids))
+        )
+        config_map.update({config.id: config for config in annual_cfg_result.scalars().all()})
+
+    if times_cards:
+        times_config_ids = sorted({card.config_id for card in times_cards})
+        times_cfg_result = await db.execute(
+            select(TimesCardConfig).where(TimesCardConfig.id.in_(times_config_ids))
+        )
+        config_map.update({config.id: config for config in times_cfg_result.scalars().all()})
+
+    items = [_serialize_membership_card_info(card, config_map.get(card.config_id)) for card in annual_cards]
+    items.extend(_serialize_membership_card_info(card, config_map.get(card.config_id)) for card in times_cards)
+    total = len(items)
+    return PaginatedResponse.create(
+        items=items[pagination.offset: pagination.offset + pagination.page_size],
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+
+
+@router.get("/membership-card-configs", summary="统一会员卡配置列表")
+async def list_membership_card_configs(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """获取统一会员卡配置列表。"""
+    site_id = get_site_id(request)
+    configs = await member_service.get_membership_card_configs(db, site_id=site_id)
+    return ResponseModel.success(data=[MembershipCardConfigSchema.model_validate(item) for item in configs])
 
 
 # ========== 操作日志 ==========
@@ -1875,6 +2157,7 @@ async def update_customer_service_config(
 ):
     """更新客服配置（存储在 page_config 表中）"""
     site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
     result = await db.execute(
         select(PageConfig).where(PageConfig.page_key == "customer_service", PageConfig.site_id == site_id)
     )
@@ -1886,6 +2169,670 @@ async def update_customer_service_config(
         db.add(config)
     await db.commit()
     return ResponseModel.success(message="客服配置更新成功")
+
+
+# ========== 智能客服知识库 ==========
+
+@router.get("/customer-service/knowledge", summary="智能客服知识库列表")
+async def list_customer_service_knowledge(
+    request: Request,
+    keyword: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """获取当前营地智能客服知识库条目。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    conditions = [
+        CustomerServiceKnowledgeArticle.site_id == site_id,
+        CustomerServiceKnowledgeArticle.is_deleted.is_(False),
+    ]
+    if status:
+        conditions.append(CustomerServiceKnowledgeArticle.status == status)
+    if keyword:
+        keyword_pattern = f"%{keyword.strip()}%"
+        conditions.append(
+            or_(
+                CustomerServiceKnowledgeArticle.title.ilike(keyword_pattern),
+                CustomerServiceKnowledgeArticle.content.ilike(keyword_pattern),
+            )
+        )
+
+    total_result = await db.execute(select(func.count(CustomerServiceKnowledgeArticle.id)).where(*conditions))
+    total = total_result.scalar() or 0
+    result = await db.execute(
+        select(CustomerServiceKnowledgeArticle)
+        .where(*conditions)
+        .order_by(CustomerServiceKnowledgeArticle.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = [serialize_article(article) for article in result.scalars().all()]
+    return ResponseModel.success(
+        data={
+            "list": items,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": (total + page_size - 1) // page_size if page_size else 0,
+            },
+        }
+    )
+
+
+@router.post("/customer-service/knowledge", summary="创建智能客服知识")
+async def create_customer_service_knowledge(
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """创建知识库条目，可直接发布或保存草稿。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    try:
+        payload = validate_knowledge_payload(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    article = CustomerServiceKnowledgeArticle(
+        site_id=site_id,
+        **payload,
+        published_at=now_if_published(payload["status"]),
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db.add(article)
+    await db.commit()
+    await db.refresh(article)
+    return ResponseModel.success(data=serialize_article(article), message="知识库条目已创建")
+
+
+@router.put("/customer-service/knowledge/{article_id}", summary="更新智能客服知识")
+async def update_customer_service_knowledge(
+    article_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """更新知识库条目。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    result = await db.execute(
+        select(CustomerServiceKnowledgeArticle).where(
+            CustomerServiceKnowledgeArticle.id == article_id,
+            CustomerServiceKnowledgeArticle.site_id == site_id,
+            CustomerServiceKnowledgeArticle.is_deleted.is_(False),
+        )
+    )
+    article = result.scalar_one_or_none()
+    if not article:
+        raise HTTPException(status_code=404, detail="知识库条目不存在")
+
+    merged = {
+        "title": article.title,
+        "content": article.content,
+        "content_format": article.content_format,
+        "source_type": article.source_type,
+        "source_name": article.source_name,
+        "keywords": article.keywords or [],
+        "status": article.status,
+        **body,
+    }
+    try:
+        payload = validate_knowledge_payload(merged)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    for key, value in payload.items():
+        setattr(article, key, value)
+    if article.status == "published" and not article.published_at:
+        article.published_at = now_if_published(article.status)
+    if article.status != "published":
+        article.published_at = None
+    article.updated_by = admin.id
+
+    await db.commit()
+    await db.refresh(article)
+    return ResponseModel.success(data=serialize_article(article), message="知识库条目已更新")
+
+
+@router.delete("/customer-service/knowledge/{article_id}", summary="删除智能客服知识")
+async def delete_customer_service_knowledge(
+    article_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """软删除知识库条目。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    result = await db.execute(
+        select(CustomerServiceKnowledgeArticle).where(
+            CustomerServiceKnowledgeArticle.id == article_id,
+            CustomerServiceKnowledgeArticle.site_id == site_id,
+            CustomerServiceKnowledgeArticle.is_deleted.is_(False),
+        )
+    )
+    article = result.scalar_one_or_none()
+    if not article:
+        raise HTTPException(status_code=404, detail="知识库条目不存在")
+    article.is_deleted = True
+    article.updated_by = admin.id
+    await db.commit()
+    return ResponseModel.success(message="知识库条目已删除")
+
+
+@router.post("/customer-service/knowledge/upload", summary="上传智能客服知识文件")
+async def upload_customer_service_knowledge(
+    request: Request,
+    file: UploadFile = File(...),
+    title: Optional[str] = Form(None),
+    status: str = Form("draft"),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """上传 txt/md/pdf/docx 文件并生成知识库条目。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    try:
+        content = await read_upload_file_limited(file)
+        text, content_format, source_type = extract_text_from_knowledge_file(
+            filename=file.filename or "",
+            content=content,
+        )
+        payload = validate_knowledge_payload({
+            "title": title or (file.filename or "知识库文件"),
+            "content": text,
+            "content_format": content_format,
+            "source_type": source_type,
+            "source_name": file.filename,
+            "keywords": [],
+            "status": status,
+        })
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    article = CustomerServiceKnowledgeArticle(
+        site_id=site_id,
+        **payload,
+        published_at=now_if_published(payload["status"]),
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db.add(article)
+    await db.commit()
+    await db.refresh(article)
+    return ResponseModel.success(data=serialize_article(article), message="知识库文件已导入")
+
+
+@router.post("/customer-service/ask", summary="智能客服知识库测试问答")
+async def admin_ask_customer_service(
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """管理端预览知识库问答效果，并记录审计日志。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="请输入问题")
+    if len(question) > 300:
+        raise HTTPException(status_code=400, detail="问题不能超过300字")
+
+    result = await db.execute(
+        select(CustomerServiceKnowledgeArticle).where(
+            CustomerServiceKnowledgeArticle.site_id == site_id,
+            CustomerServiceKnowledgeArticle.status == "published",
+            CustomerServiceKnowledgeArticle.is_deleted.is_(False),
+        )
+    )
+    articles = result.scalars().all()
+    answer = select_knowledge_answer(question=question, articles=articles, site_id=site_id)
+    log = CustomerServiceAskLog(
+        **build_ask_log_payload(
+            site_id=site_id,
+            channel="admin_preview",
+            question=question,
+            result=answer,
+            admin_id=admin.id,
+        )
+    )
+    db.add(log)
+    await db.commit()
+    await db.refresh(log)
+    return ResponseModel.success(data={**answer, "log_id": log.id})
+
+
+@router.get("/customer-service/ask-logs", summary="智能客服问答日志")
+async def list_customer_service_ask_logs(
+    request: Request,
+    channel: Optional[str] = Query(None),
+    needs_human: Optional[bool] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """查询当前营地智能客服问答日志。"""
+    site_id = get_site_id(request)
+    _ensure_customer_service_admin(admin, target_site_id=site_id)
+    conditions = [
+        CustomerServiceAskLog.site_id == site_id,
+        CustomerServiceAskLog.is_deleted.is_(False),
+    ]
+    if channel:
+        conditions.append(CustomerServiceAskLog.channel == channel)
+    if needs_human is not None:
+        conditions.append(CustomerServiceAskLog.needs_human.is_(needs_human))
+
+    total_result = await db.execute(select(func.count(CustomerServiceAskLog.id)).where(*conditions))
+    total = total_result.scalar() or 0
+    result = await db.execute(
+        select(CustomerServiceAskLog)
+        .where(*conditions)
+        .order_by(CustomerServiceAskLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = [serialize_ask_log(log) for log in result.scalars().all()]
+    return ResponseModel.success(
+        data={
+            "list": items,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": (total + page_size - 1) // page_size if page_size else 0,
+            },
+        }
+    )
+
+
+# ========== 企业微信群机器人 ==========
+
+@router.get("/enterprise-wechat/robots", summary="企业微信群机器人列表")
+async def list_enterprise_wechat_robots(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """获取当前营地企业微信群机器人配置列表。"""
+    _ensure_super_admin(admin)
+    site_id = get_site_id(request)
+    result = await db.execute(
+        select(EnterpriseWechatRobotConfig)
+        .where(
+            EnterpriseWechatRobotConfig.site_id == site_id,
+            EnterpriseWechatRobotConfig.is_deleted.is_(False),
+        )
+        .order_by(EnterpriseWechatRobotConfig.id.desc())
+    )
+    items = [_serialize_enterprise_wechat_robot(robot) for robot in result.scalars().all()]
+    return ResponseModel.success(data=items)
+
+
+@router.post("/enterprise-wechat/robots", summary="创建企业微信群机器人")
+async def create_enterprise_wechat_robot(
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """创建企业微信群机器人配置，webhook 和 secret 均加密存储。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action="enterprise_wechat:create",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    name = (body.get("name") or "").strip()
+    webhook_url = (body.get("webhook_url") or "").strip()
+    secret = (body.get("secret") or "").strip()
+
+    if not name or not webhook_url:
+        raise HTTPException(status_code=400, detail="请提供机器人名称和 webhook_url")
+    try:
+        validate_enterprise_wechat_webhook_url(webhook_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    robot = EnterpriseWechatRobotConfig(
+        site_id=site_id,
+        name=name,
+        webhook_url_ciphertext=encrypt_sensitive(webhook_url),
+        secret_ciphertext=encrypt_sensitive(secret) if secret else None,
+        status=body.get("status") or "active",
+        created_by=admin.id,
+        updated_by=admin.id,
+    )
+    db.add(robot)
+    await db.commit()
+    await db.refresh(robot)
+    return ResponseModel.success(data=_serialize_enterprise_wechat_robot(robot), message="企业微信群机器人创建成功")
+
+
+@router.put("/enterprise-wechat/robots/{robot_id}", summary="更新企业微信群机器人")
+async def update_enterprise_wechat_robot(
+    robot_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """更新企业微信群机器人配置。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"enterprise_wechat:update:{robot_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    result = await db.execute(
+        select(EnterpriseWechatRobotConfig).where(
+            EnterpriseWechatRobotConfig.id == robot_id,
+            EnterpriseWechatRobotConfig.site_id == site_id,
+            EnterpriseWechatRobotConfig.is_deleted.is_(False),
+        )
+    )
+    robot = result.scalar_one_or_none()
+    if not robot:
+        raise HTTPException(status_code=404, detail="企业微信群机器人不存在")
+
+    if "name" in body:
+        name = (body.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="机器人名称不能为空")
+        robot.name = name
+    if "webhook_url" in body:
+        webhook_url = (body.get("webhook_url") or "").strip()
+        if not webhook_url:
+            raise HTTPException(status_code=400, detail="webhook_url 不能为空")
+        try:
+            validate_enterprise_wechat_webhook_url(webhook_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        robot.webhook_url_ciphertext = encrypt_sensitive(webhook_url)
+    if "secret" in body:
+        secret = (body.get("secret") or "").strip()
+        robot.secret_ciphertext = encrypt_sensitive(secret) if secret else None
+    if "status" in body:
+        robot.status = body["status"]
+    robot.updated_by = admin.id
+
+    await db.commit()
+    await db.refresh(robot)
+    return ResponseModel.success(data=_serialize_enterprise_wechat_robot(robot), message="企业微信群机器人更新成功")
+
+
+@router.post("/enterprise-wechat/robots/{robot_id}/test-send", summary="测试发送企业微信群机器人消息")
+async def test_send_enterprise_wechat_robot(
+    robot_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """向企业微信群机器人发送测试消息，并记录审计日志。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"enterprise_wechat:test_send:{robot_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    result = await db.execute(
+        select(EnterpriseWechatRobotConfig).where(
+            EnterpriseWechatRobotConfig.id == robot_id,
+            EnterpriseWechatRobotConfig.site_id == site_id,
+            EnterpriseWechatRobotConfig.is_deleted.is_(False),
+        )
+    )
+    robot = result.scalar_one_or_none()
+    if not robot:
+        raise HTTPException(status_code=404, detail="企业微信群机器人不存在")
+    if robot.status != "active":
+        raise HTTPException(status_code=400, detail="企业微信群机器人未启用")
+
+    content = (body.get("content") or "一月一露企业微信群机器人测试消息").strip()
+    webhook_url = decrypt_sensitive(robot.webhook_url_ciphertext)
+    try:
+        validate_enterprise_wechat_webhook_url(webhook_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    secret = decrypt_sensitive(robot.secret_ciphertext) if robot.secret_ciphertext else None
+
+    try:
+        result = await send_text_message(
+            webhook_url,
+            content=content,
+            secret=secret,
+            mentioned_mobile_list=body.get("mentioned_mobile_list"),
+        )
+        response_body = result.get("body") or {}
+        response_code = response_body.get("errcode", result.get("http_status"))
+        success = result.get("http_status") == 200 and response_body.get("errcode", 0) == 0
+        log = EnterpriseWechatRobotMessageLog(
+            robot_config_id=robot.id,
+            site_id=site_id,
+            message_type="text",
+            request_payload=_redact_enterprise_wechat_log_value(result.get("payload") or {}),
+            response_code=response_code,
+            response_body=_redact_enterprise_wechat_log_value(response_body),
+            send_status="success" if success else "failed",
+            error_message=None if success else _redact_enterprise_wechat_log_value(response_body.get("errmsg", "企业微信群机器人发送失败")),
+        )
+        db.add(log)
+        await db.commit()
+        if not success:
+            safe_message = _redact_enterprise_wechat_log_value(response_body.get("errmsg", "企业微信群机器人发送失败"))
+            raise HTTPException(status_code=502, detail=safe_message)
+        return ResponseModel.success(data={"log_id": log.id}, message="企业微信群机器人测试消息发送成功")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log = EnterpriseWechatRobotMessageLog(
+            robot_config_id=robot.id,
+            site_id=site_id,
+            message_type="text",
+            request_payload=_redact_enterprise_wechat_log_value({"msgtype": "text", "text": {"content": content}}),
+            response_code=None,
+            response_body=None,
+            send_status="failed",
+            error_message=_redact_enterprise_wechat_log_value(str(exc)),
+        )
+        db.add(log)
+        await db.commit()
+        raise HTTPException(status_code=502, detail="企业微信群机器人发送失败") from exc
+
+
+@router.post("/enterprise-wechat/robots/{robot_id}/knowledge-ask-send", summary="发送知识库问答到企业微信群")
+async def ask_send_enterprise_wechat_robot_knowledge(
+    robot_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """复用智能客服知识库回答，并通过企业微信群机器人发送到群。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"enterprise_wechat:knowledge_ask_send:{robot_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise HTTPException(status_code=400, detail="请输入问题")
+    if len(question) > 300:
+        raise HTTPException(status_code=400, detail="问题不能超过300字")
+
+    robot_result = await db.execute(
+        select(EnterpriseWechatRobotConfig).where(
+            EnterpriseWechatRobotConfig.id == robot_id,
+            EnterpriseWechatRobotConfig.site_id == site_id,
+            EnterpriseWechatRobotConfig.is_deleted.is_(False),
+        )
+    )
+    robot = robot_result.scalar_one_or_none()
+    if not robot:
+        raise HTTPException(status_code=404, detail="企业微信群机器人不存在")
+    if robot.status != "active":
+        raise HTTPException(status_code=400, detail="企业微信群机器人未启用")
+
+    article_result = await db.execute(
+        select(CustomerServiceKnowledgeArticle).where(
+            CustomerServiceKnowledgeArticle.site_id == site_id,
+            CustomerServiceKnowledgeArticle.status == "published",
+            CustomerServiceKnowledgeArticle.is_deleted.is_(False),
+        )
+    )
+    answer = select_knowledge_answer(
+        question=question,
+        articles=article_result.scalars().all(),
+        site_id=site_id,
+    )
+    ask_log = CustomerServiceAskLog(
+        **build_ask_log_payload(
+            site_id=site_id,
+            channel="enterprise_wechat",
+            question=question,
+            result=answer,
+            admin_id=admin.id,
+        )
+    )
+    db.add(ask_log)
+    await db.flush()
+
+    source_text = "、".join(source["title"] for source in answer.get("sources", [])) or "人工客服"
+    content = (
+        f"一月一露智能客服\n"
+        f"问题：{question}\n"
+        f"回答：{answer['answer']}\n"
+        f"来源：{source_text}"
+    )[:3500]
+    webhook_url = decrypt_sensitive(robot.webhook_url_ciphertext)
+    try:
+        validate_enterprise_wechat_webhook_url(webhook_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    secret = decrypt_sensitive(robot.secret_ciphertext) if robot.secret_ciphertext else None
+
+    try:
+        result = await send_text_message(
+            webhook_url,
+            content=content,
+            secret=secret,
+            mentioned_mobile_list=body.get("mentioned_mobile_list"),
+        )
+        response_body = result.get("body") or {}
+        response_code = response_body.get("errcode", result.get("http_status"))
+        success = result.get("http_status") == 200 and response_body.get("errcode", 0) == 0
+        log = EnterpriseWechatRobotMessageLog(
+            robot_config_id=robot.id,
+            site_id=site_id,
+            message_type="knowledge_answer",
+            request_payload=_redact_enterprise_wechat_log_value(result.get("payload") or {}),
+            response_code=response_code,
+            response_body=_redact_enterprise_wechat_log_value(response_body),
+            send_status="success" if success else "failed",
+            error_message=None if success else _redact_enterprise_wechat_log_value(response_body.get("errmsg", "企业微信群机器人发送失败")),
+        )
+        db.add(log)
+        await db.commit()
+        if not success:
+            safe_message = _redact_enterprise_wechat_log_value(response_body.get("errmsg", "企业微信群机器人发送失败"))
+            raise HTTPException(status_code=502, detail=safe_message)
+        return ResponseModel.success(
+            data={
+                **answer,
+                "ask_log_id": ask_log.id,
+                "robot_log_id": log.id,
+            },
+            message="知识库问答已发送到企业微信群",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log = EnterpriseWechatRobotMessageLog(
+            robot_config_id=robot.id,
+            site_id=site_id,
+            message_type="knowledge_answer",
+            request_payload=_redact_enterprise_wechat_log_value({"msgtype": "text", "text": {"content": content}}),
+            response_code=None,
+            response_body=None,
+            send_status="failed",
+            error_message=_redact_enterprise_wechat_log_value(str(exc)),
+        )
+        db.add(log)
+        await db.commit()
+        raise HTTPException(status_code=502, detail="企业微信群机器人知识库问答发送失败") from exc
+
+
+@router.get("/enterprise-wechat/robots/{robot_id}/logs", summary="企业微信群机器人发送日志")
+async def list_enterprise_wechat_robot_logs(
+    robot_id: int,
+    request: Request,
+    send_status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """查询企业微信群机器人消息发送日志，便于上线前验证 D5 发送链路。"""
+    _ensure_super_admin(admin)
+    site_id = get_site_id(request)
+    robot_result = await db.execute(
+        select(EnterpriseWechatRobotConfig.id).where(
+            EnterpriseWechatRobotConfig.id == robot_id,
+            EnterpriseWechatRobotConfig.site_id == site_id,
+            EnterpriseWechatRobotConfig.is_deleted.is_(False),
+        )
+    )
+    if not robot_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="企业微信群机器人不存在")
+
+    conditions = [
+        EnterpriseWechatRobotMessageLog.robot_config_id == robot_id,
+        EnterpriseWechatRobotMessageLog.site_id == site_id,
+        EnterpriseWechatRobotMessageLog.is_deleted.is_(False),
+    ]
+    if send_status:
+        conditions.append(EnterpriseWechatRobotMessageLog.send_status == send_status)
+
+    count_result = await db.execute(
+        select(func.count(EnterpriseWechatRobotMessageLog.id)).where(*conditions)
+    )
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(EnterpriseWechatRobotMessageLog)
+        .where(*conditions)
+        .order_by(EnterpriseWechatRobotMessageLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    items = [_serialize_enterprise_wechat_robot_log(log) for log in result.scalars().all()]
+    return ResponseModel.success(
+        data={
+            "list": items,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total,
+                "total_pages": (total + page_size - 1) // page_size if page_size else 0,
+            },
+        }
+    )
 
 
 # ========== 页面配置管理 ==========
@@ -2148,39 +3095,151 @@ async def get_notification_stats(
 
 # ========== 二次确认 ==========
 
+def _hash_high_risk_body(body: Any) -> str:
+    """对高风险写操作请求体生成稳定摘要，供二次确认 token 绑定。"""
+    canonical = json.dumps(
+        body or {},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _get_required_confirm_site_id(request: Request) -> int:
+    """高风险确认必须显式绑定当前营地，不能使用站点默认值。"""
+    site_id_raw = request.headers.get("X-Site-Id") or request.headers.get("x-site-id")
+    if site_id_raw is None or str(site_id_raw).strip() == "":
+        raise HTTPException(status_code=400, detail="高风险操作必须携带 X-Site-Id")
+    try:
+        site_id = int(site_id_raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="X-Site-Id 必须为有效营地 ID") from exc
+    if site_id not in (1, 2):
+        raise HTTPException(status_code=400, detail="X-Site-Id 必须为有效营地 ID")
+    return site_id
+
+
+def _build_confirm_token(
+    admin: AdminUser,
+    action: str,
+    request_hash: str = "",
+    site_id: Optional[int] = None,
+) -> str:
+    """生成绑定管理员、营地、动作和请求摘要的短期确认 token。"""
+    target_site_id = site_id if site_id is not None else (getattr(admin, "site_id", 1) or 1)
+    return create_access_token(
+        {
+            "sub": f"admin:{admin.id}",
+            "role": admin.role.role_code if admin.role else "super_admin",
+            "confirm_type": "operation",
+            "action": action,
+            "site_id": target_site_id,
+            "request_hash": request_hash,
+        },
+        expires_delta=timedelta(minutes=10),
+    )
+
+
+def _require_high_risk_confirm(
+    request: Request,
+    admin: AdminUser,
+    *,
+    action: str,
+    request_hash: str = "",
+) -> None:
+    """强制校验高风险写操作的服务端二次确认 token。"""
+    _ensure_super_admin(admin)
+    if not request_hash:
+        raise HTTPException(status_code=403, detail="二次确认 token 与请求内容不匹配")
+    target_site_id = _get_required_confirm_site_id(request)
+    token = request.headers.get("X-Confirm-Token") or request.headers.get("x-confirm-token")
+    if not token:
+        raise HTTPException(status_code=403, detail="缺少二次确认 token")
+
+    try:
+        payload = verify_token(token)
+    except JWTError as exc:
+        raise HTTPException(status_code=403, detail="二次确认 token 无效或已过期") from exc
+
+    expected_sub = f"admin:{admin.id}"
+    if (
+        payload.get("token_type") != "access"
+        or payload.get("confirm_type") != "operation"
+        or payload.get("sub") != expected_sub
+        or payload.get("role") != "super_admin"
+        or payload.get("action") != action
+        or int(payload.get("site_id") or 0) != target_site_id
+    ):
+        raise HTTPException(status_code=403, detail="二次确认 token 与当前操作不匹配")
+
+    token_request_hash = payload.get("request_hash") or ""
+    if token_request_hash != request_hash:
+        raise HTTPException(status_code=403, detail="二次确认 token 与请求内容不匹配")
+
+
 @router.post("/confirm/verify-code", summary="验证确认码")
 async def verify_confirm_code(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """验证二次确认码（简单实现）"""
+    """验证二次确认码。"""
+    _ensure_super_admin(admin)
     code = body.get("code", "")
     action = body.get("action", "")
-    # 简单验证：code 不为空即通过
+    request_hash = body.get("request_hash", "")
     if not code:
         raise HTTPException(status_code=400, detail="确认码不能为空")
-    return ResponseModel.success(data={"verified": True, "action": action}, message="验证通过")
+    if not request_hash:
+        raise HTTPException(status_code=400, detail="request_hash 不能为空")
+    target_site_id = _get_required_confirm_site_id(request)
+    if not admin.operation_password_hash:
+        raise HTTPException(status_code=403, detail="操作密码未设置")
+    if not verify_password(code, admin.operation_password_hash):
+        raise HTTPException(status_code=403, detail="确认码错误")
+    return ResponseModel.success(
+        data={
+            "verified": True,
+            "action": action,
+            "confirm_token": _build_confirm_token(admin, action, request_hash, site_id=target_site_id),
+        },
+        message="验证通过",
+    )
 
 
 @router.post("/confirm/verify-password", summary="验证操作密码")
 async def verify_operation_password(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """验证操作密码"""
-    import hashlib
-
+    _ensure_super_admin(admin)
     password = body.get("password", "")
     action = body.get("action", "")
+    request_hash = body.get("request_hash", "")
     if not password:
         raise HTTPException(status_code=400, detail="操作密码不能为空")
+    if not request_hash:
+        raise HTTPException(status_code=400, detail="request_hash 不能为空")
+    target_site_id = _get_required_confirm_site_id(request)
+    if not admin.operation_password_hash:
+        raise HTTPException(status_code=403, detail="操作密码未设置")
 
-    pwd_hash = hashlib.sha256(password.encode()).hexdigest()
-    if admin.operation_password_hash and admin.operation_password_hash != pwd_hash:
+    if not verify_password(password, admin.operation_password_hash):
         raise HTTPException(status_code=403, detail="操作密码错误")
-    return ResponseModel.success(data={"verified": True, "action": action}, message="验证通过")
+    return ResponseModel.success(
+        data={
+            "verified": True,
+            "action": action,
+            "confirm_token": _build_confirm_token(admin, action, request_hash, site_id=target_site_id),
+        },
+        message="验证通过",
+    )
 
 
 # ========== 会员详情 & 积分调整 ==========
@@ -2210,6 +3269,10 @@ async def get_member_detail(
         select(TimesCard).where(TimesCard.user_id == user_id, TimesCard.is_deleted.is_(False))
     )
     times_cards = times_result.scalars().all()
+    membership_cards = []
+    if annual_card:
+        membership_cards.append(_serialize_membership_card_info(annual_card))
+    membership_cards.extend(_serialize_membership_card_info(tc) for tc in times_cards)
 
     return ResponseModel.success(data={
         "id": user.id,
@@ -2217,16 +3280,22 @@ async def get_member_detail(
         "avatar_url": user.avatar_url,
         "phone": user.phone,
         "member_level": user.member_level,
-        "total_points": user.total_points,
-        "available_points": user.available_points,
-        "total_spent": float(user.total_spent) if user.total_spent else 0,
-        "order_count": user.order_count,
+        "total_points": getattr(user, "total_points", 0),
+        "available_points": getattr(user, "available_points", 0),
+        "total_spent": float(getattr(user, "total_spent", 0) or 0),
+        "order_count": getattr(user, "order_count", 0),
+        "has_membership_card": len(membership_cards) > 0,
+        "membership_card_count": len(membership_cards),
+        "membership_cards": membership_cards,
         "annual_card": {
             "id": annual_card.id,
             "status": annual_card.status,
             "start_date": annual_card.start_date.isoformat() if annual_card.start_date else None,
             "end_date": annual_card.end_date.isoformat() if annual_card.end_date else None,
         } if annual_card else None,
+        "annual_cards": [
+            {"id": annual_card.id, "status": annual_card.status, "start_date": annual_card.start_date.isoformat() if annual_card.start_date else None, "end_date": annual_card.end_date.isoformat() if annual_card.end_date else None}
+        ] if annual_card else [],
         "times_cards": [
             {"id": tc.id, "remaining_times": tc.remaining_times, "status": tc.status}
             for tc in times_cards
@@ -2646,8 +3715,444 @@ async def delete_product_discount_rule(
 
 # ========== 库存管理 ==========
 
+@router.get("/inventory-pools", summary="库存池列表")
+async def list_inventory_pools(
+    request: Request,
+    keyword: Optional[str] = Query(None, max_length=100),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """获取跨商品共享库存池列表。"""
+    _ensure_super_admin(admin)
+    site_id = get_site_id(request)
+    conditions = [
+        InventoryPool.site_id == site_id,
+        InventoryPool.is_deleted.is_(False),
+    ]
+    if keyword:
+        like_keyword = f"%{keyword.strip()}%"
+        conditions.append(or_(InventoryPool.pool_code.ilike(like_keyword), InventoryPool.name.ilike(like_keyword)))
+    if status:
+        conditions.append(InventoryPool.status == status)
+
+    count_result = await db.execute(select(func.count(InventoryPool.id)).where(*conditions))
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(InventoryPool)
+        .where(*conditions)
+        .order_by(InventoryPool.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    pools = result.scalars().all()
+    pool_ids = [pool.id for pool in pools]
+    binding_counts: dict[int, int] = {}
+    if pool_ids:
+        binding_count_result = await db.execute(
+            select(
+                InventoryPoolBinding.inventory_pool_id,
+                func.count(InventoryPoolBinding.id),
+            )
+            .where(
+                InventoryPoolBinding.inventory_pool_id.in_(pool_ids),
+                InventoryPoolBinding.site_id == site_id,
+                InventoryPoolBinding.is_deleted.is_(False),
+            )
+            .group_by(InventoryPoolBinding.inventory_pool_id)
+        )
+        binding_counts = {
+            int(row[0]): int(row[1] or 0)
+            for row in binding_count_result.all()
+        }
+    items = [
+        _serialize_inventory_pool(pool, binding_count=binding_counts.get(pool.id, 0))
+        for pool in pools
+    ]
+    return ResponseModel.success(data={"items": items, "total": total, "page": page, "page_size": page_size})
+
+
+@router.post("/inventory-pools", summary="创建库存池")
+async def create_inventory_pool(
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """创建跨商品共享库存池。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action="inventory_pool:create",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    pool_code = (body.get("pool_code") or "").strip()
+    name = (body.get("name") or "").strip()
+    if not pool_code or not name:
+        raise HTTPException(status_code=400, detail="请提供 pool_code 和 name")
+
+    if body.get("status") not in (None, "active"):
+        raise HTTPException(status_code=400, detail="新建库存池默认启用；启停请在创建后通过 /inventory-pools/{pool_id}/adjust 操作")
+    try:
+        initial_numbers = normalize_initial_pool_numbers(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    existing = await db.execute(
+        select(InventoryPool.id).where(
+            InventoryPool.site_id == site_id,
+            InventoryPool.pool_code == pool_code,
+            InventoryPool.is_deleted.is_(False),
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=409, detail="库存池编码已存在")
+
+    pool = InventoryPool(
+        site_id=site_id,
+        pool_code=pool_code,
+        name=name,
+        pool_type=body.get("pool_type") or "generic",
+        total=initial_numbers["total"],
+        available=initial_numbers["available"],
+        locked=initial_numbers["locked"],
+        sold=initial_numbers["sold"],
+        status="active",
+    )
+    db.add(pool)
+    await db.commit()
+    await db.refresh(pool)
+    return ResponseModel.success(data=_serialize_inventory_pool(pool), message="库存池创建成功")
+
+
+@router.put("/inventory-pools/{pool_id}", summary="更新库存池")
+async def update_inventory_pool(
+    pool_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """更新跨商品共享库存池。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"inventory_pool:update:{pool_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    result = await db.execute(
+        select(InventoryPool).where(
+            InventoryPool.id == pool_id,
+            InventoryPool.site_id == site_id,
+            InventoryPool.is_deleted.is_(False),
+        )
+    )
+    pool = result.scalar_one_or_none()
+    if not pool:
+        raise HTTPException(status_code=404, detail="库存池不存在")
+
+    forbidden_quantity_fields = {"total", "available", "locked", "sold"}
+    if forbidden_quantity_fields.intersection(body.keys()):
+        raise HTTPException(status_code=400, detail="库存池数量调整请使用 /inventory-pools/{pool_id}/adjust")
+
+    if "name" in body:
+        name = (body.get("name") or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="库存池名称不能为空")
+        pool.name = name
+    if "pool_type" in body:
+        pool.pool_type = body["pool_type"]
+    if "status" in body:
+        raise HTTPException(status_code=400, detail="库存池启停请使用 /inventory-pools/{pool_id}/adjust")
+
+    await db.commit()
+    await db.refresh(pool)
+    return ResponseModel.success(data=_serialize_inventory_pool(pool), message="库存池更新成功")
+
+
+@router.post("/inventory-pools/{pool_id}/adjust", summary="安全调整共享库存池")
+async def adjust_inventory_pool(
+    pool_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """安全调整共享库存池总量或状态。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"inventory_pool:adjust:{pool_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    result = await inventory_pool_service.adjust_inventory_pool(
+        db,
+        site_id=site_id,
+        pool_id=pool_id,
+        mode=body.get("mode") or "set_total",
+        total=body.get("total"),
+        delta=body.get("delta"),
+        pool_status=body.get("status"),
+    )
+    await db.commit()
+    pool = result["pool"]
+    return ResponseModel.success(
+        data={
+            "pool": _serialize_inventory_pool(pool),
+            "before": result["before"],
+            "after": result["after"],
+        },
+        message="共享库存池已调整",
+    )
+
+
+@router.get("/inventory-pools/{pool_id}/bindings", summary="库存池绑定列表")
+async def list_inventory_pool_bindings(
+    pool_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """获取库存池显式绑定关系。"""
+    _ensure_super_admin(admin)
+    site_id = get_site_id(request)
+    pool_result = await db.execute(
+        select(InventoryPool.id).where(
+            InventoryPool.id == pool_id,
+            InventoryPool.site_id == site_id,
+            InventoryPool.is_deleted.is_(False),
+        )
+    )
+    if not pool_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="库存池不存在")
+
+    result = await db.execute(
+        select(InventoryPoolBinding)
+        .where(
+            InventoryPoolBinding.inventory_pool_id == pool_id,
+            InventoryPoolBinding.site_id == site_id,
+            InventoryPoolBinding.is_deleted.is_(False),
+        )
+        .order_by(InventoryPoolBinding.priority.asc(), InventoryPoolBinding.id.asc())
+    )
+    bindings = result.scalars().all()
+    product_ids = {binding.product_id for binding in bindings if binding.product_id}
+    sku_ids = {binding.sku_id for binding in bindings if binding.sku_id}
+    product_names: dict[int, str] = {}
+    sku_labels: dict[int, str] = {}
+    sku_product_ids: dict[int, int] = {}
+    if product_ids:
+        product_result = await db.execute(
+            select(Product.id, Product.name).where(
+                Product.id.in_(product_ids),
+                Product.site_id == site_id,
+                Product.is_deleted.is_(False),
+            )
+        )
+        product_names = {int(row[0]): row[1] for row in product_result.all()}
+    if sku_ids:
+        sku_result = await db.execute(
+            select(SKU.id, SKU.sku_code, SKU.spec_values, SKU.product_id)
+            .join(Product, Product.id == SKU.product_id)
+            .where(
+                SKU.id.in_(sku_ids),
+                SKU.is_deleted.is_(False),
+                Product.site_id == site_id,
+                Product.is_deleted.is_(False),
+            )
+        )
+        for row in sku_result.all():
+            spec_values = row[2] or {}
+            spec_label = " / ".join(str(value) for value in spec_values.values()) or row[1]
+            sku_product_ids[int(row[0])] = int(row[3])
+            product_name = product_names.get(int(row[3]), "")
+            sku_labels[int(row[0])] = f"{product_name} {spec_label}".strip()
+
+    items = [
+        _serialize_inventory_pool_binding(
+            binding,
+            product_names=product_names,
+            sku_labels=sku_labels,
+            sku_product_ids=sku_product_ids,
+        )
+        for binding in bindings
+    ]
+    return ResponseModel.success(data=items)
+
+
+@router.post("/inventory-pools/{pool_id}/bindings", summary="创建库存池绑定")
+async def create_inventory_pool_binding(
+    pool_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """显式绑定商品、SKU、活动场次或租赁资产到库存池。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"inventory_pool_binding:create:{pool_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    pool_result = await db.execute(
+        select(InventoryPool.id).where(
+            InventoryPool.id == pool_id,
+            InventoryPool.site_id == site_id,
+            InventoryPool.is_deleted.is_(False),
+        )
+    )
+    if not pool_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="库存池不存在")
+
+    target_data = {
+        "product_id": body.get("product_id"),
+        "sku_id": body.get("sku_id"),
+        "activity_session_id": body.get("activity_session_id"),
+        "rental_asset_id": body.get("rental_asset_id"),
+    }
+    try:
+        validate_exactly_one_binding_target(target_data)
+        await validate_binding_target_site(db, site_id=site_id, data=target_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    binding = InventoryPoolBinding(
+        inventory_pool_id=pool_id,
+        site_id=site_id,
+        product_id=target_data["product_id"],
+        sku_id=target_data["sku_id"],
+        activity_session_id=target_data["activity_session_id"],
+        rental_asset_id=target_data["rental_asset_id"],
+        priority=int(body.get("priority") or 100),
+        status=body.get("status") or "active",
+    )
+    db.add(binding)
+    await db.commit()
+    await db.refresh(binding)
+    return ResponseModel.success(data=_serialize_inventory_pool_binding(binding), message="库存池绑定创建成功")
+
+
+@router.put("/inventory-pool-bindings/{binding_id}", summary="更新库存池绑定")
+async def update_inventory_pool_binding(
+    binding_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """更新库存池绑定关系。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"inventory_pool_binding:update:{binding_id}",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    result = await db.execute(
+        select(InventoryPoolBinding).where(
+            InventoryPoolBinding.id == binding_id,
+            InventoryPoolBinding.site_id == site_id,
+            InventoryPoolBinding.is_deleted.is_(False),
+        )
+    )
+    binding = result.scalar_one_or_none()
+    if not binding:
+        raise HTTPException(status_code=404, detail="库存池绑定不存在")
+
+    target_data = {
+        "product_id": binding.product_id,
+        "sku_id": binding.sku_id,
+        "activity_session_id": binding.activity_session_id,
+        "rental_asset_id": binding.rental_asset_id,
+    }
+    for field in ["product_id", "sku_id", "activity_session_id", "rental_asset_id"]:
+        if field in body:
+            target_data[field] = body[field]
+    try:
+        validate_exactly_one_binding_target(target_data)
+        await validate_binding_target_site(db, site_id=site_id, data=target_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for field, value in target_data.items():
+        setattr(binding, field, value)
+    if "priority" in body:
+        binding.priority = int(body["priority"])
+    if "status" in body:
+        binding.status = body["status"]
+
+    await db.commit()
+    await db.refresh(binding)
+    return ResponseModel.success(data=_serialize_inventory_pool_binding(binding), message="库存池绑定更新成功")
+
+
+@router.get("/inventory/calendar", summary="完整库存日历")
+async def get_inventory_calendar(
+    request: Request,
+    date_start: date = Query(...),
+    date_end: date = Query(...),
+    product_ids: Optional[List[int]] = Query(None),
+    product_type: Optional[str] = Query(None),
+    sku_ids: Optional[List[int]] = Query(None),
+    time_slot: Optional[str] = Query(None),
+    inventory_source: str = Query("all"),
+    include_missing: bool = Query(True),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """查询完整库存日历，缺失日期也返回关闭状态格子。"""
+    _ensure_super_admin(admin)
+    site_id = get_site_id(request)
+    data = await inventory_calendar_service.get_inventory_calendar(
+        db,
+        site_id=site_id,
+        date_start=date_start,
+        date_end=date_end,
+        product_ids=product_ids,
+        product_type=product_type,
+        sku_ids=sku_ids,
+        time_slot=time_slot,
+        inventory_source=inventory_source,
+        include_missing=include_missing,
+    )
+    return ResponseModel.success(data=data)
+
+
+@router.post("/inventory/batch-upsert", summary="批量创建或调整库存日历")
+async def batch_upsert_inventory_calendar(
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """批量 upsert 普通日期库存，显式共享池目标会被拒绝。"""
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action="inventory:batch-upsert",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    data = await inventory_calendar_service.batch_upsert_inventory(
+        db,
+        site_id=site_id,
+        body=body,
+        operator_id=admin.id,
+    )
+    await db.commit()
+    return ResponseModel.success(data=data, message="库存日历批量调整完成")
+
+
 @router.get("/inventory", summary="库存列表")
 async def list_inventory(
+    request: Request,
     product_id: Optional[int] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
@@ -2657,7 +4162,8 @@ async def list_inventory(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取库存列表"""
-    conditions = [Inventory.is_deleted.is_(False)]
+    site_id = get_site_id(request)
+    conditions = [Inventory.site_id == site_id, Inventory.is_deleted.is_(False)]
     if product_id:
         conditions.append(Inventory.product_id == product_id)
     if start_date:
@@ -2697,56 +4203,61 @@ async def list_inventory(
 async def update_inventory(
     inventory_id: int,
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新库存"""
-    result = await db.execute(
-        select(Inventory).where(Inventory.id == inventory_id, Inventory.is_deleted.is_(False))
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action=f"inventory:update:{inventory_id}",
+        request_hash=_hash_high_risk_body(body),
     )
-    inv = result.scalar_one_or_none()
-    if not inv:
-        raise HTTPException(status_code=404, detail="库存记录不存在")
-    if "total" in body:
-        inv.total = body["total"]
-    if "status" in body:
-        inv.status = body["status"]
+    site_id = get_site_id(request)
+    inv = await inventory_calendar_service.update_inventory_cell(
+        db,
+        site_id=site_id,
+        inventory_id=inventory_id,
+        body=body,
+        operator_id=admin.id,
+    )
     await db.commit()
-    return ResponseModel.success(message="库存更新成功")
+    return ResponseModel.success(data=_serialize_inventory_record(inv), message="库存更新成功")
 
 
 @router.post("/inventory/batch-open", summary="批量开放库存")
 async def batch_open_inventory(
     body: dict,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     """批量开放库存"""
-    product_id = body.get("product_id")
-    start = body.get("start_date")
-    end = body.get("end_date")
-    total_per_day = body.get("total", 10)
-
-    if not all([product_id, start, end]):
-        raise HTTPException(status_code=400, detail="请提供 product_id、start_date、end_date")
-
-    dt_start = date.fromisoformat(start)
-    dt_end = date.fromisoformat(end)
-    created = 0
-    current = dt_start
-    while current <= dt_end:
-        # 检查是否已有
-        exist = await db.execute(
-            select(Inventory).where(Inventory.product_id == product_id, Inventory.date == current)
-        )
-        if not exist.scalar_one_or_none():
-            inv = Inventory(product_id=product_id, date=current, total=total_per_day, locked=0, sold=0, status="open")
-            db.add(inv)
-            created += 1
-        current += timedelta(days=1)
-
+    _require_high_risk_confirm(
+        request,
+        admin,
+        action="inventory:batch-upsert",
+        request_hash=_hash_high_risk_body(body),
+    )
+    site_id = get_site_id(request)
+    data = await inventory_calendar_service.batch_upsert_inventory(
+        db,
+        site_id=site_id,
+        body={
+            "product_ids": [body.get("product_id")],
+            "date_start": body.get("start_date"),
+            "date_end": body.get("end_date"),
+            "total": body.get("total", 10),
+            "mode": "open",
+            "status": "open",
+            "create_missing": True,
+            "remark": body.get("remark") or "兼容批量开放库存",
+        },
+        operator_id=admin.id,
+    )
     await db.commit()
-    return ResponseModel.success(data={"created": created}, message=f"成功开放 {created} 天库存")
+    return ResponseModel.success(data=data, message=f"成功开放 {data['created_count']} 天库存")
 
 
 # ========== 押金记录 ==========
@@ -2774,22 +4285,40 @@ async def approve_order_refund(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """退款审批（兼容前端 /refund/approve 路径）"""
+    _ensure_super_admin(admin)
     site_id = get_site_id(request)
-    result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False), Order.site_id == site_id)
-    )
-    order = result.scalar_one_or_none()
-    if not order:
-        raise HTTPException(status_code=404, detail="订单不存在")
+    order = await refund_service.get_order_for_refund(db, order_id=order_id, site_id=site_id)
 
     approved = body.get("approved", False)
-    reason = body.get("reason", "")
-
+    refund = await refund_service.find_pending_refund_for_order(
+        db,
+        order_id=order_id,
+        site_id=site_id,
+    )
+    if refund is None:
+        refund_amount = Decimal(str(body.get("refund_amount") or getattr(order, "actual_amount", 0) or 0))
+        refund = await refund_service.create_refund_record(
+            db,
+            order,
+            refund_mode="full",
+            order_action="cancel_order",
+            refund_amount=refund_amount,
+            release_inventory=True,
+            reason=body.get("reason") or "兼容订单退款审批",
+            requested_by=admin.id,
+            requester_role=admin.role.role_code if admin.role else "admin",
+        )
     if approved:
-        order.status = "refunded"
+        if refund.status == "pending":
+            await refund_service.approve_refund(db, refund_id=refund.id, site_id=site_id, approved_by=admin.id)
     else:
-        order.status = "paid"  # 拒绝退款恢复到已支付
-
+        await refund_service.reject_refund(
+            db,
+            refund_id=refund.id,
+            site_id=site_id,
+            rejected_by=admin.id,
+            reason=body.get("reason") or "兼容订单退款拒绝",
+        )
     await db.commit()
     msg = "退款已通过" if approved else "退款已拒绝"
     return ResponseModel.success(message=msg)
@@ -2804,17 +4333,40 @@ async def partial_refund(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """部分退款"""
+    _ensure_super_admin(admin)
     site_id = get_site_id(request)
-    result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False), Order.site_id == site_id)
+    order = await refund_service.get_order_for_refund(db, order_id=order_id, site_id=site_id)
+    item_ids = [int(item_id) for item_id in body.get("item_ids", [])]
+    selected_items = [
+        item
+        for item in (getattr(order, "items", []) or [])
+        if not item_ids or item.id in item_ids
+    ]
+    if not selected_items:
+        raise HTTPException(status_code=400, detail="请选择要退款的订单项")
+    refund_amount = Decimal(str(body.get("refund_amount") or sum((item.actual_price for item in selected_items), Decimal("0"))))
+    refund_items = [
+        {
+            "order_item_id": item.id,
+            "refund_amount": Decimal(str(getattr(item, "actual_price", 0) or 0)),
+            "quantity": getattr(item, "quantity", 1) or 1,
+        }
+        for item in selected_items
+    ]
+    await refund_service.create_refund_record(
+        db,
+        order,
+        refund_mode="item",
+        order_action="keep_order",
+        refund_amount=refund_amount,
+        release_inventory=False,
+        reason=body.get("reason") or "兼容部分退款",
+        requested_by=admin.id,
+        requester_role=admin.role.role_code if admin.role else "admin",
+        items=refund_items,
     )
-    order = result.scalar_one_or_none()
-    if not order:
-        raise HTTPException(status_code=404, detail="订单不存在")
-    # 简单标记为部分退款
-    order.status = "partial_refunded"
     await db.commit()
-    return ResponseModel.success(message="部分退款处理成功")
+    return ResponseModel.success(message="部分退款申请已创建")
 
 
 # ========== 商品状态更新（兼容 PUT 方法） ==========

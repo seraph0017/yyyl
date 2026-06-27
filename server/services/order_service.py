@@ -13,7 +13,10 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
+import secrets
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
@@ -23,16 +26,18 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models.order import Order, OrderItem, Ticket
-from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product
+from config import settings
+from models.order import Order, OrderItem, TemporaryOrderSession, Ticket
+from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product, SKU
 from models.user import User
 from redis_client import get_redis
-from services import inventory_service, settlement_service, wechat_pay_service
+from services import inventory_pool_service, inventory_service, member_service, qrcode_service, settlement_service, ticket_service, wechat_pay_service
 from utils.helpers import generate_order_no, generate_qr_token, generate_ticket_code
 
 logger = logging.getLogger(__name__)
 
 CAMPSITE_PRODUCT_TYPES = {"daily_camping", "event_camping"}
+TEMPORARY_ORDER_EXPIRE_SECONDS = 15 * 60
 
 # 排序字段白名单
 ALLOWED_SORT_FIELDS = {"id", "created_at", "actual_amount", "status"}
@@ -64,8 +69,8 @@ def build_order_list_query(
         select(Order)
         .options(selectinload(Order.items))
         .join(Order.user)
-        .join(Order.items)
-        .join(Product, Product.id == OrderItem.product_id)
+        .join(Order.items, isouter=True)
+        .join(Product, Product.id == OrderItem.product_id, isouter=True)
         .outerjoin(Ticket, Ticket.order_item_id == OrderItem.id)
         .where(Order.is_deleted.is_(False))
     )
@@ -130,6 +135,9 @@ async def create_order(
     source_qrcode_id: Optional[int] = None,
     source_channel: Optional[str] = None,
     source_scanned_at: Optional[datetime] = None,
+    payment_timeout_seconds: int = 1800,
+    biz_data: Optional[Dict[str, Any]] = None,
+    order_type_override: Optional[str] = None,
 ) -> Order:
     """创建普通订单
 
@@ -148,6 +156,9 @@ async def create_order(
         source_qrcode_id: 来源小程序码ID
         source_channel: 来源渠道
         source_scanned_at: 来源扫码时间
+        payment_timeout_seconds: 支付超时时间（秒）
+        biz_data: 业务扩展数据
+        order_type_override: 强制订单类型
 
     Returns:
         创建的 Order 实例
@@ -159,8 +170,11 @@ async def create_order(
     discount_amount = Decimal("0")
     deposit_amount = Decimal("0")
     order_type = ""
+    order_site_id: Optional[int] = None
+    user_site_id = getattr(user, "site_id", None)
     order_items: List[Dict[str, Any]] = []
-    locked_inventories: List[Tuple[int, Any, int, Any, Any]] = []  # 记录已锁定的库存，异常时回滚
+    locked_inventories: List[Tuple[int, Any, int, Any, Any]] = []  # 记录已锁定的旧库存，异常时回滚
+    locked_inventory_pools: List[Tuple[int, int]] = []  # 记录已锁定的共享库存池，异常时回滚
 
     try:
         for item_data in items_data:
@@ -170,6 +184,7 @@ async def create_order(
             dates = item_data.get("dates", [])
             time_slot = item_data.get("time_slot")
             identity_ids = item_data.get("identity_ids", [])
+            primary_identity_id = identity_ids[0] if identity_ids else None
 
             # 1. 查询并校验商品
             result = await db.execute(
@@ -184,6 +199,18 @@ async def create_order(
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail={"code": 40401, "message": f"商品不存在或已下架: id={product_id}"},
+                )
+            if user_site_id is not None and product.site_id != user_site_id:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": 40401, "message": f"商品不存在或已下架: id={product_id}"},
+                )
+            if order_site_id is None:
+                order_site_id = product.site_id
+            elif order_site_id != product.site_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": 40002, "message": "同一订单不能包含不同营地商品"},
                 )
 
             is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
@@ -215,44 +242,64 @@ async def create_order(
 
             # 4. 计算价格并锁定库存（按日期逐天处理）
             for d in dates:
-                # 锁定库存
-                await inventory_service.lock_inventory(
-                    db, product_id, d, quantity, order_id=0,
-                    sku_id=sku_id, time_slot=time_slot,
+                inventory_pool_id = await _lock_inventory_for_order_item(
+                    db,
+                    site_id=product.site_id,
+                    product_id=product_id,
+                    sku_id=sku_id,
+                    inv_date=d,
+                    quantity=quantity,
+                    order_id=0,
+                    time_slot=time_slot,
+                    locked_inventories=locked_inventories,
+                    locked_inventory_pools=locked_inventory_pools,
                 )
-                locked_inventories.append((product_id, d, quantity, sku_id, time_slot))
 
                 # 计算价格：4级优先级链定价
-                day_price = await _resolve_price(db, product, d)
+                day_price = await _resolve_price(db, product, d, sku_id=sku_id)
                 actual_price = day_price * quantity
 
                 # 创建订单项
                 order_items.append({
                     "product_id": product_id,
                     "sku_id": sku_id,
+                    "inventory_pool_id": inventory_pool_id,
                     "date": d,
                     "time_slot": time_slot,
                     "quantity": quantity,
                     "unit_price": day_price,
                     "actual_price": actual_price,
-                    "identity_ids": identity_ids,
+                    "identity_id": primary_identity_id,
                     "parent_item_id": item_data.get("parent_order_item_id"),
                 })
                 total_amount += actual_price
 
             # 非营位商品不按日期拆单，直接按购买数量生成一个无日期订单项
             if not is_campsite_product:
-                unit_price = product.base_price or Decimal("0")
+                inventory_pool_id = await _lock_inventory_for_order_item(
+                    db,
+                    site_id=product.site_id,
+                    product_id=product_id,
+                    sku_id=sku_id,
+                    inv_date=None,
+                    quantity=quantity,
+                    order_id=0,
+                    time_slot=time_slot,
+                    locked_inventories=locked_inventories,
+                    locked_inventory_pools=locked_inventory_pools,
+                )
+                unit_price = await _resolve_sku_price(db, product, sku_id)
                 actual_price = unit_price * quantity
                 order_items.append({
                     "product_id": product_id,
                     "sku_id": sku_id,
+                    "inventory_pool_id": inventory_pool_id,
                     "date": None,
                     "time_slot": time_slot,
                     "quantity": quantity,
                     "unit_price": unit_price,
                     "actual_price": actual_price,
-                    "identity_ids": identity_ids,
+                    "identity_id": primary_identity_id,
                     "parent_item_id": item_data.get("parent_order_item_id"),
                 })
                 total_amount += actual_price
@@ -268,12 +315,12 @@ async def create_order(
 
         # 6. 创建订单
         actual_amount = total_amount - discount_amount + deposit_amount
-        payment_timeout = 1800  # 默认30分钟
+        payment_timeout = payment_timeout_seconds
 
         order = Order(
             order_no=generate_order_no(),
             user_id=user.id,
-            order_type=order_type,
+            order_type=order_type_override or order_type,
             status="pending_payment",
             total_amount=total_amount,
             discount_amount=discount_amount,
@@ -281,8 +328,10 @@ async def create_order(
             deposit_amount=deposit_amount,
             discount_type=discount_type_result,
             discount_detail=discount_detail_result,
+            biz_data=biz_data,
             payment_method=payment_method,
             payment_status="unpaid",
+            site_id=order_site_id or user_site_id or 1,
             times_card_id=times_card_id,
             address_id=address_id,
             remark=remark,
@@ -296,26 +345,16 @@ async def create_order(
 
         # 7. 创建订单项
         for oi_data in order_items:
-            identity_ids = oi_data.pop("identity_ids", [])
+            identity_id = oi_data.pop("identity_id", None)
             parent_item_id = oi_data.pop("parent_item_id", None)
 
-            # 如果有多个身份信息，为每个身份创建一个订单项
-            if identity_ids:
-                for identity_id in identity_ids:
-                    oi = OrderItem(
-                        order_id=order.id,
-                        identity_id=identity_id,
-                        parent_item_id=parent_item_id,
-                        **oi_data,
-                    )
-                    db.add(oi)
-            else:
-                oi = OrderItem(
-                    order_id=order.id,
-                    parent_item_id=parent_item_id,
-                    **oi_data,
-                )
-                db.add(oi)
+            oi = OrderItem(
+                order_id=order.id,
+                identity_id=identity_id,
+                parent_item_id=parent_item_id,
+                **oi_data,
+            )
+            db.add(oi)
 
         await db.flush()
         logger.info(f"[订单] 创建: order_id={order.id}, order_no={order.order_no}, user={user.id}")
@@ -329,7 +368,666 @@ async def create_order(
                 await inventory_service.release_inventory(db, pid, d, qty, 0, sid, ts)
             except Exception:
                 logger.error(f"[订单] 回滚库存失败: product={pid}, date={d}")
+        for pool_id, qty in locked_inventory_pools:
+            try:
+                await inventory_pool_service.release_pool_inventory(db, pool_id=pool_id, quantity=qty)
+            except Exception:
+                logger.error(f"[订单] 回滚共享库存池失败: pool={pool_id}")
         raise
+
+
+async def quote_order(
+    db: AsyncSession,
+    user: User,
+    items_data: List[Dict[str, Any]],
+    *,
+    disclaimer_signed: bool = False,
+) -> Dict[str, Any]:
+    """订单确认页报价与库存预校验，不锁库存、不创建订单。"""
+    total_amount = Decimal("0")
+    deposit_amount = Decimal("0")
+    order_type = ""
+    order_site_id: Optional[int] = None
+    user_site_id = getattr(user, "site_id", None)
+    quote_items: List[Dict[str, Any]] = []
+    discount_items: List[Dict[str, Any]] = []
+    pool_requirements: Dict[int, int] = {}
+    inventory_requirements: Dict[Tuple[int, int, Any, str], int] = {}
+
+    for item_data in items_data:
+        product_id = item_data["product_id"]
+        sku_id = item_data.get("sku_id")
+        quantity = item_data.get("quantity", 1)
+        dates = item_data.get("dates", [])
+        time_slot = item_data.get("time_slot")
+
+        result = await db.execute(
+            select(Product).where(
+                Product.id == product_id,
+                Product.is_deleted.is_(False),
+                Product.status == "on_sale",
+            )
+        )
+        product = result.scalar_one_or_none()
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": 40401, "message": f"商品不存在或已下架: id={product_id}"},
+            )
+        if user_site_id is not None and product.site_id != user_site_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": 40401, "message": f"商品不存在或已下架: id={product_id}"},
+            )
+        if order_site_id is None:
+            order_site_id = product.site_id
+        elif order_site_id != product.site_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40002, "message": "同一订单不能包含不同营地商品"},
+            )
+
+        is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
+        if is_campsite_product and not dates:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40916, "message": "营位商品请选择预约日期"},
+            )
+        if not is_campsite_product:
+            dates = []
+
+        if not order_type:
+            order_type = product.type
+
+        if product.require_disclaimer and not disclaimer_signed:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40915, "message": "请先签署免责声明"},
+            )
+        if product.sale_start_at and datetime.now(timezone.utc) < product.sale_start_at:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40905, "message": "开票时间未到"},
+            )
+
+        for d in dates:
+            inventory_source, inventory_pool_id, available = await _quote_inventory_for_order_item(
+                db,
+                site_id=product.site_id,
+                product_id=product_id,
+                sku_id=sku_id,
+                inv_date=d,
+                quantity=quantity,
+                time_slot=time_slot,
+                pool_requirements=pool_requirements,
+                inventory_requirements=inventory_requirements,
+            )
+            day_price = await _resolve_price(db, product, d, sku_id=sku_id)
+            actual_price = day_price * quantity
+            quote_item = {
+                "product_id": product_id,
+                "sku_id": sku_id,
+                "product_name": product.name,
+                "date": d,
+                "quantity": quantity,
+                "unit_price": day_price,
+                "actual_price": actual_price,
+                "inventory_source": inventory_source,
+                "inventory_pool_id": inventory_pool_id,
+                "available": available,
+            }
+            quote_items.append(quote_item)
+            discount_items.append({
+                "product_id": product_id,
+                "sku_id": sku_id,
+                "date": d,
+                "time_slot": time_slot,
+                "quantity": quantity,
+                "unit_price": day_price,
+                "actual_price": actual_price,
+            })
+            total_amount += actual_price
+
+        if not is_campsite_product:
+            inventory_source, inventory_pool_id, available = await _quote_inventory_for_order_item(
+                db,
+                site_id=product.site_id,
+                product_id=product_id,
+                sku_id=sku_id,
+                inv_date=None,
+                quantity=quantity,
+                time_slot=time_slot,
+                pool_requirements=pool_requirements,
+                inventory_requirements=inventory_requirements,
+            )
+            unit_price = await _resolve_sku_price(db, product, sku_id)
+            actual_price = unit_price * quantity
+            quote_item = {
+                "product_id": product_id,
+                "sku_id": sku_id,
+                "product_name": product.name,
+                "date": None,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "actual_price": actual_price,
+                "inventory_source": inventory_source,
+                "inventory_pool_id": inventory_pool_id,
+                "available": available,
+            }
+            quote_items.append(quote_item)
+            discount_items.append({
+                "product_id": product_id,
+                "sku_id": sku_id,
+                "date": None,
+                "time_slot": time_slot,
+                "quantity": quantity,
+                "unit_price": unit_price,
+                "actual_price": actual_price,
+            })
+            total_amount += actual_price
+
+        if product.ext_rental and product.ext_rental.deposit_amount > 0:
+            deposit_amount += product.ext_rental.deposit_amount * quantity
+
+    discount_amount, discount_type, discount_detail = await _calculate_discount(
+        db, items_data, discount_items, total_amount
+    )
+    actual_amount = total_amount - discount_amount + deposit_amount
+    return {
+        "items": quote_items,
+        "total_amount": total_amount,
+        "discount_amount": discount_amount,
+        "actual_amount": actual_amount,
+        "deposit_amount": deposit_amount,
+        "discount_type": discount_type,
+        "discount_detail": discount_detail,
+        "has_shared_inventory": any(item.get("inventory_pool_id") for item in quote_items),
+        "order_type": order_type,
+        "site_id": order_site_id or user_site_id or 1,
+    }
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _generate_temporary_order_token() -> str:
+    return secrets.token_urlsafe(24)
+
+
+def _generate_temporary_session_no() -> str:
+    return generate_order_no("TO")
+
+
+def hash_temporary_order_token(token: str) -> str:
+    secret = settings.JWT_SECRET_KEY.encode("utf-8")
+    return hmac.new(secret, token.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _mask_auth_code(auth_code: str) -> str:
+    if len(auth_code) <= 10:
+        return f"{auth_code[:2]}******{auth_code[-2:]}"
+    return f"{auth_code[:6]}******{auth_code[-4:]}"
+
+
+def _temporary_biz_data(session: TemporaryOrderSession, *, custom_amount: bool) -> Dict[str, Any]:
+    return {
+        "temporary_order": {
+            "session_id": session.id,
+            "session_no": session.session_no,
+            "payment_flow": session.payment_flow,
+            "mode": session.mode,
+            "custom_amount": custom_amount,
+            "item_name": session.item_name,
+            "amount": str(session.amount) if session.amount is not None else None,
+            "remark": session.remark,
+            "created_by_id": session.created_by_id,
+            "created_by_source": session.created_by_source,
+        }
+    }
+
+
+def _temporary_payment_timeout_seconds(session: TemporaryOrderSession) -> int:
+    remaining = int((session.expire_at - _now()).total_seconds())
+    return max(1, min(TEMPORARY_ORDER_EXPIRE_SECONDS, remaining))
+
+
+def build_temporary_order_miniapp_path(token: str) -> str:
+    return f"/pages/order-confirm/index?temporary_token={token}"
+
+
+def build_temporary_session_response_payload(
+    session: TemporaryOrderSession,
+    *,
+    token: Optional[str] = None,
+) -> Dict[str, Any]:
+    audit_data = session.audit_data if isinstance(session.audit_data, dict) else {}
+    payload = {
+        "id": session.id,
+        "session_no": session.session_no,
+        "token": token,
+        "status": session.status,
+        "payment_flow": session.payment_flow,
+        "mode": session.mode,
+        "product_id": session.product_id,
+        "sku_id": session.sku_id,
+        "quantity": session.quantity,
+        "booking_date": session.booking_date,
+        "time_slot": session.time_slot,
+        "item_name": session.item_name,
+        "amount": session.amount,
+        "remark": session.remark,
+        "order_id": session.order_id,
+        "expire_at": session.expire_at,
+        "miniapp_path": build_temporary_order_miniapp_path(token) if token else None,
+        "qrcode_image_url": audit_data.get("qrcode_image_url"),
+    }
+    return payload
+
+
+async def create_temporary_order_session(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    body: Any,
+    operator_id: int,
+    operator_source: str,
+) -> Tuple[TemporaryOrderSession, str]:
+    """创建现场临时订单/收款会话。"""
+    if body.mode == "product":
+        result = await db.execute(
+            select(Product).where(
+                Product.id == body.product_id,
+                Product.site_id == site_id,
+                Product.is_deleted.is_(False),
+                Product.status == "on_sale",
+            )
+        )
+        product = result.scalar_one_or_none()
+        if product is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"code": 40401, "message": "商品不存在或已下架"},
+            )
+        if body.sku_id:
+            sku_result = await db.execute(
+                select(SKU).where(
+                    SKU.id == body.sku_id,
+                    SKU.product_id == body.product_id,
+                    SKU.is_deleted.is_(False),
+                    SKU.status == "active",
+                )
+            )
+            if sku_result.scalar_one_or_none() is None:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"code": 40405, "message": "SKU 不存在或已下架"},
+                )
+        if product.type in CAMPSITE_PRODUCT_TYPES and not body.booking_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40916, "message": "营位商品现场下单必须选择预约日期"},
+            )
+
+    now = _now()
+    token = _generate_temporary_order_token()
+    qrcode_image_url = None
+    if body.payment_flow == "customer_scan_qr":
+        qrcode_image_url = await qrcode_service.create_temporary_order_qrcode_image(
+            site_id=site_id,
+            token=token,
+        )
+    session = TemporaryOrderSession(
+        site_id=site_id,
+        session_no=_generate_temporary_session_no(),
+        token_hash=hash_temporary_order_token(token),
+        status="draft",
+        payment_flow=body.payment_flow,
+        mode=body.mode,
+        product_id=body.product_id,
+        sku_id=body.sku_id,
+        quantity=body.quantity,
+        booking_date=body.booking_date,
+        time_slot=body.time_slot,
+        item_name=(body.item_name.strip() if body.item_name else None),
+        amount=body.amount,
+        remark=(body.remark.strip() if body.remark else None),
+        created_by_id=operator_id,
+        created_by_source=operator_source,
+        expire_at=now + timedelta(seconds=TEMPORARY_ORDER_EXPIRE_SECONDS),
+        audit_data={
+            "created_by_id": operator_id,
+            "created_by_source": operator_source,
+            "payment_flow": body.payment_flow,
+            "mode": body.mode,
+            "qrcode_image_url": qrcode_image_url,
+        },
+    )
+    db.add(session)
+    await db.flush()
+    return session, token
+
+
+async def _get_temporary_session_by_token(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    token: str,
+) -> TemporaryOrderSession:
+    result = await db.execute(
+        select(TemporaryOrderSession)
+        .where(
+            TemporaryOrderSession.site_id == site_id,
+            TemporaryOrderSession.token_hash == hash_temporary_order_token(token),
+            TemporaryOrderSession.is_deleted.is_(False),
+        )
+        .with_for_update()
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40441, "message": "临时收款会话不存在"},
+        )
+    return session
+
+
+def _ensure_temporary_session_claimable(session: TemporaryOrderSession, *, site_id: int) -> None:
+    if session.site_id != site_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40441, "message": "临时收款会话不存在"},
+        )
+    if session.status not in {"draft", "pending_payment"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40941, "message": "临时收款会话状态不允许继续支付"},
+        )
+    if session.expire_at <= _now():
+        session.status = "expired"
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40904, "message": "临时收款会话已过期"},
+        )
+
+
+async def _create_custom_temporary_order(
+    db: AsyncSession,
+    *,
+    session: TemporaryOrderSession,
+    user: User,
+) -> Order:
+    amount = Decimal(str(session.amount or "0")).quantize(Decimal("0.01"))
+    order = Order(
+        order_no=generate_order_no(),
+        user_id=user.id,
+        order_type="temporary",
+        status="pending_payment",
+        total_amount=amount,
+        discount_amount=Decimal("0"),
+        actual_amount=amount,
+        deposit_amount=Decimal("0"),
+        discount_type="none",
+        discount_detail=None,
+        biz_data=_temporary_biz_data(session, custom_amount=True),
+        payment_method="wechat_pay",
+        payment_status="unpaid",
+        site_id=session.site_id,
+        remark=session.remark,
+        expire_at=session.expire_at,
+        source_channel="onsite_temporary",
+    )
+    if isinstance(user, User):
+        order.user = user
+    db.add(order)
+    await db.flush()
+    return order
+
+
+async def _create_product_temporary_order(
+    db: AsyncSession,
+    *,
+    session: TemporaryOrderSession,
+    user: User,
+) -> Order:
+    items_data = [{
+        "product_id": session.product_id,
+        "sku_id": session.sku_id,
+        "quantity": session.quantity,
+        "dates": [session.booking_date] if session.booking_date else [],
+        "time_slot": session.time_slot,
+        "identity_ids": [],
+    }]
+    order = await create_order(
+        db,
+        user,
+        items_data,
+        disclaimer_signed=True,
+        remark=session.remark,
+        payment_method="wechat_pay",
+        source_channel="onsite_temporary",
+        payment_timeout_seconds=_temporary_payment_timeout_seconds(session),
+        biz_data=_temporary_biz_data(session, custom_amount=False),
+    )
+    order.expire_at = session.expire_at
+    if isinstance(user, User):
+        order.user = user
+    await db.flush()
+    return order
+
+
+async def _create_order_from_temporary_session(
+    db: AsyncSession,
+    *,
+    session: TemporaryOrderSession,
+    user: User,
+) -> Order:
+    if session.order_id:
+        return await get_order_detail(db, session.order_id, user_id=user.id)
+    if session.mode == "custom_amount":
+        return await _create_custom_temporary_order(db, session=session, user=user)
+    return await _create_product_temporary_order(db, session=session, user=user)
+
+
+async def claim_temporary_order_session(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    token: str,
+    user: User,
+) -> Order:
+    """顾客扫码后认领临时会话，并转正式订单。"""
+    session = await _get_temporary_session_by_token(db, site_id=site_id, token=token)
+    _ensure_temporary_session_claimable(session, site_id=site_id)
+    if getattr(user, "site_id", site_id) != site_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40441, "message": "临时收款会话不存在"},
+        )
+    order = await _create_order_from_temporary_session(db, session=session, user=user)
+    if session.order_id and order.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40942, "message": "临时收款会话已被其他用户认领"},
+        )
+    session.order_id = order.id
+    session.status = "pending_payment"
+    audit_data = dict(session.audit_data or {})
+    audit_data.update({
+        "claimed_by_user_id": user.id,
+        "claimed_at": _now().isoformat(),
+        "order_id": order.id,
+    })
+    session.audit_data = audit_data
+    await db.flush()
+    return order
+
+
+async def _get_or_create_onsite_guest_user(db: AsyncSession, *, site_id: int) -> User:
+    openid = f"onsite:{site_id}"
+    result = await db.execute(
+        select(User).where(
+            User.openid == openid,
+            User.site_id == site_id,
+            User.is_deleted.is_(False),
+        )
+    )
+    user = result.scalar_one_or_none()
+    if user:
+        return user
+    user = User(
+        openid=openid,
+        nickname="现场散客",
+        role="user",
+        site_id=site_id,
+        status="active",
+    )
+    db.add(user)
+    await db.flush()
+    return user
+
+
+async def charge_temporary_order_by_auth_code(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    session: TemporaryOrderSession,
+    auth_code: str,
+    device_id: Optional[str] = None,
+) -> Tuple[Order, Dict[str, Any]]:
+    """商户扫描用户付款码，走真实微信付款码接口。"""
+    _ensure_temporary_session_claimable(session, site_id=site_id)
+    user = await _get_or_create_onsite_guest_user(db, site_id=site_id)
+    order = await _create_order_from_temporary_session(db, session=session, user=user)
+    if getattr(order, "id", None):
+        order = await get_order_detail(db, order.id, user_id=user.id)
+    session.order_id = order.id
+    audit_data = dict(session.audit_data or {})
+    audit_data.update({
+        "auth_code_masked": _mask_auth_code(auth_code),
+        "device_id": device_id,
+        "order_id": order.id,
+    })
+    session.audit_data = audit_data
+
+    try:
+        result = await wechat_pay_service.create_codepay_transaction(
+            order,
+            auth_code=auth_code,
+            site_id=site_id,
+            device_id=device_id,
+        )
+    except wechat_pay_service.WechatPayError as exc:
+        order.remark = f"{order.remark or ''} 付款码收款待确认".strip()
+        session.status = "pending_payment"
+        audit_data = dict(session.audit_data or {})
+        audit_data.update({"wechat_trade_state": "UNKNOWN", "requires_query": True})
+        session.audit_data = audit_data
+        await db.flush()
+        logger.warning(
+            "[现场收款] 微信付款码状态未知，保留本地订单等待查单: order_id=%s, error=%s",
+            order.id,
+            exc,
+        )
+        unknown_result = {
+            "trade_state": "UNKNOWN",
+            "requires_query": True,
+            "error_message": "微信付款码状态未知，请稍后查单确认后再处理",
+        }
+        return order, unknown_result
+
+    trade_state = result.get("trade_state")
+    if trade_state == "SUCCESS":
+        await mark_order_paid(
+            db,
+            order,
+            payment_no=result.get("transaction_id") or f"WXCODE_{order.order_no}",
+            payment_method="wechat_pay",
+        )
+        session.status = "paid"
+    else:
+        result["requires_query"] = True
+        session.status = "pending_payment"
+    audit_data = dict(session.audit_data or {})
+    audit_data.update({
+        "wechat_trade_state": trade_state,
+        "wechat_transaction_id": result.get("transaction_id"),
+    })
+    session.audit_data = audit_data
+    await db.flush()
+    return order, result
+
+
+async def query_temporary_codepay_result(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    session_id: int,
+    operator_id: int,
+    operator_source: str,
+) -> Tuple[TemporaryOrderSession, Order, Dict[str, Any]]:
+    """查询现场付款码交易状态，并把成功支付补偿落库。"""
+    result = await db.execute(
+        select(TemporaryOrderSession)
+        .where(
+            TemporaryOrderSession.id == session_id,
+            TemporaryOrderSession.site_id == site_id,
+            TemporaryOrderSession.is_deleted.is_(False),
+        )
+        .with_for_update()
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40472, "message": "现场收款会话不存在"},
+        )
+    if session.payment_flow != "merchant_scan_code":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40073, "message": "仅付款码收款会话支持查单"},
+        )
+    if not session.order_id:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40973, "message": "现场收款尚未生成正式订单"},
+        )
+
+    order = await get_order_detail(db, session.order_id)
+    if order.site_id != site_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "订单不存在"},
+        )
+
+    pay_result = await wechat_pay_service.query_codepay_transaction(order, site_id=site_id)
+    trade_state = pay_result.get("trade_state")
+    if trade_state == "SUCCESS":
+        await mark_order_paid(
+            db,
+            order,
+            payment_no=pay_result.get("transaction_id") or f"WXCODE_{order.order_no}",
+            payment_method="wechat_pay",
+            allow_expired=True,
+        )
+        session.status = "paid"
+    elif trade_state in {"PAYERROR", "REVOKED", "CLOSED", "REFUND"}:
+        session.status = "failed"
+        pay_result["requires_query"] = False
+    else:
+        session.status = "pending_payment"
+        pay_result["requires_query"] = True
+
+    audit_data = dict(session.audit_data or {})
+    audit_data.update({
+        "wechat_trade_state": trade_state,
+        "wechat_transaction_id": pay_result.get("transaction_id"),
+        "last_query_at": datetime.now(timezone.utc).isoformat(),
+        "last_query_by": {"id": operator_id, "source": operator_source},
+    })
+    session.audit_data = audit_data
+    await db.flush()
+    return session, order, pay_result
 
 
 async def cancel_order(
@@ -362,11 +1060,7 @@ async def cancel_order(
 
     # 释放库存
     for item in order.items:
-        if item.date:
-            await inventory_service.release_inventory(
-                db, item.product_id, item.date, item.quantity,
-                order.id, item.sku_id, item.time_slot,
-            )
+        await _release_order_item_inventory(db, item, order.id)
 
     await db.flush()
     logger.info(f"[订单] 取消: order_id={order_id}, user={user_id}")
@@ -447,12 +1141,7 @@ async def apply_refund(
         for item in refund_items:
             refund_amount += item.actual_price
             item.refund_status = "refunded"
-            # 释放对应日期库存
-            if item.date:
-                await _refund_inventory(
-                    db, item.product_id, item.date, item.quantity,
-                    order.id, item.sku_id, item.time_slot,
-                )
+            await _refund_order_item_inventory(db, item, order.id)
 
         # 判断是否全部退完
         all_refunded = all(item.refund_status == "refunded" for item in order.items)
@@ -536,12 +1225,7 @@ async def approve_refund(
             # 释放库存
             for item in order.items:
                 item.refund_status = "refunded"
-                if item.date:
-                    # 退款：已售 → 可用
-                    await _refund_inventory(
-                        db, item.product_id, item.date, item.quantity,
-                        order.id, item.sku_id, item.time_slot,
-                    )
+                await _refund_order_item_inventory(db, item, order.id)
     else:
         order.status = "paid"  # 驳回，恢复已支付状态
         order.remark = f"退款被拒绝: {reject_reason}" if reject_reason else order.remark
@@ -581,6 +1265,8 @@ async def mock_pay_order(
     # 检查是否超时
     if order.expire_at and datetime.now(timezone.utc) > order.expire_at:
         order.status = "cancelled"
+        for item in order.items:
+            await _release_order_item_inventory(db, item, order.id)
         await db.flush()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -599,11 +1285,7 @@ async def mock_pay_order(
         order.remark = "模拟支付失败"
         # 释放库存
         for item in order.items:
-            if item.date:
-                await inventory_service.release_inventory(
-                    db, item.product_id, item.date, item.quantity,
-                    order.id, item.sku_id, item.time_slot,
-                )
+            await _release_order_item_inventory(db, item, order.id)
 
     await db.flush()
     logger.info(
@@ -639,6 +1321,8 @@ async def initiate_payment(
 
     if order.expire_at and datetime.now(timezone.utc) > order.expire_at:
         order.status = "cancelled"
+        for item in order.items:
+            await _release_order_item_inventory(db, item, order.id)
         await db.flush()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -664,10 +1348,32 @@ async def mark_order_paid(
     order: Order,
     payment_no: str,
     payment_method: str = "wechat_pay",
+    *,
+    allow_expired: bool = False,
 ) -> Order:
     """将订单标记为已支付，确认库存并生成电子票。"""
     if order.payment_status == "paid":
+        if order.order_type == "annual_card":
+            await member_service.activate_annual_card_for_paid_order(db, order)
+            await db.flush()
         return order
+    if (
+        allow_expired
+        and order.status == "cancelled"
+        and order.payment_status == "unpaid"
+    ):
+        order.remark = f"{order.remark or ''} 微信支付成功通知恢复超时订单".strip()
+        await _relock_released_order_inventory_for_payment(db, order)
+    elif order.status != "pending_payment" or order.payment_status != "unpaid":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40902, "message": "订单状态不允许支付确认"},
+        )
+    if order.expire_at and datetime.now(timezone.utc) > order.expire_at and not allow_expired:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40904, "message": "订单已超时，支付确认被拒绝"},
+        )
 
     order.status = "paid"
     order.payment_status = "paid"
@@ -676,16 +1382,39 @@ async def mark_order_paid(
     order.payment_method = payment_method
 
     for item in order.items:
-        if item.date:
-            await inventory_service.confirm_sell(
-                db, item.product_id, item.date, item.quantity,
-                order.id, item.sku_id, item.time_slot,
-            )
+        await _confirm_order_item_inventory(db, item, order.id)
 
     await settlement_service.record_payment_pending_income(db, order)
-    await _generate_tickets(db, order)
+    if order.order_type == "annual_card":
+        await member_service.activate_annual_card_for_paid_order(db, order)
+    else:
+        await _generate_tickets(db, order)
     await db.flush()
     return order
+
+
+async def _relock_released_order_inventory_for_payment(db: AsyncSession, order: Order) -> None:
+    """晚到微信成功通知恢复已取消订单时，先把已释放库存重新锁定。"""
+    for item in order.items:
+        quantity = getattr(item, "quantity", 1) or 1
+        inventory_pool_id = getattr(item, "inventory_pool_id", None)
+        if inventory_pool_id:
+            await inventory_pool_service.lock_pool_inventory(
+                db,
+                pool_id=inventory_pool_id,
+                quantity=quantity,
+            )
+            continue
+        if getattr(item, "date", None):
+            await inventory_service.lock_inventory(
+                db,
+                item.product_id,
+                item.date,
+                quantity,
+                order.id,
+                getattr(item, "sku_id", None),
+                getattr(item, "time_slot", None),
+            )
 
 
 async def settle_completed_order(
@@ -722,17 +1451,43 @@ async def handle_wechat_payment_notification(
         select(Order)
         .options(selectinload(Order.items))
         .where(Order.order_no == out_trade_no, Order.is_deleted.is_(False))
+        .with_for_update()
     )
     order = result.scalar_one_or_none()
     if order is None:
         return None
 
+    _validate_wechat_payment_transaction(order, transaction)
     return await mark_order_paid(
         db,
         order,
         payment_no=transaction_id or f"WX_{out_trade_no}",
         payment_method="wechat_pay",
+        allow_expired=True,
     )
+
+
+def _validate_wechat_payment_transaction(order: Order, transaction: Dict[str, Any]) -> None:
+    config = wechat_pay_service.get_wechat_pay_config(order.site_id)
+    if transaction.get("appid") and transaction.get("appid") != config.app_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40051, "message": "微信支付通知 appid 不匹配"},
+        )
+    if transaction.get("mchid") and transaction.get("mchid") != config.mch_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40052, "message": "微信支付通知 mchid 不匹配"},
+        )
+    paid_total = ((transaction.get("amount") or {}).get("payer_total")
+                  or (transaction.get("amount") or {}).get("total"))
+    if paid_total is not None:
+        expected_total = int((Decimal(str(order.actual_amount)).quantize(Decimal("0.01"))) * 100)
+        if int(paid_total) != expected_total:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40053, "message": "微信支付通知金额不匹配"},
+            )
 
 
 async def handle_wechat_refund_notification(
@@ -760,11 +1515,7 @@ async def handle_wechat_refund_notification(
         order.refunded_amount = order.actual_amount
         for item in order.items:
             item.refund_status = "refunded"
-            if item.date:
-                await _refund_inventory(
-                    db, item.product_id, item.date, item.quantity,
-                    order.id, item.sku_id, item.time_slot,
-                )
+            await _refund_order_item_inventory(db, item, order.id)
     elif refund_status in {"ABNORMAL", "CLOSED"}:
         order.status = "paid"
         order.payment_status = "paid"
@@ -852,6 +1603,7 @@ async def get_order_detail(
     db: AsyncSession,
     order_id: int,
     user_id: Optional[int] = None,
+    site_id: Optional[int] = None,
 ) -> Order:
     """获取订单详情
 
@@ -859,6 +1611,7 @@ async def get_order_detail(
         db: 数据库会话
         order_id: 订单ID
         user_id: 用户ID（为None则不校验归属）
+        site_id: 营地ID（为None则不校验营地）
 
     Returns:
         Order 实例
@@ -870,6 +1623,8 @@ async def get_order_detail(
     )
     if user_id:
         query = query.where(Order.user_id == user_id)
+    if site_id is not None:
+        query = query.where(Order.site_id == site_id)
 
     result = await db.execute(query)
     order = result.scalar_one_or_none()
@@ -1012,6 +1767,199 @@ async def update_shipping(
 
 # ---- 内部方法 ----
 
+async def _quote_inventory_for_order_item(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    product_id: int,
+    sku_id: Optional[int],
+    inv_date: Optional[date],
+    quantity: int,
+    time_slot: Optional[str],
+    pool_requirements: Dict[int, int],
+    inventory_requirements: Dict[Tuple[int, int, Any, str], int],
+) -> Tuple[str, Optional[int], Optional[int]]:
+    """报价阶段校验库存，不改变库存数量。"""
+    pool = await inventory_pool_service.get_bound_inventory_pool(
+        db,
+        site_id=site_id,
+        product_id=product_id,
+        sku_id=sku_id,
+    )
+    if pool:
+        required_quantity = pool_requirements.get(pool.id, 0) + quantity
+        try:
+            inventory_pool_service.validate_pool_availability(
+                pool,
+                required_quantity=required_quantity,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": 40901, "message": str(exc)},
+            ) from exc
+        pool_requirements[pool.id] = required_quantity
+        return "inventory_pool", pool.id, int(pool.available)
+
+    if inv_date is None:
+        return "none", None, None
+
+    query = select(Inventory).where(
+        Inventory.product_id == product_id,
+        Inventory.date == inv_date,
+        Inventory.is_deleted.is_(False),
+        Inventory.status == "open",
+    )
+    if sku_id:
+        query = query.where(Inventory.sku_id == sku_id)
+    if time_slot:
+        query = query.where(Inventory.time_slot == time_slot)
+
+    result = await db.execute(query)
+    inv = result.scalar_one_or_none()
+    if inv is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40404, "message": "库存记录不存在或已关闭"},
+        )
+
+    inventory_key = (product_id, sku_id or 0, inv_date, time_slot or "")
+    required_quantity = inventory_requirements.get(inventory_key, 0) + quantity
+    if inv.available < required_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40901, "message": f"库存不足，可用: {inv.available}, 需要: {required_quantity}"},
+        )
+    inventory_requirements[inventory_key] = required_quantity
+    return "inventory", None, int(inv.available)
+
+
+async def _lock_inventory_for_order_item(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    product_id: int,
+    sku_id: Optional[int],
+    inv_date: Optional[date],
+    quantity: int,
+    order_id: int,
+    time_slot: Optional[str],
+    locked_inventories: List[Tuple[int, Any, int, Any, Any]],
+    locked_inventory_pools: List[Tuple[int, int]],
+) -> Optional[int]:
+    """优先锁定显式绑定的共享库存池，否则走旧日期库存。"""
+    pool = await inventory_pool_service.get_bound_inventory_pool(
+        db,
+        site_id=site_id,
+        product_id=product_id,
+        sku_id=sku_id,
+    )
+    if pool:
+        await inventory_pool_service.lock_pool_inventory(
+            db,
+            pool_id=pool.id,
+            quantity=quantity,
+        )
+        locked_inventory_pools.append((pool.id, quantity))
+        return pool.id
+
+    if inv_date is None:
+        return None
+
+    await inventory_service.lock_inventory(
+        db,
+        product_id,
+        inv_date,
+        quantity,
+        order_id,
+        sku_id,
+        time_slot,
+    )
+    locked_inventories.append((product_id, inv_date, quantity, sku_id, time_slot))
+    return None
+
+
+async def _release_order_item_inventory(
+    db: AsyncSession,
+    item: OrderItem,
+    order_id: int,
+) -> None:
+    """取消或支付失败：锁定库存回到可用。"""
+    inventory_pool_id = getattr(item, "inventory_pool_id", None)
+    if inventory_pool_id:
+        await inventory_pool_service.release_pool_inventory(
+            db,
+            pool_id=inventory_pool_id,
+            quantity=getattr(item, "quantity", 1) or 1,
+        )
+        return
+    if getattr(item, "date", None):
+        await inventory_service.release_inventory(
+            db,
+            item.product_id,
+            item.date,
+            getattr(item, "quantity", 1) or 1,
+            order_id,
+            getattr(item, "sku_id", None),
+            getattr(item, "time_slot", None),
+        )
+
+
+async def _confirm_order_item_inventory(
+    db: AsyncSession,
+    item: OrderItem,
+    order_id: int,
+) -> None:
+    """支付成功：锁定库存转已售。"""
+    inventory_pool_id = getattr(item, "inventory_pool_id", None)
+    if inventory_pool_id:
+        await inventory_pool_service.confirm_pool_sell(
+            db,
+            pool_id=inventory_pool_id,
+            quantity=getattr(item, "quantity", 1) or 1,
+        )
+        return
+    if getattr(item, "date", None):
+        await inventory_service.confirm_sell(
+            db,
+            item.product_id,
+            item.date,
+            getattr(item, "quantity", 1) or 1,
+            order_id,
+            getattr(item, "sku_id", None),
+            getattr(item, "time_slot", None),
+        )
+
+
+async def _refund_order_item_inventory(
+    db: AsyncSession,
+    item: OrderItem,
+    order_id: int,
+    *,
+    quantity: Optional[int] = None,
+) -> None:
+    """退款成功：已售库存回补可用。"""
+    refund_quantity = quantity or getattr(item, "quantity", 1) or 1
+    inventory_pool_id = getattr(item, "inventory_pool_id", None)
+    if inventory_pool_id:
+        await inventory_pool_service.refund_pool_inventory(
+            db,
+            pool_id=inventory_pool_id,
+            quantity=refund_quantity,
+        )
+        return
+    if getattr(item, "date", None):
+        await _refund_inventory(
+            db,
+            item.product_id,
+            item.date,
+            refund_quantity,
+            order_id,
+            getattr(item, "sku_id", None),
+            getattr(item, "time_slot", None),
+        )
+
+
 async def _get_user_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
     """获取用户的订单（带权限校验）"""
     result = await db.execute(
@@ -1049,13 +1997,15 @@ async def _generate_tickets(db: AsyncSession, order: Order) -> List[Ticket]:
         return tickets
 
     for item in order.items:
+        qr_token = generate_qr_token()
         ticket = Ticket(
+            site_id=order.site_id,
             order_id=order.id,
             order_item_id=item.id,
             user_id=order.user_id,
             ticket_no=generate_ticket_code(),
             ticket_type=ticket_type,
-            qr_token=generate_qr_token(),
+            qr_token_hash=ticket_service._hash_qr_token(qr_token),
             qr_token_expires_at=datetime.now(timezone.utc) + timedelta(seconds=30),
             verify_date=item.date,
             verify_status="pending",
@@ -1113,13 +2063,15 @@ async def _resolve_price(
     db: AsyncSession,
     product: Product,
     target_date: date,
+    sku_id: Optional[int] = None,
 ) -> Decimal:
     """4级优先级链动态定价
 
-    1. 特定日期特殊价（最高优先级）
-    2. 自定义日期类型价（DateTypeConfig 配置的日期类型）
-    3. 系统日期类型价（自动判断 weekday/weekend）
-    4. 商品基础价（兜底）
+    1. SKU价格（如有，最高优先级）
+    2. 特定日期特殊价
+    3. 自定义日期类型价（DateTypeConfig 配置的日期类型）
+    4. 系统日期类型价（自动判断 weekday/weekend）
+    5. 商品基础价（兜底）
 
     Args:
         db: 数据库会话
@@ -1129,7 +2081,11 @@ async def _resolve_price(
     Returns:
         当天适用价格
     """
-    # 1. 特定日期特殊价
+    # 1. SKU 价格优先，保证商品详情、报价、建单三端同价
+    if sku_id:
+        return await _resolve_sku_price(db, product, sku_id)
+
+    # 2. 特定日期特殊价
     rule_result = await db.execute(
         select(PricingRule).where(
             PricingRule.product_id == product.id,
@@ -1145,7 +2101,7 @@ async def _resolve_price(
         )
         return custom_rule.price
 
-    # 2. 自定义日期类型价（查 DateTypeConfig）
+    # 3. 自定义日期类型价（查 DateTypeConfig）
     dtc_result = await db.execute(
         select(DateTypeConfig).where(
             DateTypeConfig.date == target_date,
@@ -1171,7 +2127,7 @@ async def _resolve_price(
             )
             return dtype_rule.price
 
-    # 3. 系统日期类型价（周一~周五=weekday, 周六日=weekend）
+    # 4. 系统日期类型价（周一~周五=weekday, 周六日=weekend）
     system_date_type = "weekend" if target_date.weekday() >= 5 else "weekday"
     sys_rule_result = await db.execute(
         select(PricingRule).where(
@@ -1188,12 +2144,38 @@ async def _resolve_price(
         )
         return sys_rule.price
 
-    # 4. 商品基础价（兜底）
+    # 5. 商品基础价（兜底）
     logger.info(
         f"[定价] 使用基础价: product={product.id}, date={target_date}, "
         f"price={product.base_price}"
     )
     return product.base_price
+
+
+async def _resolve_sku_price(
+    db: AsyncSession,
+    product: Product,
+    sku_id: Optional[int],
+) -> Decimal:
+    """非营位商品价格解析：SKU 价格优先，商品基础价兜底。"""
+    if not sku_id:
+        return product.base_price or Decimal("0")
+
+    result = await db.execute(
+        select(SKU).where(
+            SKU.id == sku_id,
+            SKU.product_id == product.id,
+            SKU.is_deleted.is_(False),
+            SKU.status == "active",
+        )
+    )
+    sku = result.scalar_one_or_none()
+    if sku is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "SKU不存在或已下架"},
+        )
+    return sku.price or Decimal("0")
 
 
 async def _calculate_discount(

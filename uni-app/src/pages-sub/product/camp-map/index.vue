@@ -38,40 +38,57 @@
         <movable-view
           class="map-movable"
           direction="all"
+          :x="mapOffsetX"
+          :y="mapOffsetY"
           :scale="true"
           :scale-min="0.5"
           :scale-max="3"
           :scale-value="mapScale"
+          @change="onMapMove"
           @scale="onMapScale"
         >
-          <!-- 地图底图 -->
-          <image
-            class="map-image"
-            :src="resolveImageUrl(campMap.map_image)"
-            mode="widthFix"
-            @load="onMapImageLoad"
-          />
+          <view class="map-content">
+            <!-- 地图底图 -->
+            <image
+              class="map-image"
+              :src="resolveImageUrl(campMap.map_image)"
+              mode="widthFix"
+              @load="onMapImageLoad"
+            />
 
-          <!-- 区域热点 -->
-          <view
-            class="zone-hotspot"
-            :class="[`zone-hotspot--${getZoneStatus(zone)}`]"
-            v-for="zone in campMap.zones"
-            :key="zone.id"
-            :style="getZoneStyle(zone)"
-            @tap="onZoneTap(zone)"
-          >
-            <text class="zone-hotspot__label">{{ zone.zone_code }}</text>
-            <text class="zone-hotspot__count" v-if="zone.available_count !== undefined">
-              {{ zone.available_count }}/{{ zone.total_count }}
-            </text>
+            <!-- 区域热点 -->
+            <view
+              class="zone-hotspot"
+              :class="[`zone-hotspot--${getZoneStatus(zone)}`]"
+              v-for="zone in campMap.zones"
+              :key="zone.id"
+              :style="getZoneStyle(zone)"
+              @tap="onZoneTap(zone)"
+            >
+              <text class="zone-hotspot__label">{{ zone.zone_code || zone.zone_name }}</text>
+              <text class="zone-hotspot__count" v-if="zone.available_count !== undefined">
+                {{ zone.available_count }}/{{ zone.total_count }}
+              </text>
+            </view>
           </view>
         </movable-view>
       </movable-area>
 
+      <view class="map-controls">
+        <view class="map-control-btn" @tap="zoomIn">
+          <text>+</text>
+        </view>
+        <view class="map-control-btn" @tap="zoomOut">
+          <text>-</text>
+        </view>
+        <view class="map-control-btn map-control-btn--reset" @tap="resetMapView">
+          <text>1:1</text>
+        </view>
+      </view>
+
       <!-- 缩放提示 -->
       <view class="zoom-tip" v-if="showZoomTip">
-        <text>👆 双指缩放可查看详情</text>
+        <text>双指缩放可查看详情</text>
       </view>
     </view>
 
@@ -118,9 +135,9 @@
           <view
             class="zone-popup__btn btn-primary"
             @tap="onViewProducts"
-            v-if="selectedZone.product_ids && selectedZone.product_ids.length > 0"
+            v-if="hasZoneAction(selectedZone)"
           >
-            <text>查看可预约商品</text>
+            <text>{{ getZoneActionLabel(selectedZone) }}</text>
           </view>
           <view class="zone-popup__empty" v-else>
             <text>该区域暂无可预约商品</text>
@@ -133,8 +150,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { get, resolveImageUrl } from '@/utils/request'
+import { get, post, resolveImageUrl } from '@/utils/request'
 import type { ICampMap, ICampMapZone } from '@/types'
+import { handleCmsLink } from '@/utils/cms-link'
+import type { CmsLink } from '@/types/cms'
+import { recordPageView } from '@/utils/analytics'
 import EmptyState from '@/components/empty-state/index.vue'
 
 const loading = ref(true)
@@ -143,6 +163,8 @@ const selectedDate = ref('')
 const showZonePopup = ref(false)
 const selectedZone = ref<ICampMapZone | null>(null)
 const mapScale = ref(1)
+const mapOffsetX = ref(0)
+const mapOffsetY = ref(0)
 const showZoomTip = ref(true)
 
 /** 日期选项 */
@@ -214,26 +236,92 @@ function getZoneStyle(zone: ICampMapZone) {
 function onZoneTap(zone: ICampMapZone) {
   selectedZone.value = zone
   showZonePopup.value = true
+  recordZoneClick(zone)
 }
 
 /** 查看商品 */
 function onViewProducts() {
-  if (!selectedZone.value || !selectedZone.value.product_ids.length) return
+  if (!selectedZone.value || !hasZoneAction(selectedZone.value)) return
 
-  // 跳转到分类页，传区域筛选
-  const productId = selectedZone.value.product_ids[0]
+  const zone = selectedZone.value
   showZonePopup.value = false
-  uni.navigateTo({
-    url: `/pages/product-detail/index?id=${productId}`,
-  })
+  navigateZoneLink(zone)
+}
+
+function hasZoneAction(zone: ICampMapZone): boolean {
+  return Boolean((zone.link_type && zone.link_target) || zone.product_ids?.length)
+}
+
+function getZoneActionLabel(zone: ICampMapZone): string {
+  if (zone.link_label) return zone.link_label
+  if (zone.link_type === 'h5' || zone.link_type === 'cms') return '查看详情'
+  return '查看可预约商品'
+}
+
+function navigateZoneLink(zone: ICampMapZone) {
+  if (zone.link_type && zone.link_target) {
+    const type: CmsLink['type'] = zone.link_type === 'cms' ? 'activity' : zone.link_type
+    const link: CmsLink = {
+      type,
+      target: zone.link_target,
+    }
+    handleCmsLink(link)
+    return
+  }
+
+  const productId = zone.product_ids?.[0]
+  if (productId) {
+    handleCmsLink({ type: 'product', target: String(productId) })
+  }
+}
+
+async function recordZoneClick(zone: ICampMapZone) {
+  try {
+    const result = await post<{ click_count?: number }>(
+      `/camp-maps/zones/${zone.id}/click`,
+      {},
+      { needAuth: false, showError: false },
+    )
+    if (result?.click_count !== undefined) {
+      zone.click_count = result.click_count
+    }
+  } catch {
+    // 点击统计失败不影响用户继续查看地图
+  }
 }
 
 function onMapImageLoad() {
   // 地图图片加载完成
 }
 
+function clampMapScale(value: number) {
+  return Math.min(3, Math.max(0.5, Number(value.toFixed(2))))
+}
+
+function zoomIn() {
+  mapScale.value = clampMapScale(mapScale.value + 0.25)
+  showZoomTip.value = false
+}
+
+function zoomOut() {
+  mapScale.value = clampMapScale(mapScale.value - 0.25)
+  showZoomTip.value = false
+}
+
+function resetMapView() {
+  mapScale.value = 1
+  mapOffsetX.value = 0
+  mapOffsetY.value = 0
+  showZoomTip.value = false
+}
+
+function onMapMove(e: { detail: { x: number; y: number } }) {
+  mapOffsetX.value = e.detail.x
+  mapOffsetY.value = e.detail.y
+}
+
 function onMapScale(e: { detail: { scale: number } }) {
-  mapScale.value = e.detail.scale
+  mapScale.value = clampMapScale(e.detail.scale)
   if (showZoomTip.value) {
     showZoomTip.value = false
   }
@@ -275,6 +363,7 @@ async function loadZones() {
 
 onMounted(() => {
   initDateOptions()
+  recordPageView('camp-map', '营地地图')
   loadMapData()
 
   // 3秒后隐藏缩放提示
@@ -378,12 +467,60 @@ onMounted(() => {
 
 .map-movable {
   width: 100%;
-  height: 100%;
+  min-height: 800rpx;
   position: relative;
+}
+
+.map-content {
+  position: relative;
+  width: 100%;
+  line-height: 0;
 }
 
 .map-image {
   width: 100%;
+  display: block;
+}
+
+.map-controls {
+  position: absolute;
+  right: 24rpx;
+  bottom: 128rpx;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.map-control-btn {
+  width: 88rpx;
+  height: 88rpx;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8rpx 24rpx rgba(45, 74, 62, 0.18);
+  border: 1rpx solid rgba(45, 74, 62, 0.1);
+
+  text {
+    font-size: 34rpx;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--color-primary);
+  }
+
+  &:active {
+    transform: scale(0.96);
+    opacity: 0.86;
+  }
+
+  &--reset {
+    text {
+      font-size: 22rpx;
+      letter-spacing: 0;
+    }
+  }
 }
 
 .zone-hotspot {
@@ -422,13 +559,19 @@ onMounted(() => {
 
   &__label {
     font-size: 22rpx;
+    line-height: 28rpx;
     font-weight: 700;
     color: #fff;
     text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.5);
+    max-width: 92%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   &__count {
     font-size: 18rpx;
+    line-height: 24rpx;
     color: #fff;
     text-shadow: 0 1rpx 4rpx rgba(0, 0, 0, 0.5);
     margin-top: 2rpx;
@@ -561,6 +704,11 @@ onMounted(() => {
       font-size: var(--font-size-base);
       font-weight: 600;
       color: #fff;
+      max-width: 100%;
+      padding: 0 20rpx;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     &:active { opacity: 0.85; }

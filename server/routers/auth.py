@@ -71,10 +71,12 @@ async def phone_login(
     通过 X-Site-Id 请求头区分不同营地小程序。
     """
     site_id = get_site_id(request)
-    # 先走 wx_login 获取/创建用户
-    result = await auth_service.wx_login(body.code, db, site_id=site_id)
-    # TODO: 用 phone_code 调用微信 getPhoneNumber 接口获取手机号并绑定到用户
-    # 目前先直接返回登录结果
+    result = await auth_service.phone_login(
+        body.code,
+        body.phone_code,
+        db,
+        site_id=site_id,
+    )
     return ResponseModel.success(data=result)
 
 

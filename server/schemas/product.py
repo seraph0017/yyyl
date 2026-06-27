@@ -116,6 +116,8 @@ class SKUUpdate(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
+    id: Optional[int] = Field(default=None, description="SKU ID（更新时传）")
+    sku_code: Optional[str] = Field(default=None, min_length=1, max_length=50, description="SKU 编码")
     spec_values: Optional[Dict[str, Any]] = Field(default=None, description="规格值")
     price: Optional[Decimal] = Field(default=None, ge=0, description="价格")
     stock: Optional[int] = Field(default=None, ge=0, description="库存")
@@ -208,6 +210,7 @@ class ProductDetail(BaseModel):
     booking_mode: Optional[str] = Field(default=None, description="预约模式")
     status: str = Field(description="商品状态")
     base_price: Decimal = Field(description="基础价格")
+    stock: int = Field(default=0, ge=0, description="商品详情库存聚合值；SKU 商品为 active SKU 库存和")
     images: List[Dict[str, Any]] = Field(default_factory=list, description="商品图片")
     description: Optional[str] = Field(default=None, description="富文本描述")
     category: Optional[str] = Field(default=None, description="分类")
@@ -288,6 +291,7 @@ class ProductUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     name: Optional[str] = Field(default=None, max_length=100, description="商品名称")
+    type: Optional[str] = Field(default=None, description="商品类型")
     booking_mode: Optional[str] = Field(default=None, description="预约模式")
     status: Optional[str] = Field(default=None, description="商品状态")
     base_price: Optional[Decimal] = Field(default=None, ge=0, description="基础价格")
@@ -310,6 +314,20 @@ class ProductUpdate(BaseModel):
     ext_rental: Optional[RentalExtSchema] = Field(default=None, description="装备租赁扩展")
     ext_activity: Optional[ActivityExtSchema] = Field(default=None, description="活动扩展")
     ext_shop: Optional[ShopExtSchema] = Field(default=None, description="商品售卖扩展")
+    skus: Optional[List[SKUUpdate]] = Field(default=None, description="SKU 列表；传入时按清单同步")
+
+    @field_validator("type")
+    @classmethod
+    def validate_type(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        allowed = {
+            "daily_camping", "event_camping", "rental",
+            "daily_activity", "special_activity", "shop", "merchandise",
+        }
+        if v not in allowed:
+            raise ValueError(f"商品类型必须为 {allowed} 之一")
+        return v
 
 
 class ProductStatusUpdate(BaseModel):
@@ -441,6 +459,8 @@ class PriceCalendarItem(BaseModel):
     price: Decimal = Field(description="价格")
     available: int = Field(description="可用库存")
     status: str = Field(description="库存状态: open/closed")
+    inventory_source: str = Field(default="inventory", description="库存来源: inventory/inventory_pool")
+    inventory_pool_id: Optional[int] = Field(default=None, description="共享库存池ID")
 
 
 # ---- 商品搜索/筛选 ----

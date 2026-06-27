@@ -73,6 +73,7 @@ class WechatPayServiceTest(unittest.IsolatedAsyncioTestCase):
         order = SimpleNamespace(
             order_no="YY202606140001",
             actual_amount=Decimal("12.34"),
+            expire_at=None,
             user=SimpleNamespace(openid="openid-test"),
             id=18,
         )
@@ -101,6 +102,7 @@ class WechatPayServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["out_trade_no"], "YY202606140001")
         self.assertEqual(payload["amount"]["total"], 1234)
         self.assertEqual(payload["payer"]["openid"], "openid-test")
+        self.assertIn("time_expire", payload)
         self.assertNotIn("Wechatpay-Serial", post_call.kwargs["headers"])
         self.assertIn('serial_no="SERIAL123"', post_call.kwargs["headers"]["Authorization"])
         self.assertEqual(params["package"], "prepay_id=wx_pre_123")

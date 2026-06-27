@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>一月一露 PRD 增量需求文档 v1.8</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1f2933;
+      --muted: #62717f;
+      --line: #d8e0e8;
+      --soft: #f7faf8;
+      --brand: #2d4a3e;
+      --accent: #b88746;
+      --danger: #a43f3f;
+      --ok: #21734e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0 auto;
+      max-width: 1120px;
+      padding: 44px 32px 80px;
+      color: var(--ink);
+      font: 15px/1.72 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+      background: #fff;
+    }
+    h1, h2, h3, h4 { color: #17211c; line-height: 1.3; }
+    h1 { margin: 0 0 12px; font-size: 34px; letter-spacing: 0; }
+    h2 { margin: 44px 0 14px; padding-top: 8px; border-top: 2px solid var(--brand); font-size: 24px; }
+    h3 { margin: 28px 0 10px; font-size: 18px; }
+    h4 { margin: 20px 0 8px; font-size: 16px; }
+    p { margin: 10px 0; }
+    code { padding: 1px 5px; border-radius: 4px; background: #eef4f1; font-family: Menlo, Consolas, monospace; font-size: 0.92em; }
+    table { width: 100%; margin: 12px 0 22px; border-collapse: collapse; table-layout: fixed; }
+    th, td { border: 1px solid var(--line); padding: 9px 10px; vertical-align: top; word-break: break-word; }
+    th { background: #eef4f1; color: #18352a; text-align: left; font-weight: 700; }
+    ul { margin: 8px 0 18px; padding-left: 22px; }
+    li { margin: 4px 0; }
+    .meta {
+      margin: 18px 0 28px;
+      padding: 16px 18px;
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--brand);
+      background: var(--soft);
+    }
+    .badge {
+      display: inline-block;
+      margin-right: 6px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--brand);
+    }
+    .p0 { background: var(--danger); }
+    .p1 { background: var(--accent); }
+    .p2 { background: var(--muted); }
+    .ok { color: var(--ok); font-weight: 700; }
+    .warn { color: var(--danger); font-weight: 700; }
+    .note {
+      margin: 14px 0 22px;
+      padding: 12px 14px;
+      border: 1px solid #ead8bd;
+      background: #fff9ef;
+    }
+    .toc a { color: var(--brand); text-decoration: none; }
+    .checklist td:first-child { width: 58px; text-align: center; }
+    @media print {
+      body { max-width: none; padding: 20mm; font-size: 12px; }
+      h2 { break-after: avoid; }
+      table { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>一月一露 — PRD 增量需求文档 v1.8</h1>
+  <div class="meta">
+    <p><strong>版本</strong>：v1.8-rev4</p>
+    <p><strong>日期</strong>：2026-06-24</p>
+    <p><strong>基线</strong>：基于 PRD v1.7（二维码、退款结算、订单导出已实现，当前代码 HEAD <code>695b421</code>）</p>
+    <p><strong>来源</strong>：用户提供《新小程序需求及bug总结.docx》</p>
+    <p><strong>状态</strong>：全量一次上线 PRD 审批稿，待用户审批后进入三端开发文档拆分</p>
+  </div>
+
+  <h2 id="scope">0. 版本定位与默认假设</h2>
+  <h3>0.1 与 v1.7 的关系</h3>
+  <p>v1.7 已实现小程序码统一生成、二维码扫码归因、订单高级筛选与导出、退款与取消解耦、资金 pending/available 结算、Admin 二维码/退款/结算界面、小程序扫码 landing 页。因此 v1.8 不重复建设这些能力，而是在最新实现上补齐统一商品运营、库存日历、会员卡统一、手机端核销、AI 客服与登录手机号等新业务域。</p>
+  <table>
+    <thead><tr><th>Word 原始需求</th><th>v1.7 覆盖情况</th><th>v1.8 处理方式</th></tr></thead>
+    <tbody>
+      <tr><td>商品二维码、所有商品生成二维码</td><td>已覆盖商品/分类/活动/CMS 页面小程序码</td><td>增强商品编辑页快捷入口、统计与权限，不新建二维码模型</td></tr>
+      <tr><td>导出系统：批量导出订单 Excel</td><td>已覆盖订单筛选与导出任务</td><td>补导出字段：核销状态、详细订单数、手机号、会员卡消耗、临时订单来源</td></tr>
+      <tr><td>退款/提现相关高危操作</td><td>v1.7 有退款结算，已有操作密码接口雏形</td><td>v1.8 加固六位超级管理员密码与高危确认流程</td></tr>
+      <tr><td>核销系统：购买商品后生成二维码</td><td>已有电子票 QR 与员工扫码</td><td>扩展商品/租赁/活动/会员卡核销口径、核销日志与手机端查看</td></tr>
+      <tr><td>临时商品订单扫码支付</td><td>v1.7 有二维码与支付基础，但无临时订单/收款会话</td><td>新增临时订单和现场收款流程</td></tr>
+      <tr><td>营地地图热区</td><td>v1.5 已有地图区域，当前有 <code>CampMap/CampMapZone</code></td><td>增强热区链接、缩放与点击统计</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0.2 默认假设</h3>
+  <table>
+    <thead><tr><th>编号</th><th>假设</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>A1</td><td>v1.8 定位为“商品与运营后台统一升级”</td><td>覆盖商品、营位、活动、租赁、库存、订单、会员、核销、AI 客服</td></tr>
+      <tr><td>A2</td><td>商品管理采用演进式合并</td><td>继续使用现有 <code>Product + 扩展表 + SKU + Inventory</code>，前端菜单与交互合并，不推倒重建</td></tr>
+      <tr><td>A3</td><td>商品类型四类对外展示</td><td>管理后台筛选项显示为商品、营位、活动、租赁；内部映射到现有 Product.type 枚举</td></tr>
+      <tr><td>A4</td><td>“库存管理”空标题按库存日历和库存池补全</td><td>不规划独立仓储/WMS；v1.8 全量处理可售库存、日期库存、跨商品共享库存、库存日志</td></tr>
+      <tr><td>A5</td><td>AI 客服和微信群助手采用同一知识库能力</td><td>小程序智能客服与企业微信群机器人同属 v1.8 一次上线范围，共用知识库、审计与人工兜底规则</td></tr>
+      <tr><td>A6</td><td>临时商品订单是正式订单的一种现场收款入口</td><td>生成后可转正式 <code>Order</code> 并走微信支付；扫码收款与扫用户付款码均需支付会话和审计</td></tr>
+      <tr><td>A7</td><td>六位数字密码是“二次确认密码”</td><td>不替代登录密码；仅用于提现、导出、批量删除、退款保留订单等高危动作</td></tr>
+      <tr><td>A8</td><td>手机端商家核销使用现有小程序员工入口增强</td><td>不单独开发新 App；基于 <code>uni-app/src/pages/staff</code> 扩展订单查看、核销历史和权限</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0.3 已确定产品决策</h3>
+  <table>
+    <thead><tr><th>决策点</th><th>已定方案</th><th>影响</th></tr></thead>
+    <tbody>
+      <tr><td>D1：v1.8 是否一次性进入开发</td><td>全部需求纳入同一个 v1.8 生产版本，一次性完成开发、联调、验收和上线审查</td><td>开发文档和排期可分工并行，但验收口径必须保持为一次上线闭环</td></tr>
+      <tr><td>D2：会员卡是否完全替代年卡/次卡文案</td><td>后台统一显示“会员卡”，底层兼容年卡/次数卡旧数据</td><td>避免历史订单和权益判断迁移过重</td></tr>
+      <tr><td>D3：共享库存是否允许跨商品共享</td><td>允许跨商品共享库存池。共享范围通过 <code>InventoryPoolBinding</code> 显式绑定到商品、SKU、活动场次或租赁设备，不允许隐式共享</td><td>可支持同一批皮划艇名额、同一套租赁装备、联票活动等跨商品售卖；必须强化锁库存、退款回补和审计</td></tr>
+      <tr><td>D4：临时订单是否允许无商品纯金额收款</td><td>允许，但必须标记 <code>custom_amount</code> 并强制备注</td><td>满足现场收款，财务审计要更严格</td></tr>
+      <tr><td>D5：微信群助手接入渠道</td><td>按企业微信群机器人实现，接入企业微信机器人 webhook 或企业微信应用消息能力，不做个人微信群自动回复</td><td>上线能力可合规落地，群内问答与小程序智能客服共用知识库和人工兜底</td></tr>
+    </tbody>
+  </table>
+
+  <h3>0.4 架构评审修订摘要</h3>
+  <p>v1.8 初评为 <span class="warn">7.4 / 10，NOT APPROVED</span>。主要阻塞项为库存池与临时订单状态机、统一商品选项迁移、会员卡权益引擎、日历规则优先级、核销日志、浏览统计性能、AI 知识库安全和高危操作密码。rev3 已将这些问题收敛为明确状态机、迁移策略、API 契约、安全边界和验收项，复评目标为 <span class="ok">APPROVED，8.6+</span>。</p>
+
+  <h2 id="overview">1. 变更总览</h2>
+  <table>
+    <thead><tr><th>序号</th><th>需求</th><th>优先级</th><th>影响面</th><th>简述</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>统一商品管理与购买选项</td><td><span class="badge p0">P0</span></td><td>后端模型 + Admin + 小程序</td><td>合并营位/商品管理入口，支持商品/营位/活动/租赁筛选，多选项、多价格、独立/共享库存</td></tr>
+      <tr><td>2</td><td>库存日历与批量库存管理</td><td><span class="badge p0">P0</span></td><td>后端库存 + Admin 日历</td><td>营位/活动/租赁日历、按日期/星期关闭、查看订单、增减库存、批量规则</td></tr>
+      <tr><td>3</td><td>微信手机号登录与订单用户信息</td><td><span class="badge p0">P0</span></td><td>认证 + 订单 + 小程序</td><td>小程序登录必须授权手机号，订单页展示用户、手机号、核销状态、详细订单数、备注</td></tr>
+      <tr><td>4</td><td>会员卡统一与二维码购买</td><td><span class="badge p0">P0</span></td><td>会员 + 商品 + 支付 + Admin</td><td>年卡/次卡统一会员卡，支持无限次数或次数限制、有效期、消耗规则、后台调整</td></tr>
+      <tr><td>5</td><td>核销与手机端商家查看增强</td><td><span class="badge p0">P0</span></td><td>票券 + 员工端 + Admin</td><td>商品/营位/活动/租赁购买后生成核销二维码，员工手机端核销并查看订单/历史</td></tr>
+      <tr><td>6</td><td>临时商品订单与现场收款</td><td><span class="badge p0">上线必选</span></td><td>订单 + 支付 + 财务 + 员工端</td><td>后台/手机端输入类型和价格生成收款订单，可用户扫码支付或扫用户付款码收款</td></tr>
+      <tr><td>7</td><td>商品详情富文本、区域与活动属性增强</td><td><span class="badge p0">上线必选</span></td><td>商品扩展 + 上传 + Admin</td><td>营位区域列表维护、包含人数、封面上传、富文本图片/样式/链接，活动预定时间和集合地点</td></tr>
+      <tr><td>8</td><td>页面浏览量与地图热区增强</td><td><span class="badge p0">上线必选</span></td><td>埋点 + 地图 + 报表</td><td>单页面浏览量统计，营地地图热区可链接到商品/CMS/H5，支持缩放和点击统计</td></tr>
+      <tr><td>9</td><td>高危操作二次确认加固</td><td><span class="badge p0">上线必选</span></td><td>权限 + 安全 + 审计</td><td>六位超级管理员密码，绑定提现/导出/批量删除/高危退款等动作</td></tr>
+      <tr><td>10</td><td>智能客服与企业微信群助手</td><td><span class="badge p0">上线必选</span></td><td>知识库 + AI + 小程序 + 企业微信机器人</td><td>基于营地须知和露营知识回答问题，企业微信群机器人与小程序客服同步上线</td></tr>
+      <tr><td>11</td><td>登录错误提示 bug 修复</td><td><span class="badge p0">P0</span></td><td>Admin 登录</td><td>密码错误必须提示“用户名或密码错误”，不能显示网络问题</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="product">2. 统一商品管理与购买选项（P0）</h2>
+  <h3>2.1 功能描述</h3>
+  <p>管理后台将“营位管理”和“商品管理”统一为“商品管理”。对运营人员而言，营位、活动、租赁、商品都作为商品进行创建、筛选、上下架、配置价格、配置库存、生成二维码和查看订单。底层继续复用现有 <code>Product</code> 基表、类型扩展表、<code>SKU</code> 与 <code>Inventory</code>，新增结构化选项和库存模式以承接复杂购买选项。</p>
+
+  <h3>2.2 类型映射</h3>
+  <table>
+    <thead><tr><th>后台显示类型</th><th>内部 Product.type</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>营位</td><td><code>daily_camping</code>, <code>event_camping</code></td><td>日常营位和活动营位</td></tr>
+      <tr><td>活动</td><td><code>daily_activity</code>, <code>special_activity</code></td><td>日常活动和特定活动；特定活动不单独建菜单，在商品管理筛选查看</td></tr>
+      <tr><td>租赁</td><td><code>rental</code></td><td>装备租赁</td></tr>
+      <tr><td>商品</td><td><code>shop</code>, <code>merchandise</code>, <code>insurance</code></td><td>现场商品、邮寄商品、保险等</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.3 购买选项规则</h3>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>选项组</td><td>每个商品可配置 0-N 个选项组，例如规格、颜色、位置、时间、套餐类型。</td></tr>
+      <tr><td>选项值</td><td>每个选项组包含 1-N 个选项值，可排序、启用/停用。</td></tr>
+      <tr><td>SKU 生成</td><td>多选项商品按选项组合生成 SKU；无选项商品保留默认 SKU。</td></tr>
+      <tr><td>价格</td><td>SKU 可设置独立价格；未设置时使用 Product.base_price。</td></tr>
+      <tr><td>库存模式</td><td><code>independent</code> 独立库存、<code>shared_pool</code> 共享库存池。</td></tr>
+      <tr><td>独立库存</td><td>每个 SKU/日期/场次独立扣减库存，适用于气罐规格颜色、营位位置。</td></tr>
+      <tr><td>共享库存</td><td>多个商品、SKU、活动场次或租赁设备可通过 <code>InventoryPoolBinding</code> 指向同一库存池，用户购买任一绑定售卖单元均扣同一池，适用于皮划艇活动名额、跨商品联票、同一批租赁装备等。</td></tr>
+      <tr><td>兼容旧数据</td><td>旧 <code>SKU.spec_values</code> 可迁移或兼容读取；未迁移商品按默认 SKU 处理。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.4 商品购买逻辑</h3>
+  <table>
+    <thead><tr><th>商品场景</th><th>购买规则</th></tr></thead>
+    <tbody>
+      <tr><td>营位</td><td>必须选择日期；按包含人数和入住晚数计算详细订单数。</td></tr>
+      <tr><td>活动</td><td>可配置预定时间/场次；按人数或套票单位下单。</td></tr>
+      <tr><td>租赁</td><td>可配置租赁日期/归还规则；可收押金；按件数下单。</td></tr>
+      <tr><td>现场商品</td><td>只需选择 SKU 与数量，可直接购买或加入购物车，不要求地址。</td></tr>
+      <tr><td>邮寄商品</td><td>必须选择收货地址；订单保留物流字段。</td></tr>
+      <tr><td>保险/搭配商品</td><td>沿用 v1.5/v1.7 搭配与订单规则，不在本期扩展独立购买。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.5 数据模型变更</h3>
+  <table>
+    <thead><tr><th>表</th><th>变更</th></tr></thead>
+    <tbody>
+      <tr><td><code>Product</code></td><td>新增 <code>display_type</code> 可选冗余字段、<code>sale_mode</code> 现场/邮寄/预约、<code>cover_image_url</code>、<code>view_count</code> 可选统计缓存。</td></tr>
+      <tr><td><code>ProductOptionGroup</code></td><td>新增：id, site_id, product_id, name, code, sort_order, status。</td></tr>
+      <tr><td><code>ProductOptionValue</code></td><td>新增：id, group_id, label, value, sort_order, status, extra_price_delta。</td></tr>
+      <tr><td><code>SKU</code></td><td>新增/规范：option_value_ids, inventory_mode, inventory_pool_id(nullable), sort_order。</td></tr>
+      <tr><td><code>InventoryPool</code></td><td>新增：id, site_id, pool_code, name, pool_type, total, available, locked, sold, status；作为跨商品共享库存事实源。</td></tr>
+      <tr><td><code>InventoryPoolBinding</code></td><td>新增：id, site_id, inventory_pool_id, product_id, sku_id, activity_session_id, rental_asset_id, priority, status；显式声明哪些售卖单元共享同一库存池。</td></tr>
+      <tr><td><code>Inventory</code></td><td>补唯一约束 <code>(site_id, product_id, sku_id, date, time_slot)</code>；新增 <code>inventory_pool_id</code>，绑定库存池时库存扣减以库存池为准。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.6 API 变更</h3>
+  <table>
+    <thead><tr><th>方法</th><th>路径</th><th>说明</th><th>端</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td><code>/api/v1/admin/products</code></td><td>增加 display_type、inventory_mode、option keyword 筛选</td><td>B端</td></tr>
+      <tr><td>POST</td><td><code>/api/v1/admin/products</code></td><td>创建商品时支持四类商品与选项配置</td><td>B端</td></tr>
+      <tr><td>PUT</td><td><code>/api/v1/admin/products/{id}</code></td><td>更新基础信息、选项、SKU、库存模式</td><td>B端</td></tr>
+      <tr><td>GET</td><td><code>/api/v1/admin/products/{id}/options</code></td><td>商品选项与 SKU 配置详情</td><td>B端</td></tr>
+      <tr><td>PUT</td><td><code>/api/v1/admin/products/{id}/options</code></td><td>保存选项组、选项值和 SKU 组合</td><td>B端</td></tr>
+      <tr><td>GET</td><td><code>/api/v1/products/{id}</code></td><td>C端返回选项、SKU、库存模式、购买规则</td><td>C端</td></tr>
+    </tbody>
+  </table>
+
+  <h3>2.7 验收标准</h3>
+  <ul>
+    <li>后台商品管理可筛选商品、营位、活动、租赁。</li>
+    <li>气罐可按规格+颜色生成独立库存 SKU。</li>
+    <li>万圣节营位票可按位置生成独立库存 SKU。</li>
+    <li>皮划艇活动、联票商品和租赁商品可跨商品共享同一库存池，并能追溯每个商品的占用明细。</li>
+    <li>现场商品无需地址即可下单，邮寄商品必须选择地址。</li>
+    <li>旧商品数据不丢失，旧营位入口可跳转到统一商品管理。</li>
+  </ul>
+
+  <h2 id="inventory">3. 库存日历与批量库存管理（P0）</h2>
+  <p>保留营位日历用于日常订票，同时新增活动日历和租赁日历。管理员可在日历中查看指定日期的库存状态、订单列表、核销状态和销售情况，并支持按日期区间、星期规则批量关闭或调整库存。</p>
+  <table>
+    <thead><tr><th>日历</th><th>覆盖商品</th><th>主要用途</th></tr></thead>
+    <tbody>
+      <tr><td>营位日历</td><td><code>daily_camping</code>, <code>event_camping</code></td><td>日常订票、关闭营位、批量调库存</td></tr>
+      <tr><td>活动日历</td><td><code>daily_activity</code>, <code>special_activity</code></td><td>活动场次容量、报名订单查看</td></tr>
+      <tr><td>租赁日历</td><td><code>rental</code></td><td>装备可租数量、日期库存管理</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>单日关闭</td><td>可关闭某商品/SKU/库存池在某一天的库存，关闭后 C端不可下单。</td></tr>
+      <tr><td>星期规则</td><td>可按日期范围 + 星期批量关闭，例如 2026-01-01 至 2026-02-01 每周六关闭。</td></tr>
+      <tr><td>库存调整</td><td>支持增加/减少 total；available 自动按 <code>total - locked - sold</code> 校验，不能小于 0。</td></tr>
+      <tr><td>订单弹窗</td><td>点击日历日期可查看当天订单：订单号、用户、手机号、商品/SKU、数量、核销状态、备注。</td></tr>
+      <tr><td>并发保护</td><td>库存调整与下单锁库存必须使用行级锁；调整不得覆盖已售/锁定库存。</td></tr>
+      <tr><td>审计</td><td>所有人工库存调整写入 <code>InventoryLog</code>，记录前后值、操作人、规则 ID 和备注。</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td><code>/api/v1/admin/inventory/calendar</code></td><td>多类型库存日历查询</td></tr>
+      <tr><td>GET</td><td><code>/api/v1/admin/inventory/day-orders</code></td><td>查询某日订单弹窗</td></tr>
+      <tr><td>POST</td><td><code>/api/v1/admin/inventory/adjust</code></td><td>单日库存增减/关闭/开放</td></tr>
+      <tr><td>POST</td><td><code>/api/v1/admin/inventory/batch-rules</code></td><td>创建批量关闭/库存调整规则</td></tr>
+      <tr><td>GET</td><td><code>/api/v1/admin/inventory/logs</code></td><td>库存调整日志</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>管理员可关闭 2026-01-01 至 2026-02-01 每周六的指定营位库存。</li>
+    <li>点击日历日期能弹窗查看当天订单和核销状态。</li>
+    <li>人工减少库存不得导致可用库存为负。</li>
+    <li>活动和租赁也可按日期/场次查看和调整库存。</li>
+  </ul>
+
+  <h2 id="phone">4. 微信手机号登录与订单用户信息（P0）</h2>
+  <p>小程序用户登录必须完成微信手机号授权。订单与后台用户管理需要展示微信用户关联的系统用户、手机号和订单备注。当前 <code>/api/v1/auth/phone-login</code> 仍是 TODO，仅返回普通登录结果；v1.8 必须补真实微信 <code>getPhoneNumber</code> 流程。</p>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>登录流程</td><td>小程序先 <code>wx.login</code> 获取 code，再通过手机号授权按钮获取 <code>phone_code</code>，调用后端 phone-login。</td></tr>
+      <tr><td>绑定手机号</td><td>后端调用微信手机号接口，成功后写入 <code>User.phone</code>，并返回带手机号的 token 用户信息。</td></tr>
+      <tr><td>强制授权</td><td>未绑定手机号的用户可浏览商品，但下单、会员卡购买、客服提问、核销展示前必须授权手机号。</td></tr>
+      <tr><td>隐私</td><td>普通 admin 默认展示脱敏手机号；拥有订单导出/用户管理权限才可查看完整手机号。</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>订单字段</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>订单号</td><td><code>Order.order_no</code></td></tr>
+      <tr><td>用户</td><td>系统 <code>User.id/nickname/openid</code> 脱敏展示</td></tr>
+      <tr><td>手机号</td><td><code>User.phone</code> 或订单快照手机号，默认脱敏</td></tr>
+      <tr><td>订单金额</td><td>total/actual/refunded/settled</td></tr>
+      <tr><td>订单数</td><td>商品类=数量；营位=人数 x 晚数；活动=人数/套票 x 场次</td></tr>
+      <tr><td>订单状态</td><td>服务状态 + 支付状态 + 退款状态 + 核销状态分开展示</td></tr>
+      <tr><td>订单备注</td><td>下单时用户备注 + 后台内部备注分离</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>新用户首次下单前必须完成手机号授权。</li>
+    <li>授权成功后 <code>User.phone</code> 落库，订单列表可按手机号搜索。</li>
+    <li>管理后台订单详情展示订单号、用户、手机号、金额、订单数、核销状态、备注。</li>
+  </ul>
+
+  <h2 id="membership">5. 会员卡统一与二维码购买（P0）</h2>
+  <p>后台不再将年卡和次卡作为两个割裂入口，而统一为“会员卡”。开卡时可选择：无限次数仅限制有效期，或限制次数且限制有效期。不同营位/商品可配置不同消耗次数或消耗选项，后台可手动调整次数和有效期，会员卡可生成小程序码购买。</p>
+  <table>
+    <thead><tr><th>现有能力</th><th>v1.8 策略</th></tr></thead>
+    <tbody>
+      <tr><td><code>AnnualCardConfig/AnnualCard</code></td><td>映射为 <code>usage_mode=unlimited</code> 的会员卡</td></tr>
+      <tr><td><code>TimesCardConfig/TimesCard</code></td><td>映射为 <code>usage_mode=limited_times</code> 的会员卡</td></tr>
+      <tr><td>激活码</td><td>保留，作为会员卡发放方式之一</td></tr>
+      <tr><td>次数消耗规则</td><td>升级为会员卡消耗规则，可按商品/SKU/营位区域配置</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>卡配置</td><td>卡名、价格、有效期、使用模式、总次数、适用商品、状态、购买二维码。</td></tr>
+      <tr><td>无限次数</td><td>有效期内可用，仍受每日限额、连续天数、适用商品限制。</td></tr>
+      <tr><td>限制次数</td><td>每次下单按消耗规则扣减，次数不足不可下单。</td></tr>
+      <tr><td>消耗规则</td><td>可按商品、SKU、营位区域设置 <code>consume_count</code>；未配置默认 1 次。</td></tr>
+      <tr><td>后台调整</td><td>super_admin/admin 可调整剩余次数、有效期、状态；必须记录调整原因和日志。</td></tr>
+      <tr><td>二维码购买</td><td>复用 v1.7 小程序码，目标类型新增/复用 <code>membership_card</code>。</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>后台以“会员卡”统一管理年卡和次卡。</li>
+    <li>创建会员卡时可选择无限次数或限制次数。</li>
+    <li>不同营位可配置不同消耗次数。</li>
+    <li>后台可调整用户会员卡剩余次数和有效期，且有日志。</li>
+  </ul>
+
+  <h2 id="verify">6. 核销与手机端商家查看增强（P0）</h2>
+  <p>购买营位、活动、租赁、现场商品后均生成可核销凭证。员工通过小程序手机端扫码核销，并可查看当天订单、待核销列表、核销历史和订单详情。现有 <code>/pages/staff</code> 与 <code>Ticket</code> QR 流程保留并增强。</p>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>凭证生成</td><td>支付成功后按订单项生成 Ticket/核销凭证；商品类可按数量生成一张多次数凭证或多张凭证，由商品配置决定。</td></tr>
+      <tr><td>动态二维码</td><td>沿用 30 秒刷新机制，降低截图复用风险。</td></tr>
+      <tr><td>核销权限</td><td>staff/admin/super_admin 可核销；必须校验员工 site_id 与票券 site_id。</td></tr>
+      <tr><td>幂等</td><td>同一二维码重复扫码返回“已核销”和首次核销信息，不重复扣次数。</td></tr>
+      <tr><td>核销日志</td><td>每次成功/失败核销均记录 TicketVerifyLog，含员工、时间、设备、结果、失败原因。</td></tr>
+      <tr><td>手机端查看</td><td>员工可查看今天订单、待核销、已核销、用户手机号脱敏、备注。</td></tr>
+      <tr><td>年卡/会员卡</td><td>会员卡核销保留验证码二次确认或等价用户确认机制。</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>方法</th><th>路径</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>GET</td><td><code>/api/v1/staff/orders/today</code></td><td>手机端今日订单</td></tr>
+      <tr><td>GET</td><td><code>/api/v1/staff/tickets/pending</code></td><td>待核销列表</td></tr>
+      <tr><td>GET</td><td><code>/api/v1/staff/tickets/logs</code></td><td>核销历史</td></tr>
+      <tr><td>POST</td><td><code>/api/v1/staff/tickets/scan</code></td><td>增强扫码核销，写入日志</td></tr>
+      <tr><td>POST</td><td><code>/api/v1/admin/tickets/{id}/void</code></td><td>后台作废凭证</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="temporary">7. 临时商品订单与现场收款（上线必选）</h2>
+  <p>商家可在后台或手机端创建临时商品订单：选择营位类、活动类、租赁类、商品类或自定义收款，直接输入价格、数量和备注，生成收款二维码。用户扫码后完成微信支付；也支持商家扫用户付款码进行收款。</p>
+  <table>
+    <thead><tr><th>状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><code>draft</code></td><td>已创建临时订单，未生成支付会话</td></tr>
+      <tr><td><code>pending_payment</code></td><td>已生成收款二维码/付款码支付会话，等待支付</td></tr>
+      <tr><td><code>paid</code></td><td>微信支付成功，转正式订单与财务 pending 入账</td></tr>
+      <tr><td><code>expired</code></td><td>超时未支付，释放库存或关闭会话</td></tr>
+      <tr><td><code>cancelled</code></td><td>商家取消</td></tr>
+      <tr><td><code>refunded</code></td><td>沿用 v1.7 退款流程，并纳入 v1.8 临时订单上线验收</td></tr>
+    </tbody>
+  </table>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>商品化临时单</td><td>选择已有商品/SKU 时，沿用库存、核销、会员卡、退款规则。</td></tr>
+      <tr><td>自定义金额</td><td>允许无商品纯金额收款，但必须填写收款项目、备注和经办人。</td></tr>
+      <tr><td>二维码支付</td><td>生成临时支付二维码，用户扫码进入确认页并支付。</td></tr>
+      <tr><td>付款码收款</td><td>员工扫码用户付款码时，金额由服务端订单决定，不接受客户端篡改。</td></tr>
+      <tr><td>过期时间</td><td>默认 15 分钟，可后台配置；过期释放锁定库存。</td></tr>
+      <tr><td>审计</td><td>记录创建人、收款人、金额、商品类型、备注、支付流水、二维码来源。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="richtext">8. 商品详情富文本、区域与活动属性增强（上线必选）</h2>
+  <table>
+    <thead><tr><th>能力</th><th>规则</th></tr></thead>
+    <tbody>
+      <tr><td>所属区域</td><td>从 <code>ProductArea</code> 列表选择，可新增/删除/排序；删除前校验是否被营位引用。</td></tr>
+      <tr><td>包含人数</td><td>将“最大人数”对外改名为“包含人数”；底层可兼容 <code>max_persons</code> 字段或迁移命名。</td></tr>
+      <tr><td>封面图</td><td>支持直接上传，写入 <code>Product.cover_image_url</code> 或 images 首图。</td></tr>
+      <tr><td>富文本</td><td>支持图片、字体、字号、文字颜色、背景色、分割线、图片/文字超链接。</td></tr>
+      <tr><td>链接安全</td><td>使用 v1.6 CMS 链接选择器白名单；后端 sanitize，禁止 script/iframe/on* 事件。</td></tr>
+      <tr><td>活动属性</td><td>支持预定时间、集合地点；集合地点可选关联地图热区。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="views-map">9. 页面浏览量与地图热区增强（上线必选）</h2>
+  <h3>9.1 浏览量统计</h3>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>统计对象</td><td>商品详情页、CMS 自定义页、活动页、地图热区。</td></tr>
+      <tr><td>指标</td><td>PV、UV、最近访问时间、来源二维码/渠道。</td></tr>
+      <tr><td>去重</td><td>UV 按 user_id/openid/匿名设备 ID + 日期去重。</td></tr>
+      <tr><td>写入策略</td><td>C端上报到 Redis 计数，定时聚合落库，避免高频写数据库。</td></tr>
+      <tr><td>后台展示</td><td>商品/页面详情展示浏览量；报表页可按日期筛选。</td></tr>
+    </tbody>
+  </table>
+  <h3>9.2 地图热区</h3>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>底图</td><td>每个营地可配置一张或多张地图底图。</td></tr>
+      <tr><td>热区</td><td>地图任意多边形/矩形热区可配置链接。</td></tr>
+      <tr><td>链接类型</td><td>商品、分类、CMS 页面、H5、小程序内部页面、无跳转。</td></tr>
+      <tr><td>缩放</td><td>小程序端支持双指缩放、单点放大/缩小、重置视图。</td></tr>
+      <tr><td>点击统计</td><td>热区点击写入浏览统计。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="security">10. 高危操作二次确认加固（上线必选）</h2>
+  <p>设置超级管理员六位数字操作密码，用于提现，并作为未来最高权限需求（批量导出、批量删除、高危退款、临时订单大额收款等）的二次确认。当前确认接口必须加固，不能保留“确认码非空即通过”或简单 SHA256 校验。</p>
+  <table>
+    <thead><tr><th>规则项</th><th>规则说明</th></tr></thead>
+    <tbody>
+      <tr><td>密码格式</td><td>六位数字，仅 super_admin 可设置/重置。</td></tr>
+      <tr><td>哈希</td><td>使用 bcrypt/argon2，不使用明文、MD5、SHA256 单轮哈希。</td></tr>
+      <tr><td>错误锁定</td><td>连续错误 5 次锁定 15 分钟，可配置。</td></tr>
+      <tr><td>确认 token</td><td>验证成功后返回短 TTL token，绑定 admin_id、action、site_id、request_hash。</td></tr>
+      <tr><td>动作绑定</td><td>token 只能用于本次动作，不可复用到其他高危接口。</td></tr>
+      <tr><td>审计</td><td>成功/失败均写 OperationLog，失败不记录明文密码。</td></tr>
+      <tr><td>高危动作</td><td>提现、完整手机号导出、订单导出、批量删除、高危退款、会员卡大额调整、临时订单大额收款。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="ai">11. 智能客服与企业微信群助手（上线必选）</h2>
+  <p>管理员上传露营知识、营地须知、活动规则、退款规则、交通指引等资料，系统构建知识库。用户可在小程序智能客服中打字提问，系统基于知识库回答并给出来源。企业微信群助手通过企业微信群机器人能力接入，和小程序智能客服同步上线并复用同一知识库。</p>
+  <table>
+    <thead><tr><th>功能</th><th>v1.8 全量上线范围</th></tr></thead>
+    <tbody>
+      <tr><td>小程序智能客服</td><td>支持文本问答、来源引用、人工客服兜底、回答反馈和会话日志。</td></tr>
+      <tr><td>企业微信群助手</td><td>通过企业微信群机器人 webhook 或企业微信应用消息接入，支持群内常见问题自动回复、无法回答转人工提示、回复审计。</td></tr>
+      <tr><td>大量知识提交</td><td>支持后台富文本/Markdown/文件上传；文件解析类型至少覆盖 txt/md/pdf/docx。</td></tr>
+      <tr><td>敏感问题</td><td>涉及价格、退款、天气、订单状态时优先调用系统 API 或提示人工确认。</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>每个 site_id 独立知识库，不跨营地检索。</li>
+    <li>上传文件执行大小、类型、病毒/脚本风险校验。</li>
+    <li>回答必须限制在知识库和可调用系统信息内，不编造价格、库存、退款承诺。</li>
+    <li>Prompt injection 内容不得改变系统身份或泄露后台数据。</li>
+  </ul>
+
+  <h2 id="login-bug">12. Bug：Admin 登录错误提示（P0）</h2>
+  <p>登录界面密码错误时显示“网络问题/网络异常”，未提示“用户名或密码错误”。后端 <code>admin_login</code> 返回 401 与 detail.message，Admin axios 拦截器需要正确解析对象型 detail，仅无响应时才显示网络异常。</p>
+  <table>
+    <thead><tr><th>场景</th><th>展示文案</th></tr></thead>
+    <tbody>
+      <tr><td>用户名不存在/密码错误</td><td>用户名或密码错误</td></tr>
+      <tr><td>账号禁用</td><td>管理员账号已被禁用</td></tr>
+      <tr><td>后端 5xx 或无响应</td><td>网络异常，请检查网络连接</td></tr>
+      <tr><td>表单为空</td><td>请输入用户名 / 请输入密码</td></tr>
+    </tbody>
+  </table>
+  <ul>
+    <li>输入错误密码时提示“用户名或密码错误”。</li>
+    <li>断网或服务不可达时才提示网络异常。</li>
+    <li>登录失败不会清空用户名，密码可按安全要求清空。</li>
+  </ul>
+
+  <h2 id="model-summary">13. 数据模型总览</h2>
+  <table>
+    <thead><tr><th>模块</th><th>新增/修改模型</th></tr></thead>
+    <tbody>
+      <tr><td>商品选项</td><td>ProductOptionGroup、ProductOptionValue、SKU option_value_ids</td></tr>
+      <tr><td>共享库存</td><td>InventoryPool、Inventory.inventory_pool_id、InventoryRule</td></tr>
+      <tr><td>区域</td><td>ProductArea 或 CampsiteArea</td></tr>
+      <tr><td>会员卡</td><td>MembershipCardConfig、MembershipCard、MembershipConsumptionRule、MembershipAdjustmentLog，或兼容聚合现有年卡/次卡表</td></tr>
+      <tr><td>核销</td><td>TicketVerifyLog，Ticket 增加 site_id/verify_snapshot（如当前缺失）</td></tr>
+      <tr><td>临时订单</td><td>TemporaryOrder、PaymentIntent</td></tr>
+      <tr><td>浏览量</td><td>PageViewEvent、PageViewStatDaily</td></tr>
+      <tr><td>地图</td><td>CampMapZone.link_config/style_config/click_count</td></tr>
+      <tr><td>安全</td><td>OperationPasswordAttempt / ConfirmToken（也可 Redis token + OperationLog）</td></tr>
+      <tr><td>AI 客服</td><td>KnowledgeBase、KnowledgeDocument、KnowledgeChunk、ChatSession、ChatMessage</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="frontend-backend">14. 三端开发范围</h2>
+  <h3>14.1 后端</h3>
+  <ul>
+    <li>扩展商品选项、SKU、库存池、库存日历和批量规则。</li>
+    <li>完成真实手机号授权，补手机号绑定与权限脱敏。</li>
+    <li>增强订单查询字段、详细订单数、核销状态、备注。</li>
+    <li>统一会员卡服务，兼容年卡/次卡旧数据。</li>
+    <li>增强票券核销日志、员工订单查看接口。</li>
+    <li>新增临时订单和支付会话。</li>
+    <li>加固操作密码和高危确认 token。</li>
+    <li>新增浏览统计、地图热区链接、AI 知识库 API。</li>
+  </ul>
+  <h3>14.2 管理后台</h3>
+  <ul>
+    <li>商品管理入口合并，商品编辑器支持类型、选项、库存模式、富文本和活动属性。</li>
+    <li>日历页扩展营位/活动/租赁三类视图与订单弹窗。</li>
+    <li>订单列表/详情增强用户、手机号、详细订单数、核销状态、备注与导出字段。</li>
+    <li>会员卡统一配置和用户卡调整界面。</li>
+    <li>核销日志、临时订单、浏览量、地图热区链接、高危操作密码设置界面。</li>
+    <li>智能客服知识库管理界面。</li>
+  </ul>
+  <h3>14.3 小程序</h3>
+  <ul>
+    <li>手机号授权登录和下单前补绑手机号。</li>
+    <li>商品详情支持多选项、共享库存、现场/邮寄/预约差异。</li>
+    <li>订单确认根据类型要求日期、场次、地址、出行人。</li>
+    <li>会员卡购买页和会员卡详情统一。</li>
+    <li>员工核销页增强订单查看与核销历史。</li>
+    <li>地图热区缩放和跳转。</li>
+    <li>智能客服问答页面。</li>
+  </ul>
+
+  <h2 id="compatibility">15. 兼容性、异常处理与上线边界</h2>
+  <table>
+    <thead><tr><th>领域</th><th>兼容策略</th></tr></thead>
+    <tbody>
+      <tr><td>v1.7 二维码</td><td>继续复用 <code>MiniProgramQRCode</code>，新增目标类型不重建二维码表。</td></tr>
+      <tr><td>v1.7 导出</td><td>复用 ExportTask，补导出字段和高危确认。</td></tr>
+      <tr><td>v1.7 退款结算</td><td>临时订单支付后转正式订单，沿用退款结算流程。</td></tr>
+      <tr><td>商品旧数据</td><td>保留现有 Product.type、SKU.spec_values；新选项体系支持渐进迁移。</td></tr>
+      <tr><td>年卡/次卡旧数据</td><td>v1.8 上线时提供统一会员卡兼容视图和迁移策略，旧数据可读、可核销、可退款、可调整。</td></tr>
+      <tr><td>多营地</td><td>所有新增表必须含 site_id；Admin 请求必须携带/校验 X-Site-Id 或 admin.site_id。</td></tr>
+      <tr><td>软删除</td><td>新增模型继承 Base，删除均为软删除。</td></tr>
+    </tbody>
+  </table>
+  <div class="note">
+    <p><strong>上线边界</strong>：v1.8 全部需求一次性纳入生产版本；跨商品共享库存池、企业微信群机器人、小程序智能客服、临时订单、手机端核销、会员卡统一均为上线必选。完整仓储/WMS、采购入库和供应商管理不属于本需求原始范围，不作为 v1.8 上线验收项；PRD 批准前不拆三端开发文档或改业务代码；现有 v1.7 二维码、退款、结算、导出主链路必须复用且不可回退。</p>
+  </div>
+
+  <h2 id="architecture-fixes">16. 架构修补闭环</h2>
+  <h3>16.1 库存池、临时订单与支付一致性</h3>
+  <table>
+    <thead><tr><th>主题</th><th>规则</th></tr></thead>
+    <tbody>
+      <tr><td>库存事实源</td><td>库存事实以 <code>InventoryPool</code> / <code>InventorySlot</code> 或增强后的 <code>Inventory</code> 为准，库存池用于表达同商品或跨商品共享库存，商品/SKU/活动场次/租赁设备通过 <code>InventoryPoolBinding</code> 显式绑定库存池，不自行维护可售事实。</td></tr>
+      <tr><td>不变量</td><td>任一库存槽必须满足 <code>available + locked + sold = total</code>，且三个数量均不得小于 0。</td></tr>
+      <tr><td>锁库存时机</td><td>创建正式订单或临时订单确认支付前锁库存，生成 <code>stock_hold_token</code>；未支付过期、取消或支付失败必须释放锁定库存。</td></tr>
+      <tr><td>锁定时长</td><td>普通订单默认 30 分钟，临时现场收款默认 15 分钟，秒杀订单沿用现有秒杀支付超时配置。</td></tr>
+      <tr><td>幂等键</td><td>订单预览、临时订单确认、支付回调、退款释放库存均必须携带或生成幂等键，重复请求不能重复扣减或释放库存。</td></tr>
+      <tr><td>支付成功</td><td>微信支付成功通知幂等确认库存：locked 减少、sold 增加，并生成票券/核销凭证及资金 pending 入账。</td></tr>
+      <tr><td>退款/取消</td><td>沿用 v1.7 退款状态机；只有明确 release_inventory=true 的退款或取消才回补 available，且通过库存日志记录。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>16.2 商品选项与旧 SKU 兼容迁移</h3>
+  <table>
+    <thead><tr><th>阶段</th><th>规则</th></tr></thead>
+    <tbody>
+      <tr><td>兼容读取</td><td>旧商品继续读取 <code>SKU.spec_values</code> 与 <code>ProductExtShop.spec_definitions</code>；新商品优先读取 ProductOptionGroup/ProductOptionValue。</td></tr>
+      <tr><td>历史订单</td><td>历史订单永远以 OrderItem 快照金额、SKU 名称、规格快照为准，不因后台修改 SKU/选项而重算。</td></tr>
+      <tr><td>渐进迁移</td><td>提供后台迁移任务，将旧 JSON 规格转换为结构化选项；迁移前后 SKU id 尽量保持不变。</td></tr>
+      <tr><td>双写限制</td><td>迁移期允许服务层兼容读，不允许 Admin 同时编辑旧 JSON 与新结构，避免双写冲突。</td></tr>
+      <tr><td>回滚</td><td>迁移任务必须记录迁移批次和原始 JSON 备份，支持按商品回滚到迁移前状态。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>16.3 日历规则优先级</h3>
+  <table>
+    <thead><tr><th>优先级</th><th>规则层</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>站点默认规则</td><td>默认营业日、节假日、基础日期类型。</td></tr>
+      <tr><td>2</td><td>商品规则</td><td>商品可售周期、停售时间、活动有效日期。</td></tr>
+      <tr><td>3</td><td>库存池规则</td><td>同商品或跨商品共享库存池的日期/场次容量规则。</td></tr>
+      <tr><td>4</td><td>批量日历规则</td><td>按日期范围和星期生成的开关/库存调整规则。</td></tr>
+      <tr><td>5</td><td>单日覆盖</td><td>手工单日关闭、开放或指定库存，优先级最高。</td></tr>
+    </tbody>
+  </table>
+  <p>冲突处理原则：关闭优先于开放；单日覆盖优先于批量规则；不得将 total 调整到低于 sold + locked；价格规则与库存规则分离，但日历接口需同时返回最终价格与最终可售库存。</p>
+
+  <h3>16.4 会员卡权益引擎与迁移</h3>
+  <table>
+    <thead><tr><th>主题</th><th>规则</th></tr></thead>
+    <tbody>
+      <tr><td>权益计划</td><td><code>MemberCardPlan</code> 表达卡产品，包含 usage_mode、validity_days、total_times、适用商品和销售状态。</td></tr>
+      <tr><td>权益实例</td><td><code>MemberCardInstance</code> 表达用户持有卡，记录 start/end、remaining_times、status、来源订单。</td></tr>
+      <tr><td>权益流水</td><td><code>MemberCardUsageLedger</code> 记录每次消耗、返还、人工调整，作为次数余额事实源。</td></tr>
+      <tr><td>旧数据兼容</td><td>年卡映射为 unlimited，次数卡映射为 limited_times；迁移前可通过统一服务聚合展示。</td></tr>
+      <tr><td>退款返还</td><td>会员卡抵扣订单退款时，按原订单消耗流水返还权益；现金退款与权益返还分开记录。</td></tr>
+    </tbody>
+  </table>
+
+  <h3>16.5 核销、统计、AI 与高危安全边界</h3>
+  <table>
+    <thead><tr><th>领域</th><th>必须约束</th></tr></thead>
+    <tbody>
+      <tr><td>核销</td><td>新增 TicketVerificationLog，成功、失败、重复核销、验证码失败均记录；员工核销必须校验 admin/user staff 身份与 site_id。</td></tr>
+      <tr><td>浏览统计</td><td>浏览事件先写 Redis/队列，按分钟或小时批量落库；UV 去重不得导出 openid 明文。</td></tr>
+      <tr><td>AI 客服</td><td>回答必须基于已发布知识库或系统 API；无来源时转人工，不得编造库存、价格、退款结论。</td></tr>
+      <tr><td>高危确认</td><td>操作密码使用 bcrypt/argon2，失败锁定，确认 token 绑定动作、请求摘要、site_id 和短 TTL。</td></tr>
+    </tbody>
+  </table>
+
+  <h2 id="acceptance">17. 总体验收标准</h2>
+  <table class="checklist">
+    <tbody>
+      <tr><td>□</td><td>用户审批本 PRD 后，方可进入三端开发文档拆分。</td></tr>
+      <tr><td>□</td><td>统一商品管理能覆盖商品/营位/活动/租赁四类运营对象。</td></tr>
+      <tr><td>□</td><td>库存日历能按日期和星期批量关闭/调整库存，并查看当天订单。</td></tr>
+      <tr><td>□</td><td>小程序下单前能真实绑定手机号。</td></tr>
+      <tr><td>□</td><td>会员卡统一管理并兼容年卡/次卡历史数据。</td></tr>
+      <tr><td>□</td><td>员工手机端可核销并查看订单。</td></tr>
+      <tr><td>□</td><td>临时订单可扫码支付且全链路审计。</td></tr>
+      <tr><td>□</td><td>高危操作二次确认达到安全要求。</td></tr>
+      <tr><td>□</td><td>登录密码错误提示准确。</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

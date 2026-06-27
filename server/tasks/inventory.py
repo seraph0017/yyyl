@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, update
 
 from celery_app import celery_app
+from models.inventory_pool import InventoryPool
 from models.product import Inventory, InventoryLog, Product
 from models.order import Order, OrderItem
 from tasks.helpers import get_sync_db, get_sync_redis, task_monitor
@@ -90,6 +91,27 @@ def task_inventory_auto_release(self):
                 ).scalars().all()
 
                 for item in items:
+                    if item.inventory_pool_id:
+                        pool = db.execute(
+                            select(InventoryPool)
+                            .where(
+                                InventoryPool.id == item.inventory_pool_id,
+                                InventoryPool.is_deleted.is_(False),
+                            )
+                            .with_for_update()
+                        ).scalar_one_or_none()
+
+                        if pool and pool.locked >= item.quantity:
+                            pool.locked -= item.quantity
+                            pool.available += item.quantity
+                            logger.info(
+                                "[库存释放] 共享库存池超时释放: order_id=%s, pool_id=%s, qty=%s",
+                                order.id,
+                                pool.id,
+                                item.quantity,
+                            )
+                        continue
+
                     if item.date:
                         inv = db.execute(
                             select(Inventory).where(

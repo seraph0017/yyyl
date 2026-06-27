@@ -56,13 +56,30 @@
 
           <!-- 地图图片预览 -->
           <div class="map-image-wrapper mb-16">
-            <el-image
-              v-if="selectedMap.map_image"
-              :src="selectedMap.map_image"
-              fit="contain"
-              class="map-image"
-              :preview-src-list="[selectedMap.map_image]"
-            />
+            <div v-if="selectedMap.map_image" class="map-preview-scroll">
+              <div class="map-preview-canvas">
+                <img
+                  :src="selectedMap.map_image"
+                  alt="营地地图"
+                  class="map-image"
+                />
+                <button
+                  v-for="zone in selectedMap.zones || []"
+                  :key="zone.id"
+                  type="button"
+                  class="map-zone-overlay"
+                  :style="getZoneOverlayStyle(zone)"
+                  @click="handleEditZone(zone)"
+                >
+                  <span>{{ zone.zone_code || zone.zone_name }}</span>
+                </button>
+              </div>
+              <el-image
+                :src="selectedMap.map_image"
+                class="map-preview-hidden"
+                :preview-src-list="[selectedMap.map_image]"
+              />
+            </div>
             <el-empty v-else description="暂未上传地图图片" />
           </div>
 
@@ -83,6 +100,15 @@
                 <el-tag size="small">{{ row.product_ids?.length || 0 }} 个</el-tag>
               </template>
             </el-table-column>
+            <el-table-column label="热区链接" min-width="150">
+              <template #default="{ row }">
+                <el-tag v-if="row.link_type && row.link_type !== 'none'" size="small" type="warning">
+                  {{ getLinkTypeLabel(row.link_type) }}
+                </el-tag>
+                <span v-else class="text-secondary">未配置</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="click_count" label="点击" width="72" align="center" />
             <el-table-column prop="sort_order" label="排序" width="60" align="center" />
             <el-table-column label="操作" width="120" fixed="right" align="center">
               <template #default="{ row }">
@@ -114,9 +140,8 @@
         </el-form-item>
         <el-form-item label="地图类型" prop="map_type">
           <el-select v-model="mapForm.map_type" placeholder="选择类型" style="width: 100%">
-            <el-option label="平面图" value="plan" />
-            <el-option label="卫星图" value="satellite" />
-            <el-option label="手绘图" value="illustration" />
+            <el-option label="图片地图" value="image" />
+            <el-option label="SVG地图" value="svg" />
           </el-select>
         </el-form-item>
         <el-form-item label="地图图片" prop="map_image">
@@ -124,7 +149,7 @@
             <template #append>
               <el-upload
                 :show-file-list="false"
-                action="/api/v1/admin/upload"
+                action="/api/v1/admin/cms/assets/upload"
                 :headers="uploadHeaders"
                 :on-success="handleMapImageUpload"
               >
@@ -151,16 +176,46 @@
         </el-form-item>
         <el-form-item label="坐标">
           <div class="coordinates-row">
-            <el-input-number v-model="zoneForm.coordinates.x" :min="0" placeholder="X" controls-position="right" style="width: 110px" />
-            <el-input-number v-model="zoneForm.coordinates.y" :min="0" placeholder="Y" controls-position="right" style="width: 110px" />
-            <el-input-number v-model="zoneForm.coordinates.width" :min="1" placeholder="宽" controls-position="right" style="width: 110px" />
-            <el-input-number v-model="zoneForm.coordinates.height" :min="1" placeholder="高" controls-position="right" style="width: 110px" />
+            <el-input-number v-model="zoneForm.coordinates.x" :min="0" :max="100" placeholder="X" controls-position="right" />
+            <el-input-number v-model="zoneForm.coordinates.y" :min="0" :max="100" placeholder="Y" controls-position="right" />
+            <el-input-number v-model="zoneForm.coordinates.width" :min="1" :max="100" placeholder="宽" controls-position="right" />
+            <el-input-number v-model="zoneForm.coordinates.height" :min="1" :max="100" placeholder="高" controls-position="right" />
           </div>
         </el-form-item>
         <el-form-item label="关联商品">
           <el-select v-model="zoneForm.product_ids" multiple filterable placeholder="选择关联的商品" style="width: 100%">
             <el-option v-for="p in productList" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
+        </el-form-item>
+        <el-form-item label="链接类型">
+          <el-segmented
+            v-model="zoneForm.link_type"
+            :options="linkTypeOptions"
+            @change="handleLinkTypeChange"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item v-if="zoneForm.link_type === 'product'" label="链接目标">
+          <el-select
+            v-model="zoneForm.link_target"
+            class="link-product-select"
+            filterable
+            placeholder="选择要跳转的商品"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="p in productList"
+              :key="p.id"
+              :label="p.name"
+              :value="String(p.id)"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-else-if="zoneForm.link_type && zoneForm.link_type !== 'none'" label="链接目标">
+          <el-input v-model="zoneForm.link_target" :placeholder="linkTargetPlaceholder" />
+        </el-form-item>
+        <el-form-item v-if="zoneForm.link_type && zoneForm.link_type !== 'none'" label="按钮文案">
+          <el-input v-model="zoneForm.link_label" placeholder="如 查看详情、立即预约" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="zoneForm.description" type="textarea" :rows="3" placeholder="区域描述（选填）" />
@@ -182,8 +237,13 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getCampMaps, createCampMap, updateCampMap, deleteCampMap, createCampMapZone, updateCampMapZone, deleteCampMapZone } from '@/api/camp-map'
-import { get, getToken } from '@/utils/request'
+import { get, getToken, getCurrentSiteId } from '@/utils/request'
 import type { CampMap, CampMapZone, CampMapCreate, CampMapZoneCreate } from '@/types'
+
+type ZoneLinkType = 'none' | 'product' | 'cms' | 'h5'
+type ZoneFormState = Omit<CampMapZoneCreate, 'link_type'> & {
+  link_type: ZoneLinkType
+}
 
 const loading = ref(false)
 const submitting = ref(false)
@@ -196,12 +256,16 @@ async function fetchProducts() {
   try {
     const res = await get<{ code: number; data: { list: { id: number; name: string }[]; pagination: { total: number } } }>('/admin/products', { page: 1, page_size: 200 })
     productList.value = res.data.list
-  } catch { /* ignore */ }
+  } catch {
+    productList.value = []
+    ElMessage.error('商品列表加载失败，请检查网络后重试')
+  }
 }
 
 // 上传请求头
 const uploadHeaders = computed(() => ({
   Authorization: `Bearer ${getToken()}`,
+  'X-Site-Id': getCurrentSiteId(),
 }))
 
 // ========== 地图管理 ==========
@@ -211,7 +275,7 @@ const mapFormRef = ref<FormInstance>()
 const mapForm = reactive<CampMapCreate>({
   name: '',
   map_image: '',
-  map_type: 'plan',
+  map_type: 'image',
 })
 
 const mapFormRules: FormRules = {
@@ -244,7 +308,7 @@ function handleCreateMap() {
   editingMapId.value = null
   mapForm.name = ''
   mapForm.map_image = ''
-  mapForm.map_type = 'plan'
+  mapForm.map_type = 'image'
   mapDialogVisible.value = true
 }
 
@@ -285,8 +349,9 @@ async function handleSubmitMap() {
 }
 
 function handleMapImageUpload(response: any) {
-  if (response.data?.url) {
-    mapForm.map_image = response.data.url
+  const url = response.data?.file_url || response.data?.url
+  if (url) {
+    mapForm.map_image = url
     ElMessage.success('图片上传成功')
   }
 }
@@ -295,17 +360,106 @@ function handleMapImageUpload(response: any) {
 const zoneDialogVisible = ref(false)
 const editingZoneId = ref<number | null>(null)
 const zoneFormRef = ref<FormInstance>()
-const zoneForm = reactive<CampMapZoneCreate>({
+const zoneForm = reactive<ZoneFormState>({
   zone_name: '',
   zone_code: '',
   coordinates: { x: 0, y: 0, width: 100, height: 100 },
   product_ids: [],
   description: '',
   sort_order: 0,
+  link_type: 'none',
+  link_target: null,
+  link_label: null,
 })
 
 const zoneFormRules: FormRules = {
   zone_name: [{ required: true, message: '请输入区域名称', trigger: 'blur' }],
+}
+
+const linkTypeOptions = [
+  { label: '无', value: 'none' },
+  { label: '商品', value: 'product' },
+  { label: 'CMS', value: 'cms' },
+  { label: 'H5', value: 'h5' },
+]
+
+const linkTargetPlaceholder = computed(() => {
+  if (zoneForm.link_type === 'none') return ''
+  if (zoneForm.link_type === 'product') return '选择商品'
+  if (zoneForm.link_type === 'cms') return 'CMS 页面编码，如 spring_campaign'
+  if (zoneForm.link_type === 'h5') return 'https:// 开头的外部链接'
+  return ''
+})
+
+function getLinkTypeLabel(type?: string | null) {
+  const item = linkTypeOptions.find(option => option.value === type)
+  return item?.label || '未知'
+}
+
+function getZoneOverlayStyle(zone: CampMapZone) {
+  const c = zone.coordinates || { x: 0, y: 0, width: 0, height: 0 }
+  return {
+    left: `${c.x}%`,
+    top: `${c.y}%`,
+    width: `${c.width}%`,
+    height: `${c.height}%`,
+  }
+}
+
+function handleLinkTypeChange() {
+  zoneForm.link_target = null
+  zoneForm.link_label = null
+}
+
+function validateZoneCoordinates(): boolean {
+  const { x, y, width, height } = zoneForm.coordinates
+  if ([x, y, width, height].some(value => typeof value !== 'number' || Number.isNaN(value))) {
+    ElMessage.warning('请填写完整的百分比坐标')
+    return false
+  }
+  if (x < 0 || y < 0 || width <= 0 || height <= 0 || x > 100 || y > 100 || width > 100 || height > 100) {
+    ElMessage.warning('坐标必须在 0-100 的百分比范围内')
+    return false
+  }
+  if (x + width > 100) {
+    ElMessage.warning('热区宽度超出底图范围')
+    return false
+  }
+  if (y + height > 100) {
+    ElMessage.warning('热区高度超出底图范围')
+    return false
+  }
+  return true
+}
+
+function validateZoneLink(): boolean {
+  if (!zoneForm.link_type || zoneForm.link_type === 'none') return true
+  const target = String(zoneForm.link_target || '').trim()
+  if (!target) {
+    ElMessage.warning('请填写链接目标')
+    return false
+  }
+  if (zoneForm.link_type === 'product') {
+    if (productList.value.length === 0) {
+      ElMessage.warning('商品列表加载失败，暂不能保存商品热区链接')
+      return false
+    }
+    const selectedProductIds = new Set(productList.value.map(item => String(item.id)))
+    if (!selectedProductIds.has(target)) {
+      ElMessage.warning('请选择有效商品')
+      return false
+    }
+  }
+  if (zoneForm.link_type === 'cms' && !/^[A-Za-z0-9_-]{2,50}$/.test(target)) {
+    ElMessage.warning('CMS 页面编码仅支持字母、数字、下划线和短横线')
+    return false
+  }
+  if (zoneForm.link_type === 'h5' && !/^https:\/\//.test(target)) {
+    ElMessage.warning('H5 链接必须以 https:// 开头')
+    return false
+  }
+  zoneForm.link_target = target
+  return true
 }
 
 function handleCreateZone() {
@@ -316,6 +470,9 @@ function handleCreateZone() {
   zoneForm.product_ids = []
   zoneForm.description = ''
   zoneForm.sort_order = 0
+  zoneForm.link_type = 'none'
+  zoneForm.link_target = null
+  zoneForm.link_label = null
   zoneDialogVisible.value = true
 }
 
@@ -327,6 +484,9 @@ function handleEditZone(zone: CampMapZone) {
   zoneForm.product_ids = [...zone.product_ids]
   zoneForm.description = zone.description
   zoneForm.sort_order = zone.sort_order
+  zoneForm.link_type = (zone.link_type && zone.link_type !== null ? zone.link_type : 'none') as ZoneLinkType
+  zoneForm.link_target = zone.link_target || null
+  zoneForm.link_label = zone.link_label || null
   zoneDialogVisible.value = true
 }
 
@@ -340,6 +500,8 @@ async function handleDeleteZone(zone: CampMapZone) {
 async function handleSubmitZone() {
   await zoneFormRef.value?.validate()
   if (!selectedMap.value) return
+  if (!validateZoneCoordinates()) return
+  if (!validateZoneLink()) return
   submitting.value = true
   try {
     if (editingZoneId.value) {
@@ -422,16 +584,78 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   background: var(--color-bg-warm);
+  padding: 12px;
+
+  .map-preview-scroll {
+    width: 100%;
+    max-height: 420px;
+    overflow: auto;
+    text-align: center;
+  }
+
+  .map-preview-canvas {
+    position: relative;
+    display: inline-block;
+    line-height: 0;
+    max-width: 100%;
+  }
 
   .map-image {
-    max-height: 400px;
-    width: 100%;
+    display: block;
+    max-width: 100%;
+    height: auto;
+    object-fit: contain;
+  }
+
+  .map-preview-hidden {
+    display: none;
+  }
+}
+
+.map-zone-overlay {
+  position: absolute;
+  border: 2px solid rgba(200, 168, 114, 0.92);
+  background: rgba(45, 74, 62, 0.16);
+  color: #fff;
+  border-radius: 4px;
+  padding: 0;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.34);
+  transition: border-color 0.2s, background-color 0.2s, transform 0.2s;
+
+  &:hover {
+    border-color: var(--color-primary);
+    background: rgba(45, 74, 62, 0.28);
+    transform: scale(1.02);
+  }
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    max-width: 100%;
+    min-height: 20px;
+    padding: 2px 6px;
+    border-radius: 0 0 4px 0;
+    background: rgba(45, 74, 62, 0.82);
+    font-size: 12px;
+    line-height: 16px;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
 .coordinates-row {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+
+  :deep(.el-input-number) {
+    flex: 1 1 110px;
+    min-width: 104px;
+    max-width: 130px;
+  }
 }
 
 .text-secondary {

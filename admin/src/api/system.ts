@@ -158,6 +158,27 @@ export function getProductReport(params: { start_date: string; end_date: string;
   return get<{ data: any }>('/admin/reports/products', params)
 }
 
+export interface PageViewStatItem {
+  id: number
+  site_id: number
+  page_key: string
+  page_title?: string | null
+  stat_date: string
+  view_count: number
+  user_count: number
+  last_viewed_at?: string | null
+}
+
+export interface PageViewSummary {
+  record_count: number
+  view_count: number
+  user_count: number
+}
+
+export function getPageViewStats(params: { start_date?: string; end_date?: string; page_key?: string; page?: number; page_size?: number }) {
+  return get<{ data: { list: PageViewStatItem[]; pagination: { total: number }; summary: PageViewSummary } }>('/admin/analytics/page-views', params)
+}
+
 export function exportReport(data: { type: string; params: Record<string, any> }) {
   return post('/admin/reports/export', data, { responseType: 'blob' })
 }

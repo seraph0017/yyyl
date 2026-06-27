@@ -1,4 +1,4 @@
-import { get, post, put, del } from '@/utils/request'
+import { get, post, put, patch, del } from '@/utils/request'
 import type {
   Product, ProductCreateRequest, ProductSearchParams,
   PricingRule, DiscountRule, Inventory, InventoryUpdateRequest, InventoryBatchRequest,
@@ -14,6 +14,10 @@ export function getProductDetail(id: number) {
   return get<{ data: Product }>(`/products/${id}`)
 }
 
+export function getAdminProductDetail(id: number) {
+  return get<{ data: Product }>(`/admin/products/${id}`)
+}
+
 export function createProduct(data: ProductCreateRequest) {
   return post<{ data: Product }>('/admin/products', data)
 }
@@ -27,7 +31,7 @@ export function deleteProduct(id: number) {
 }
 
 export function updateProductStatus(id: number, status: string) {
-  return put(`/admin/products/${id}/status`, { status })
+  return patch(`/admin/products/${id}/status`, { status })
 }
 
 // 定价规则

@@ -47,11 +47,14 @@ export const orderStatusMap: Record<string, { label: string; type: string }> = {
   pending_payment: { label: '待支付', type: 'warning' },
   paid: { label: '已支付', type: 'primary' },
   confirmed: { label: '已确认', type: 'success' },
+  verified: { label: '已核销', type: 'success' },
   in_use: { label: '使用中', type: 'primary' },
   completed: { label: '已完成', type: 'info' },
   cancelled: { label: '已取消', type: 'info' },
+  refund_pending: { label: '退款待审', type: 'warning' },
   refunding: { label: '退款中', type: 'warning' },
   refunded: { label: '已退款', type: 'danger' },
+  partial_refunded: { label: '部分退款', type: 'warning' },
 }
 
 // 支付状态映射

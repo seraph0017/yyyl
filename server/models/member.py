@@ -143,6 +143,7 @@ class AnnualCard(Base):
     __table_args__ = (
         Index("idx_ac_user", "user_id"),
         Index("idx_ac_config", "config_id"),
+        Index("uq_ac_order", "order_id", unique=True),
         Index("idx_ac_site_status", "site_id", "status"),
         {"comment": "年卡实例表"},
     )

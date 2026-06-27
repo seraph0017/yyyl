@@ -81,6 +81,7 @@ class RefundRecordResponse(BaseModel):
     refund_amount: Decimal
     system_amount: Decimal
     release_inventory: bool
+    inventory_released: bool
     reason: str
     risk_level: str
     status: str

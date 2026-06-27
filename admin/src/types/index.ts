@@ -70,30 +70,94 @@ export interface TokenPayload {
 
 // ==================== 商品 ====================
 
-export type ProductCategory = 'campsite' | 'activity' | 'meal' | 'equipment_rental' | 'addon' | 'shop_item' | 'peripheral'
+export type ProductType = 'daily_camping' | 'event_camping' | 'rental' | 'daily_activity' | 'special_activity' | 'shop' | 'merchandise'
 
-export type ProductStatus = 'active' | 'inactive' | 'draft'
+export type ProductCategory = ProductType | 'campsite' | 'activity' | 'meal' | 'equipment_rental' | 'addon' | 'shop_item' | 'peripheral'
+
+export type ProductStatus = 'draft' | 'on_sale' | 'off_sale'
+
+export type LegacyProductStatus = 'active' | 'inactive'
+
+export interface ProductImage {
+  url: string
+  sort_order?: number
+  alt?: string
+}
+
+export interface CampingExt {
+  has_electricity?: boolean
+  has_platform?: boolean
+  sun_exposure?: 'sunny' | 'shaded' | 'mixed' | string | null
+  position_name?: string | null
+  area?: string | null
+  max_persons?: number | null
+  event_start_date?: string | null
+  event_end_date?: string | null
+}
+
+export interface ActivityExt {
+  booking_unit?: 'person' | 'group' | string
+  time_slots?: Array<Record<string, any>>
+  event_date?: string | null
+}
+
+export interface RentalExt {
+  deposit_amount?: number
+  rental_category?: string
+  damage_config?: Array<Record<string, any>>
+}
+
+export interface ShopExt {
+  has_sku?: boolean
+  spec_definitions?: Array<Record<string, any>> | null
+  shipping_required?: boolean
+  shop_type?: string
+}
+
+export interface ProductSkuUpsert {
+  id?: number
+  sku_code?: string
+  spec_values?: Record<string, any>
+  price: number
+  stock: number
+  status?: 'active' | 'inactive'
+  image_url?: string | null
+}
 
 export interface Product {
   id: number
   name: string
+  type: ProductType
   category: ProductCategory
-  sub_category: string
+  sub_category?: string
   status: ProductStatus
-  cover_image: string
-  images: string[]
+  cover_image?: string
+  images: ProductImage[]
   description: string
   base_price: number
-  market_price: number | null
-  unit: string
+  market_price?: number | null
+  unit?: string
+  booking_mode?: 'by_position' | 'by_quantity' | string | null
+  sale_start_at?: string | null
+  sale_end_at?: string | null
+  refund_deadline_type?: 'days' | 'hours'
+  refund_deadline_value?: number
+  require_camping_ticket?: boolean
+  is_seckill?: boolean
+  seckill_payment_timeout?: number
+  normal_payment_timeout?: number
   sort_order: number
-  tags: string[]
-  require_identity: boolean
+  tags?: string[]
+  require_identity?: boolean
   require_disclaimer: boolean
   created_at: string
   updated_at: string
   // 扩展信息
   extension?: ProductExtension
+  ext_camping?: CampingExt
+  ext_activity?: ActivityExt
+  ext_rental?: RentalExt
+  ext_shop?: ShopExt
   skus?: ProductSKU[]
   pricing_rules?: PricingRule[]
   discount_rules?: DiscountRule[]
@@ -115,12 +179,14 @@ export interface ProductExtension {
 export interface ProductSKU {
   id: number
   product_id: number
-  sku_name: string
+  sku_name?: string
   sku_code: string
   price: number
   stock: number
-  attributes: Record<string, string>
-  status: ProductStatus
+  attributes?: Record<string, string>
+  spec_values?: Record<string, any>
+  status: 'active' | 'inactive'
+  image_url?: string | null
 }
 
 export interface PricingRule {
@@ -149,26 +215,42 @@ export interface DiscountRule {
 
 export interface ProductCreateRequest {
   name: string
-  category: ProductCategory
+  type: ProductType
+  category?: ProductCategory
   sub_category?: string
   status?: ProductStatus
-  cover_image: string
-  images?: string[]
+  cover_image?: string
+  images?: ProductImage[]
   description?: string
   base_price: number
   market_price?: number
   unit?: string
+  booking_mode?: 'by_position' | 'by_quantity' | string | null
+  sale_start_at?: string | null
+  sale_end_at?: string | null
+  refund_deadline_type?: 'days' | 'hours'
+  refund_deadline_value?: number
+  require_camping_ticket?: boolean
+  is_seckill?: boolean
+  seckill_payment_timeout?: number
+  normal_payment_timeout?: number
   sort_order?: number
   tags?: string[]
   require_identity?: boolean
   require_disclaimer?: boolean
   extension?: Record<string, any>
+  ext_camping?: CampingExt
+  ext_activity?: ActivityExt
+  ext_rental?: RentalExt
+  ext_shop?: ShopExt
+  skus?: ProductSkuUpsert[]
 }
 
 export interface ProductSearchParams extends PaginationParams, SortParams {
   keyword?: string
   category?: ProductCategory
   status?: ProductStatus
+  type?: ProductType
 }
 
 // ==================== 库存 ====================
@@ -201,27 +283,31 @@ export interface InventoryBatchRequest {
 
 // ==================== 订单 ====================
 
-export type OrderStatus = 'pending_payment' | 'paid' | 'confirmed' | 'in_use' | 'completed' | 'cancelled' | 'refunding' | 'refunded'
+export type OrderStatus = 'pending_payment' | 'paid' | 'confirmed' | 'verified' | 'in_use' | 'completed' | 'cancelled' | 'refund_pending' | 'refunding' | 'refunded' | 'partial_refunded'
 export type PaymentStatus = 'unpaid' | 'paid' | 'refunding' | 'refunded' | 'partial_refunded'
 
 export interface Order {
   id: number
   order_no: string
   user_id: number
-  user_nickname: string
-  user_phone: string
+  user_nickname?: string
+  user_name?: string
+  user_phone?: string
+  user_phone_masked?: string | null
   status: OrderStatus
   payment_status: PaymentStatus
   payment_method: string
   total_amount: number
-  paid_amount: number
+  actual_amount: number
+  paid_amount?: number
   refund_amount: number
   settled_amount?: number
   settlement_status?: 'unsettled' | 'partial' | 'settled' | 'failed'
-  item_count: number
+  item_count?: number
   remark: string | null
   expire_at: string
-  paid_at: string | null
+  payment_time: string | null
+  paid_at?: string | null
   created_at: string
   updated_at: string
   items: OrderItem[]
@@ -262,6 +348,55 @@ export interface OrderSearchParams extends PaginationParams {
   source_channel?: string
 }
 
+export type TemporaryOrderPaymentFlow = 'customer_scan_qr' | 'merchant_scan_code'
+export type TemporaryOrderMode = 'custom_amount' | 'product'
+
+export interface TemporaryOrderCreatePayload {
+  payment_flow: TemporaryOrderPaymentFlow
+  mode?: TemporaryOrderMode
+  product_id?: number
+  sku_id?: number
+  quantity: number
+  booking_date?: string
+  time_slot?: string
+  item_name?: string
+  amount?: number
+  remark?: string
+  auth_code?: string
+  device_id?: string
+}
+
+export interface TemporaryOrderSession {
+  id: number
+  session_no: string
+  token?: string | null
+  status: string
+  payment_flow: TemporaryOrderPaymentFlow
+  mode: TemporaryOrderMode
+  product_id?: number | null
+  sku_id?: number | null
+  quantity: number
+  booking_date?: string | null
+  time_slot?: string | null
+  item_name?: string | null
+  amount?: number | string | null
+  remark?: string | null
+  order_id?: number | null
+  expire_at: string
+  miniapp_path?: string | null
+  qrcode_image_url?: string | null
+}
+
+export interface TemporaryOrderCodePayResult {
+  session: TemporaryOrderSession
+  order: Order
+  trade_state?: string | null
+  transaction_id?: string | null
+  requires_query?: boolean
+}
+
+export type TemporaryOrderCreateResult = TemporaryOrderSession | TemporaryOrderCodePayResult
+
 // ==================== 会员 ====================
 
 export interface MemberInfo {
@@ -276,8 +411,29 @@ export interface MemberInfo {
   points_balance: number
   registered_at: string
   last_active_at: string | null
+  membership_card_count: number
+  has_membership_card: boolean
+  membership_cards: MembershipCardInfo[]
   annual_card: AnnualCardInfo | null
   times_cards: TimesCardInfo[]
+}
+
+export interface MembershipCardInfo {
+  id: number
+  card_kind: 'annual' | 'times'
+  card_type: 'annual' | 'times'
+  config_name: string
+  status: 'active' | 'expired' | 'frozen' | 'exhausted'
+  use_mode: string
+  valid_from: string | null
+  valid_until: string | null
+  remaining_days: number | null
+  total_times: number | null
+  used_times: number | null
+  remaining_times: number | null
+  applicable_products: string[]
+  daily_limit: number | null
+  total_used_days: number | null
 }
 
 export interface AnnualCardInfo {
@@ -363,6 +519,7 @@ export interface MemberSearchParams extends PaginationParams {
   keyword?: string
   member_level?: string
   has_annual_card?: boolean
+  has_membership_card?: boolean
 }
 
 // ==================== 财务 ====================
@@ -423,6 +580,7 @@ export interface RefundRecord {
   refund_amount: number
   system_amount: number
   release_inventory: boolean
+  inventory_released: boolean
   reason: string
   risk_level: 'normal' | 'medium' | 'high'
   status: 'pending' | 'approved' | 'processing' | 'completed' | 'rejected' | 'failed'
@@ -739,12 +897,14 @@ export interface BundleStats {
 }
 
 /** 营地地图 */
+export type CampMapType = 'image' | 'svg'
+
 export interface CampMap {
   id: number
   site_id: number
   name: string
   map_image: string
-  map_type: string
+  map_type: CampMapType
   status: 'active' | 'inactive'
   zones: CampMapZone[]
   created_at: string
@@ -754,26 +914,33 @@ export interface CampMapZone {
   id: number
   camp_map_id: number
   zone_name: string
-  zone_code: string
+  zone_code: string | null
   coordinates: { x: number; y: number; width: number; height: number }
   product_ids: number[]
-  description: string
+  description: string | null
   sort_order: number
+  link_type?: 'product' | 'cms' | 'h5' | 'none' | null
+  link_target?: string | null
+  link_label?: string | null
+  click_count: number
 }
 
 export interface CampMapCreate {
   name: string
   map_image: string
-  map_type: string
+  map_type: CampMapType
 }
 
 export interface CampMapZoneCreate {
   zone_name: string
-  zone_code?: string
+  zone_code?: string | null
   coordinates: { x: number; y: number; width: number; height: number }
   product_ids: number[]
-  description?: string
+  description?: string | null
   sort_order: number
+  link_type?: 'product' | 'cms' | 'h5' | 'none' | null
+  link_target?: string | null
+  link_label?: string | null
 }
 
 /** H5小游戏 */

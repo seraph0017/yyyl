@@ -115,9 +115,18 @@ import {
   Fold, Expand, ArrowDown, SwitchButton,
   DataAnalysis, Calendar, Goods, List, User,
   Money, TrendCharts, ChatLineSquare, Document,
-  Bell, UserFilled, Setting, Notebook, Place,
+  Bell, UserFilled, Setting, Notebook, Place, Box,
   Connection, MapLocation, Aim, Timer, Wallet, DataLine, Trophy, Brush,
+  ChatDotRound,
 } from '@element-plus/icons-vue'
+
+type MenuItem = {
+  path: string
+  title: string
+  icon?: any
+  roles?: string[]
+  children?: MenuItem[]
+}
 
 const route = useRoute()
 const appStore = useAppStore()
@@ -139,8 +148,18 @@ const breadcrumbs = computed(() => {
   }))
 })
 
-const menuItems = computed(() => {
-  const items = [
+function filterMenuByRole(items: MenuItem[]): MenuItem[] {
+  return items
+    .filter(item => !item.roles || userStore.hasRole(item.roles))
+    .map(item => {
+      if (!item.children) return item
+      return { ...item, children: filterMenuByRole(item.children) }
+    })
+    .filter(item => !item.children || item.children.length > 0)
+}
+
+const menuItems = computed<MenuItem[]>(() => {
+  const items: MenuItem[] = [
     { path: '/dashboard', title: 'Dashboard', icon: DataAnalysis },
     { path: '/calendar', title: '营地日历', icon: Calendar },
     { path: '/campsites', title: '营位管理', icon: Place },
@@ -148,15 +167,15 @@ const menuItems = computed(() => {
     { path: '/orders', title: '订单管理', icon: List },
     {
       path: '/member-group',
-      title: '会员管理',
+      title: '会员卡',
       icon: User,
       children: [
-        { path: '/members', title: '会员列表' },
-        { path: '/annual-cards', title: '年卡管理' },
-        { path: '/times-cards', title: '次数卡管理' },
+        { path: '/members', title: '会员卡总览' },
+        { path: '/annual-cards', title: '年卡配置' },
+        { path: '/times-cards', title: '次数卡配置' },
       ],
     },
-    { path: '/finance', title: '财务管理', icon: Money },
+    { path: '/finance', title: '财务管理', icon: Money, roles: ['admin', 'super_admin'] },
     { path: '/reports', title: '数据统计', icon: TrendCharts },
     {
       path: '/content-group',
@@ -164,6 +183,7 @@ const menuItems = computed(() => {
       icon: Document,
       children: [
         { path: '/faq', title: 'FAQ管理' },
+        { path: '/customer-service-ai', title: '智能客服', icon: ChatDotRound, roles: ['admin', 'super_admin'] },
         { path: '/pages', title: '页面编辑' },
         { path: '/notifications', title: '消息管理' },
         { path: '/cms', title: '页面装修' },
@@ -175,7 +195,9 @@ const menuItems = computed(() => {
       icon: Connection,
       children: [
         { path: '/bundles', title: '搭配组合' },
+        { path: '/inventory-pools', title: '共享库存', roles: ['super_admin'] },
         { path: '/seckill-monitor', title: '秒杀监控' },
+        { path: '/enterprise-wechat', title: '企业微信', roles: ['super_admin'] },
         { path: '/camp-maps', title: '营地地图' },
         { path: '/games', title: '游戏管理' },
       ],
@@ -184,6 +206,7 @@ const menuItems = computed(() => {
       path: '/work-group',
       title: '工作系统',
       icon: Wallet,
+      roles: ['admin', 'super_admin'],
       children: [
         { path: '/expenses', title: '报销管理' },
         { path: '/expense-stats', title: '报销统计' },
@@ -194,6 +217,7 @@ const menuItems = computed(() => {
       path: '/system-group',
       title: '系统设置',
       icon: Setting,
+      roles: ['admin', 'super_admin'],
       children: [
         { path: '/staff', title: '员工管理' },
         { path: '/settings', title: '系统设置' },
@@ -202,10 +226,7 @@ const menuItems = computed(() => {
     },
   ]
 
-  if (!userStore.isAdmin) {
-    return items.filter(item => !['finance', '/system-group', '/work-group'].includes(item.path))
-  }
-  return items
+  return filterMenuByRole(items)
 })
 
 function handleCommand(command: string) {

@@ -18,6 +18,9 @@
         </view>
         <view class="cart-item__info">
           <text class="cart-item__name text-ellipsis-2">{{ item.product_name }}</text>
+          <text class="cart-item__spec" v-if="formatSkuLabel(item.sku_spec_values)">
+            {{ formatSkuLabel(item.sku_spec_values) }}
+          </text>
           <view class="cart-item__bottom">
             <price-tag :price="item.price" size="small" />
             <view class="cart-item__quantity">
@@ -53,7 +56,7 @@
         <view class="cart-footer__total">
           <text class="cart-footer__total-label">合计：</text>
           <text class="cart-footer__total-symbol">¥</text>
-          <text class="cart-footer__total-price">{{ totalPrice }}</text>
+          <text class="cart-footer__total-price">{{ formatAmount(totalPrice) }}</text>
         </view>
         <view class="cart-footer__btn" :class="{ 'cart-footer__btn--disabled': totalCount === 0 }" @tap="onCheckout">
           <text>结算({{ totalCount }})</text>
@@ -76,6 +79,27 @@ import type { ICartItem } from '@/types'
 import PriceTag from '@/components/price-tag/index.vue'
 import EmptyState from '@/components/empty-state/index.vue'
 
+interface CartListResponse {
+  items: Array<{
+    id: number
+    product_id: number
+    sku_id?: number | null
+    product_name?: string
+    image?: string
+    price?: string | number
+    quantity: number
+    checked?: boolean
+    product_type?: string
+    stock_available?: boolean
+    stock?: number
+    sku_spec_values?: Record<string, string> | null
+  }>
+  summary?: {
+    total_count: number
+    total_price: string
+  }
+}
+
 const cartItems = ref<ICartItem[]>([])
 const loading = ref(true)
 const editing = ref(false)
@@ -89,19 +113,34 @@ async function loadCartData() {
   try {
     const loggedIn = await ensureLogin()
     if (!loggedIn) { loading.value = false; return }
-    const data = await get<ICartItem[]>('/cart/')
-    cartItems.value = (data || []).map(item => ({
-      ...item,
-      cover_image: resolveImageUrl(item.cover_image),
-      selected: true,
+    const data = await get<CartListResponse>('/cart/')
+    cartItems.value = (data.items || []).map(item => ({
+      id: item.id,
+      product_id: item.product_id,
+      sku_id: item.sku_id ?? null,
+      product_name: item.product_name || '',
+      cover_image: resolveImageUrl(item.image || ''),
+      sku_spec_values: item.sku_spec_values || null,
+      price: Number(item.price || 0),
+      quantity: item.quantity,
+      selected: item.checked !== false,
+      stock: item.stock_available === false ? 0 : Number(item.stock ?? item.quantity),
+      category: item.product_type as ICartItem['category'],
     }))
   } catch {
     cartItems.value = []
   } finally {
     loading.value = false
-  }
+}
+	}
+
+function formatSkuLabel(specValues?: Record<string, string> | null): string {
+  return Object.values(specValues || {}).filter(Boolean).join(' / ')
 }
 
+function formatAmount(value: number): string {
+  return Number(value || 0).toFixed(2)
+}
 function onToggleAll() {
   const newSelected = !allSelected.value
   cartItems.value.forEach((item) => { item.selected = newSelected })
@@ -175,7 +214,17 @@ function onBatchDelete() {
 function onCheckout() {
   if (totalCount.value === 0) return uni.showToast({ title: '请选择要结算的商品', icon: 'none' })
   const selectedIds = cartItems.value.filter(i => i.selected).map(i => i.id).join(',')
-  uni.navigateTo({ url: `/pages/order-confirm/index?from=cart&cart_item_ids=${selectedIds}` })
+  uni.showModal({
+    title: '免责声明',
+    content: '请确认已阅读并同意营地免责声明，了解户外活动、商品使用和现场服务可能存在的风险。',
+    confirmText: '已阅读并同意',
+    cancelText: '取消',
+    success(res) {
+      if (res.confirm) {
+        uni.navigateTo({ url: `/pages/order-confirm/index?from=cart&cart_item_ids=${selectedIds}&disclaimer_signed=1` })
+      }
+    },
+  })
 }
 
 function onGoShopping() {
@@ -230,7 +279,14 @@ onShow(() => { loadCartData() })
   }
   &__info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: space-between; min-height: 168rpx; }
   &__name { font-size: var(--font-size-base); font-weight: 600; color: var(--color-text); line-height: 1.5; letter-spacing: 0.5rpx; }
-  &__bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16rpx; }
+  &__spec {
+    display: block;
+    margin-top: 6rpx;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-placeholder);
+    line-height: 1.4;
+  }
+	  &__bottom { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 16rpx; }
   &__quantity { display: flex; align-items: center; gap: 4rpx; }
   &__delete {
     padding: 12rpx; margin-left: 8rpx;

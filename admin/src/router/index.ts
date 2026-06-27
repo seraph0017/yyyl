@@ -104,26 +104,26 @@ const adminRoutes: RouteRecordRaw[] = [
       {
         path: 'members',
         name: 'Members',
-        component: () => import('@/views/members/index.vue'),
-        meta: { title: '会员管理', icon: 'User' },
+        component: () => import('@/views/members/membership-cards.vue'),
+        meta: { title: '会员卡', icon: 'User' },
       },
       {
         path: 'members/:id',
         name: 'MemberDetail',
         component: () => import('@/views/members/detail.vue'),
-        meta: { title: '会员详情', hidden: true, activeMenu: '/members' },
+        meta: { title: '会员卡详情', hidden: true, activeMenu: '/members' },
       },
       {
         path: 'annual-cards',
         name: 'AnnualCards',
         component: () => import('@/views/members/annual-cards.vue'),
-        meta: { title: '年卡管理', icon: 'Ticket', hidden: true, activeMenu: '/members' },
+        meta: { title: '会员卡配置', icon: 'Ticket', hidden: true, activeMenu: '/members' },
       },
       {
         path: 'times-cards',
         name: 'TimesCards',
         component: () => import('@/views/members/times-cards.vue'),
-        meta: { title: '次数卡管理', icon: 'Ticket', hidden: true, activeMenu: '/members' },
+        meta: { title: '会员卡配置', icon: 'Ticket', hidden: true, activeMenu: '/members' },
       },
       // 财务管理
       {
@@ -145,6 +145,12 @@ const adminRoutes: RouteRecordRaw[] = [
         name: 'FAQ',
         component: () => import('@/views/content/faq.vue'),
         meta: { title: 'FAQ管理', icon: 'ChatLineSquare' },
+      },
+      {
+        path: 'customer-service-ai',
+        name: 'CustomerServiceAI',
+        component: () => import('@/views/customer-service-ai/index.vue'),
+        meta: { title: '智能客服', icon: 'ChatDotRound', roles: ['admin', 'super_admin'] },
       },
       {
         path: 'pages',
@@ -185,6 +191,12 @@ const adminRoutes: RouteRecordRaw[] = [
         meta: { title: '搭配组合', icon: 'Connection' },
       },
       {
+        path: 'inventory-pools',
+        name: 'InventoryPools',
+        component: () => import('@/views/inventory-pools/index.vue'),
+        meta: { title: '共享库存', icon: 'Box', roles: ['super_admin'] },
+      },
+      {
         path: 'camp-maps',
         name: 'CampMaps',
         component: () => import('@/views/camp-map/index.vue'),
@@ -201,6 +213,12 @@ const adminRoutes: RouteRecordRaw[] = [
         name: 'SeckillMonitor',
         component: () => import('@/views/seckill/monitor.vue'),
         meta: { title: '秒杀监控', icon: 'Timer' },
+      },
+      {
+        path: 'enterprise-wechat',
+        name: 'EnterpriseWechatRobots',
+        component: () => import('@/views/enterprise-wechat/index.vue'),
+        meta: { title: '企业微信', icon: 'ChatLineSquare', roles: ['super_admin'] },
       },
       {
         path: 'expenses',

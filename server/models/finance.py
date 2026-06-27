@@ -12,6 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -107,6 +108,14 @@ class FinanceTransaction(Base):
         Index("idx_ft_order", "order_id"),
         Index("idx_ft_site", "site_id"),
         Index("idx_ft_type", "type"),
+        Index(
+            "uq_ft_refund_record",
+            "refund_record_id",
+            unique=True,
+            postgresql_where=sa.text(
+                "refund_record_id IS NOT NULL AND type = 'refund' AND is_deleted = false"
+            ),
+        ),
         {"comment": "交易流水表"},
     )
 

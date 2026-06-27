@@ -38,6 +38,8 @@ from schemas.camp_map import (
     MiniGameCreate,
     MiniGameResponse,
     MiniGameUpdate,
+    PageViewStatResponse,
+    PageViewTrackRequest,
 )
 from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
 from services import camp_map_service, game_service
@@ -93,6 +95,44 @@ async def get_map_zones(
         site_id=site_id,
     )
     return ResponseModel.success(data=zones)
+
+
+@router.post("/api/v1/camp-maps/zones/{zone_id}/click", summary="记录地图热区点击")
+async def record_zone_click(
+    zone_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """C端记录营地地图热区点击，返回热区链接信息。"""
+    site_id = get_site_id(request)
+    data = await camp_map_service.record_zone_click(
+        db,
+        zone_id=zone_id,
+        site_id=site_id,
+    )
+    await db.commit()
+    return ResponseModel.success(data=data)
+
+
+@router.post("/api/v1/analytics/page-view", summary="记录页面浏览")
+async def record_page_view(
+    body: PageViewTrackRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """C端页面浏览量埋点，按营地、页面和自然日聚合。"""
+    site_id = get_site_id(request)
+    stat = await camp_map_service.record_page_view(
+        db,
+        site_id=site_id,
+        page_key=body.page_key,
+        page_title=body.page_title,
+        user_id=user.id if user else None,
+    )
+    await db.commit()
+    return ResponseModel.success(data=PageViewStatResponse.model_validate(stat))
 
 
 # ========== C端接口：游戏 ==========
@@ -233,7 +273,7 @@ async def create_camp_map_zone(
     zone = await camp_map_service.create_camp_map_zone(
         db,
         map_id=map_id,
-        data=body.model_dump(),
+        data=body.model_dump(mode="json"),
         site_id=site_id,
     )
     await db.commit()
@@ -254,7 +294,7 @@ async def update_camp_map_zone(
     zone = await camp_map_service.update_camp_map_zone(
         db,
         zone_id=zone_id,
-        data=body.model_dump(exclude_unset=True),
+        data=body.model_dump(exclude_unset=True, mode="json"),
         site_id=site_id,
     )
     await db.commit()
@@ -276,6 +316,46 @@ async def delete_camp_map_zone(
     )
     await db.commit()
     return ResponseModel.success(message="区域已删除")
+
+
+@router.get("/api/v1/admin/analytics/page-views", summary="页面浏览统计")
+async def list_page_view_stats(
+    request: Request,
+    start_date: Optional[date] = Query(default=None, description="开始日期"),
+    end_date: Optional[date] = Query(default=None, description="结束日期"),
+    page_key: Optional[str] = Query(default=None, description="页面标识"),
+    pagination: PaginationParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """B端查看页面浏览统计。"""
+    site_id = get_site_id(request)
+    stats, total = await camp_map_service.list_page_view_stats(
+        db,
+        site_id=site_id,
+        start_date=start_date,
+        end_date=end_date,
+        page_key=page_key,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+    summary = await camp_map_service.summarize_page_view_stats(
+        db,
+        site_id=site_id,
+        start_date=start_date,
+        end_date=end_date,
+        page_key=page_key,
+    )
+    items = [PageViewStatResponse.model_validate(item) for item in stats]
+    response = PaginatedResponse.create(
+        items=items,
+        total=total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
+    data = response.model_dump(mode="json")
+    data["data"]["summary"] = summary
+    return data
 
 
 # ========== B端接口：游戏管理 ==========

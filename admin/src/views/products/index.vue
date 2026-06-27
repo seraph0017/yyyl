@@ -11,8 +11,8 @@
             <el-option v-for="(label, key) in categoryMap" :key="key" :label="label" :value="key" />
           </el-select>
           <el-select v-model="searchParams.status" placeholder="状态" clearable style="width: 120px" @change="handleSearch">
-            <el-option label="上架" value="active" />
-            <el-option label="下架" value="inactive" />
+            <el-option label="上架" value="on_sale" />
+            <el-option label="下架" value="off_sale" />
             <el-option label="草稿" value="draft" />
           </el-select>
           <el-button type="primary" @click="handleSearch">
@@ -30,7 +30,7 @@
         <el-table-column label="商品信息" min-width="280">
           <template #default="{ row }">
             <div class="product-info">
-              <el-image :src="row.cover_image" class="product-cover" fit="cover">
+              <el-image :src="getProductCover(row)" class="product-cover" fit="cover">
                 <template #error><div class="image-placeholder"><el-icon><Picture /></el-icon></div></template>
               </el-image>
               <div>
@@ -42,13 +42,13 @@
         </el-table-column>
         <el-table-column label="基础价" width="120" align="right">
           <template #default="{ row }">
-            <span class="price">¥{{ formatPrice(row.base_price) }}</span>
+            <span class="price">¥{{ formatYuanAmount(row.base_price) }}</span>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : row.status === 'draft' ? 'info' : 'danger'" size="small">
-              {{ row.status === 'active' ? '上架' : row.status === 'draft' ? '草稿' : '下架' }}
+            <el-tag :type="row.status === 'on_sale' ? 'success' : row.status === 'draft' ? 'info' : 'danger'" size="small">
+              {{ row.status === 'on_sale' ? '上架' : row.status === 'draft' ? '草稿' : '下架' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -64,15 +64,15 @@
                   <el-icon><Edit /></el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip :content="row.status === 'active' ? '下架' : '上架'" placement="top" :show-after="400">
+              <el-tooltip :content="row.status === 'on_sale' ? '下架' : '上架'" placement="top" :show-after="400">
                 <el-button
                   class="action-btn"
-                  :class="row.status === 'active' ? 'action-btn--offline' : 'action-btn--online'"
+                  :class="row.status === 'on_sale' ? 'action-btn--offline' : 'action-btn--online'"
                   circle size="small"
                   @click="handleToggleStatus(row)"
                 >
                   <el-icon>
-                    <Bottom v-if="row.status === 'active'" />
+                    <Bottom v-if="row.status === 'on_sale'" />
                     <Top v-else />
                   </el-icon>
                 </el-button>
@@ -119,7 +119,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Picture, Edit, Delete, Top, Bottom, Share } from '@element-plus/icons-vue'
 import { getProducts, updateProductStatus, deleteProduct } from '@/api/product'
 import { createQrcode } from '@/api/qrcode'
-import { formatPrice, formatDateTime, getCategoryName, categoryMap } from '@/utils'
+import { formatDateTime, getCategoryName, categoryMap } from '@/utils'
 import type { Product, ProductSearchParams } from '@/types'
 
 const router = useRouter()
@@ -155,11 +155,21 @@ function handleSearch() {
   fetchData()
 }
 
+function getProductCover(row: Product): string {
+  const first = row.images?.[0]
+  return (typeof first === 'string' ? first : first?.url) || row.cover_image || ''
+}
+
+function formatYuanAmount(value: number | string | null | undefined): string {
+  const amount = Number(value || 0)
+  return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
+}
+
 async function handleToggleStatus(row: Product) {
-  const newStatus = row.status === 'active' ? 'inactive' : 'active'
+  const newStatus = row.status === 'on_sale' ? 'off_sale' : 'on_sale'
   try {
     await updateProductStatus(row.id, newStatus)
-    ElMessage.success(`已${newStatus === 'active' ? '上架' : '下架'}`)
+    ElMessage.success(`已${newStatus === 'on_sale' ? '上架' : '下架'}`)
     row.status = newStatus
   } catch {}
 }
@@ -195,6 +205,7 @@ onMounted(fetchData)
   display: flex;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .product-info {
@@ -243,5 +254,11 @@ onMounted(fetchData)
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--color-border-light);
+}
+
+@media (max-width: 720px) {
+  .search-bar {
+    width: 100%;
+  }
 }
 </style>

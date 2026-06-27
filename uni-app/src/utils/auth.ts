@@ -80,13 +80,37 @@ export async function phoneLogin(e: { detail: { code?: string; errMsg: string } 
  * 保存登录信息
  */
 export function saveLoginInfo(result: ILoginResult): void {
+  const user = normalizeLoginUser(result.user_info || result.user)
+  if (!user) {
+    throw new Error('登录响应缺少用户信息')
+  }
+
   uni.setStorageSync('access_token', result.access_token)
   uni.setStorageSync('refresh_token', result.refresh_token)
-  uni.setStorageSync('user_info', JSON.stringify(result.user))
+  uni.setStorageSync('user_info', JSON.stringify(user))
 
   const userStore = useUserStore()
-  userStore.setUser(result.user)
+  userStore.setUser(user)
   userStore.setToken(result.access_token, result.refresh_token)
+}
+
+export function getLoginUserInfo(result: ILoginResult): IUserInfo | null {
+  return normalizeLoginUser(result.user_info || result.user)
+}
+
+function normalizeLoginUser(raw?: IUserInfo): IUserInfo | null {
+  if (!raw) return null
+  const role = raw.role || 'user'
+  return {
+    ...raw,
+    role,
+    phone: raw.phone || '',
+    is_annual_member: Boolean(raw.is_annual_member ?? raw.is_member),
+    annual_card_expire_date: raw.annual_card_expire_date || '',
+    points: Number(raw.points ?? raw.points_balance ?? 0),
+    is_staff: Boolean(raw.is_staff || role === 'staff' || role === 'admin' || role === 'super_admin'),
+    staff_role: raw.staff_role || (role === 'user' ? '' : role),
+  }
 }
 
 /**
@@ -149,7 +173,7 @@ export function requireLogin(callback?: () => void): void {
     confirmText: '去登录',
     success(res) {
       if (res.confirm) {
-        uni.navigateTo({ url: '/pages/mine/index' })
+        uni.switchTab({ url: '/pages/mine/index' })
       }
     },
   })

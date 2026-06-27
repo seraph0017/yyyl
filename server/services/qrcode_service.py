@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import secrets
 import string
 from dataclasses import dataclass
@@ -30,6 +31,7 @@ import services.cms_service as cms_service
 WECHAT_API_BASE = "https://api.weixin.qq.com"
 QRCODE_ATTRIBUTION_TTL_SECONDS = 86400
 QRCODE_IMAGE_DIR = Path(__file__).resolve().parents[1] / "images" / "qrcodes"
+TEMPORARY_QRCODE_IMAGE_DIR = QRCODE_IMAGE_DIR / "temporary"
 
 
 class QrcodeServiceError(Exception):
@@ -231,6 +233,31 @@ async def regenerate_qrcode(
     qrcode.generated_at = datetime.now(timezone.utc)
     await db.flush()
     return qrcode
+
+
+async def create_temporary_order_qrcode_image(*, site_id: int, token: str) -> str:
+    """为现场临时订单生成直达订单确认页的小程序码。"""
+    access_token = await _get_wechat_access_token(site_id)
+    payload = {
+        "scene": token,
+        "page": "pages/order-confirm/index",
+        "check_path": False,
+        "env_version": "release",
+    }
+    url = f"{WECHAT_API_BASE}/wxa/getwxacodeunlimit?access_token={access_token}"
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.post(url, json=payload)
+    body = response.content
+    validate_wechat_qrcode_image(
+        content_type=response.headers.get("content-type", ""),
+        body=body,
+    )
+    image_dir = TEMPORARY_QRCODE_IMAGE_DIR / str(site_id)
+    image_dir.mkdir(parents=True, exist_ok=True)
+    filename = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
+    image_path = image_dir / f"{filename}.png"
+    image_path.write_bytes(body)
+    return f"/images/qrcodes/temporary/{site_id}/{filename}.png"
 
 
 async def resolve_qrcode(

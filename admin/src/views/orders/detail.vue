@@ -27,17 +27,17 @@
             <el-descriptions-item label="用户昵称">{{ order.user_nickname }}</el-descriptions-item>
             <el-descriptions-item label="手机号">{{ order.user_phone }}</el-descriptions-item>
             <el-descriptions-item label="支付方式">{{ order.payment_method }}</el-descriptions-item>
-            <el-descriptions-item label="订单金额"><span class="price">¥{{ formatPrice(order.total_amount) }}</span></el-descriptions-item>
-            <el-descriptions-item label="实付金额">¥{{ formatPrice(order.paid_amount) }}</el-descriptions-item>
-            <el-descriptions-item label="退款金额">¥{{ formatPrice(order.refund_amount) }}</el-descriptions-item>
+            <el-descriptions-item label="订单金额"><span class="price">¥{{ formatYuanAmount(order.total_amount) }}</span></el-descriptions-item>
+            <el-descriptions-item label="实付金额">¥{{ formatYuanAmount(orderActualPaidAmount) }}</el-descriptions-item>
+            <el-descriptions-item label="退款金额">¥{{ formatYuanAmount(order.refund_amount) }}</el-descriptions-item>
             <el-descriptions-item label="结算状态">
               <el-tag :type="getSettlementTagType(order.settlement_status)" size="small">
                 {{ getSettlementStatusLabel(order.settlement_status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="已结算金额">¥{{ formatPrice(order.settled_amount || 0) }}</el-descriptions-item>
+            <el-descriptions-item label="已结算金额">¥{{ formatYuanAmount(order.settled_amount || 0) }}</el-descriptions-item>
             <el-descriptions-item label="下单时间">{{ formatDateTime(order.created_at) }}</el-descriptions-item>
-            <el-descriptions-item label="支付时间">{{ order.paid_at ? formatDateTime(order.paid_at) : '--' }}</el-descriptions-item>
+            <el-descriptions-item label="支付时间">{{ order.payment_time ? formatDateTime(order.payment_time) : '--' }}</el-descriptions-item>
             <el-descriptions-item label="过期时间">{{ formatDateTime(order.expire_at) }}</el-descriptions-item>
             <el-descriptions-item label="备注" :span="3">{{ order.remark || '无' }}</el-descriptions-item>
           </el-descriptions>
@@ -52,10 +52,10 @@
             <el-table-column prop="sku_name" label="规格" width="120" />
             <el-table-column prop="quantity" label="数量" width="80" align="center" />
             <el-table-column label="单价" width="100" align="right">
-              <template #default="{ row }">¥{{ formatPrice(row.unit_price) }}</template>
+              <template #default="{ row }">¥{{ formatYuanAmount(row.unit_price) }}</template>
             </el-table-column>
             <el-table-column label="实际价" width="100" align="right">
-              <template #default="{ row }"><span class="price">¥{{ formatPrice(row.actual_price) }}</span></template>
+              <template #default="{ row }"><span class="price">¥{{ formatYuanAmount(row.actual_price) }}</span></template>
             </el-table-column>
             <el-table-column label="日期" width="120">
               <template #default="{ row }">{{ row.date || '--' }}</template>
@@ -79,7 +79,7 @@
               <template #default="{ row }">{{ row.order_action === 'cancel_order' ? '取消订单' : '保留订单' }}</template>
             </el-table-column>
             <el-table-column label="金额" width="120" align="right">
-              <template #default="{ row }">¥{{ formatPrice(row.refund_amount) }}</template>
+              <template #default="{ row }">¥{{ formatYuanAmount(row.refund_amount) }}</template>
             </el-table-column>
             <el-table-column label="状态" width="110" align="center">
               <template #default="{ row }">
@@ -128,7 +128,7 @@
               </el-table-column>
               <el-table-column prop="product_name" label="商品" />
               <el-table-column label="可退金额" width="100" align="right">
-                <template #default="{ row }">¥{{ formatPrice(row.actual_price) }}</template>
+                <template #default="{ row }">¥{{ formatYuanAmount(row.actual_price) }}</template>
               </el-table-column>
               <el-table-column prop="quantity" label="数量" width="70" align="center" />
             </el-table>
@@ -160,7 +160,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { approveRefundRecord, createRefund, getOrderDetail, getOrderRefunds, rejectRefundRecord } from '@/api/order'
 import { useUserStore } from '@/stores/user'
-import { formatPrice, formatDateTime, getCategoryName, orderStatusMap, paymentStatusMap } from '@/utils'
+import { formatDateTime, getCategoryName, orderStatusMap, paymentStatusMap } from '@/utils'
 import type { Order, OrderStatus, PaymentStatus, RefundCreatePayload, RefundRecord } from '@/types'
 
 const router = useRouter()
@@ -191,10 +191,12 @@ const order = ref<Order>({
   user_id: 0,
   user_nickname: '',
   user_phone: '',
+  user_phone_masked: null,
   status: 'pending_payment',
   payment_status: 'unpaid',
   payment_method: '',
   total_amount: 0,
+  actual_amount: 0,
   paid_amount: 0,
   refund_amount: 0,
   settled_amount: 0,
@@ -202,11 +204,20 @@ const order = ref<Order>({
   item_count: 0,
   remark: null,
   expire_at: '',
+  payment_time: null,
   paid_at: null,
   created_at: '',
   updated_at: '',
   items: [],
 })
+
+const orderActualPaidAmount = computed(() => order.value.actual_amount ?? order.value.paid_amount ?? 0)
+
+function formatYuanAmount(value?: number | string | null) {
+  const amount = Number(value ?? 0)
+  if (!Number.isFinite(amount)) return '0.00'
+  return amount.toFixed(2)
+}
 
 async function fetchOrder() {
   const id = Number(route.params.id)
@@ -239,7 +250,7 @@ function openRefundDialog() {
   refundForm.order_action = 'cancel_order'
   refundForm.release_inventory = true
   refundForm.reason = ''
-  refundAmountYuan.value = order.value.paid_amount / 100
+  refundAmountYuan.value = orderActualPaidAmount.value
   selectedRefundItemIds.value = order.value.items.map(item => item.id)
   refundDialogVisible.value = true
 }
@@ -250,7 +261,7 @@ function handleRefundModeChange() {
     refundForm.release_inventory = true
   }
   if (refundForm.refund_mode === 'full') {
-    refundAmountYuan.value = order.value.paid_amount / 100
+    refundAmountYuan.value = orderActualPaidAmount.value
     selectedRefundItemIds.value = order.value.items.map(item => item.id)
   }
   if (refundForm.refund_mode === 'item') {
@@ -266,7 +277,7 @@ function updateItemRefundAmount() {
   const cents = order.value.items
     .filter(item => selectedRefundItemIds.value.includes(item.id))
     .reduce((sum, item) => sum + item.actual_price, 0)
-  refundAmountYuan.value = cents / 100
+  refundAmountYuan.value = cents
 }
 
 async function submitRefund() {
@@ -284,7 +295,7 @@ async function submitRefund() {
 
   refundSubmitting.value = true
   try {
-    const amount = Math.round(refundAmountYuan.value * 100)
+    const amount = Number(refundAmountYuan.value.toFixed(2))
     const payload: RefundCreatePayload = {
       ...refundForm,
       refund_amount: amount,

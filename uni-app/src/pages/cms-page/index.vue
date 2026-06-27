@@ -37,6 +37,7 @@ import { getCmsPage, checkCmsPageVersion } from '@/api/cms'
 import { getCmsPageCache, setCmsPageCache } from '@/api/cms'
 import type { CmsPageConfig } from '@/types/cms'
 import { currentSite } from '@/config/sites'
+import { recordPageView } from '@/utils/analytics'
 
 const pageCode = ref('')
 const pageTitle = ref('')
@@ -44,6 +45,7 @@ const previewToken = ref<string | undefined>(undefined)
 const pageConfig = ref<CmsPageConfig | null>(null)
 const loading = ref(true)
 const cachedVersion = ref<number>(0)
+let pageViewRecorded = false
 
 onLoad((options) => {
   pageCode.value = options?.page_code || ''
@@ -81,6 +83,7 @@ async function loadPageConfig() {
         pageTitle.value = data.title
         uni.setNavigationBarTitle({ title: data.title })
       }
+      recordCmsPageView(data.title)
       applyNavigationBarColor(data.config)
     } catch {
       pageConfig.value = null
@@ -98,6 +101,7 @@ async function loadPageConfig() {
       pageTitle.value = cache.title
       uni.setNavigationBarTitle({ title: cache.title })
     }
+    recordCmsPageView(cache.title)
     applyNavigationBarColor(cache.config)
     loading.value = false
   }
@@ -120,6 +124,7 @@ async function loadPageConfig() {
       pageTitle.value = data.title
       uni.setNavigationBarTitle({ title: data.title })
     }
+    recordCmsPageView(data.title)
     applyNavigationBarColor(data.config)
   } catch (err) {
     console.warn(`[CmsPage] 页面 ${pageCode.value} 加载失败:`, err)
@@ -128,6 +133,12 @@ async function loadPageConfig() {
     }
   }
   loading.value = false
+}
+
+function recordCmsPageView(title?: string) {
+  if (pageViewRecorded || !pageCode.value) return
+  pageViewRecorded = true
+  recordPageView(`cms:${pageCode.value}`, title || pageCode.value)
 }
 
 onPullDownRefresh(async () => {

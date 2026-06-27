@@ -2,11 +2,15 @@
   <div class="page-container">
     <div class="card-box">
       <div class="flex-between mb-16">
-        <h3>次数卡管理</h3>
+        <div>
+          <h3>会员卡配置 - 次数卡</h3>
+          <p class="sub-title">兼容入口，保留原有次数卡配置与激活码管理。</p>
+        </div>
         <el-button type="primary" @click="showConfigDialog = true"><el-icon><Plus /></el-icon>新建次数卡配置</el-button>
       </div>
 
-      <!-- 次数卡配置 -->
+      <el-alert class="mb-16" type="info" :closable="false" show-icon title="这里是旧次数卡管理入口的兼容页，主入口请使用“会员卡”总览。" />
+
       <el-table :data="configs" v-loading="loading" border class="mb-20">
         <el-table-column prop="name" label="卡名称" />
         <el-table-column prop="total_times" label="总次数" width="80" align="center" />
@@ -35,7 +39,6 @@
         </el-table-column>
       </el-table>
 
-      <!-- 激活码管理 -->
       <div class="flex-between mb-8">
         <h4>激活码管理</h4>
         <el-button size="small" type="primary" @click="showGenerateDialog = true">批量生成</el-button>
@@ -67,9 +70,13 @@
       <div class="pagination-wrapper">
         <el-pagination v-model:current-page="codeParams.page" v-model:page-size="codeParams.page_size" :total="codeTotal" layout="total, prev, pager, next" @current-change="fetchCodes" />
       </div>
+
+      <div class="compat-link">
+        <el-button @click="router.push('/members')">返回会员卡总览</el-button>
+        <el-button type="primary" plain @click="router.push('/annual-cards')">查看年卡配置</el-button>
+      </div>
     </div>
 
-    <!-- 配置弹窗 -->
     <el-dialog v-model="showConfigDialog" title="次数卡配置" width="500px">
       <el-form :model="configForm" label-width="100px">
         <el-form-item label="卡名称" required><el-input v-model="configForm.name" /></el-form-item>
@@ -83,7 +90,6 @@
       </template>
     </el-dialog>
 
-    <!-- 生成激活码弹窗 -->
     <el-dialog v-model="showGenerateDialog" title="批量生成激活码" width="400px">
       <el-form :model="genForm" label-width="100px">
         <el-form-item label="关联配置" required>
@@ -103,12 +109,14 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Edit, Setting } from '@element-plus/icons-vue'
 import { getTimesCardConfigs, createTimesCardConfig, updateTimesCardConfig, getActivationCodes, generateActivationCodes } from '@/api/member'
 import { formatPrice, formatDateTime } from '@/utils'
 import type { TimesCardConfig, ActivationCode } from '@/types'
 
+const router = useRouter()
 const loading = ref(false)
 const configs = ref<TimesCardConfig[]>([])
 const codes = ref<ActivationCode[]>([])
@@ -123,7 +131,7 @@ const genForm = reactive({ config_id: 0, count: 10 })
 
 async function fetchData() {
   loading.value = true
-  try { const res = await getTimesCardConfigs(); configs.value = res.data } catch {} finally { loading.value = false }
+  try { const res = await getTimesCardConfigs(); configs.value = res.data } catch { configs.value = [] } finally { loading.value = false }
 }
 
 async function fetchCodes() {
@@ -155,5 +163,22 @@ onMounted(() => { fetchData(); fetchCodes() })
 </script>
 
 <style lang="scss" scoped>
-.pagination-wrapper { display: flex; justify-content: flex-end; margin-top: 16px; }
+.sub-title {
+  margin: 4px 0 0;
+  color: var(--color-text-secondary);
+}
+
+.pagination-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.compat-link {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
 </style>

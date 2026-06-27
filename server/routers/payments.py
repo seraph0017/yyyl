@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +14,14 @@ from middleware.site import get_site_id
 from services import order_service, refund_service, wechat_pay_service
 
 router = APIRouter(tags=["支付"])
+logger = logging.getLogger(__name__)
+
+
+def _is_idempotent_payment_notify_error(exc: HTTPException) -> bool:
+    """仅对晚到或状态冲突通知 ACK，避免吞掉真实内部错误。"""
+    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    code = detail.get("code")
+    return exc.status_code in {400, 404} and code in {40402, 40902, 40904}
 
 
 @router.post("/api/v1/payments/wechat/notify", summary="微信支付结果通知")
@@ -28,7 +38,15 @@ async def wechat_payment_notify(
             dict(request.headers),
             site_id=site_id,
         )
-        await order_service.handle_wechat_payment_notification(db, transaction)
+        try:
+            await order_service.handle_wechat_payment_notification(db, transaction)
+        except HTTPException as exc:
+            if _is_idempotent_payment_notify_error(exc):
+                return {"code": "SUCCESS", "message": "已接收"}
+            logger.exception("微信支付通知处理失败: detail=%s", exc.detail)
+            raise
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

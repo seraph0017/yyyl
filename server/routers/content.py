@@ -25,9 +25,16 @@ from models.content import (
     FaqItem,
     PageConfig,
 )
+from models.customer_service import CustomerServiceAskLog, CustomerServiceKnowledgeArticle
 from models.user import User
 from schemas.common import ResponseModel
 from schemas.user import DisclaimerSignRequest
+from services.customer_service_knowledge_service import (
+    build_ask_log_payload,
+    build_feedback_token,
+    select_knowledge_answer,
+    verify_feedback_token,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["内容"])
 
@@ -127,6 +134,120 @@ async def search_faq_items(
     ]
 
     return ResponseModel.success(data=data)
+
+
+@router.post("/customer-service/ask", summary="智能客服知识库问答")
+async def ask_customer_service(
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """小程序智能客服问答：只基于当前营地已发布知识库回答。"""
+    site_id = get_site_id(request)
+    question = (body.get("question") or "").strip()
+    if not question:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 40001, "message": "请输入问题"},
+        )
+    if len(question) > 300:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 40002, "message": "问题不能超过300字"},
+        )
+
+    result = await db.execute(
+        select(CustomerServiceKnowledgeArticle).where(
+            CustomerServiceKnowledgeArticle.site_id == site_id,
+            CustomerServiceKnowledgeArticle.status == "published",
+            CustomerServiceKnowledgeArticle.is_deleted.is_(False),
+        )
+    )
+    articles = result.scalars().all()
+    answer = select_knowledge_answer(question=question, articles=articles, site_id=site_id)
+
+    log = CustomerServiceAskLog(
+        **build_ask_log_payload(
+            site_id=site_id,
+            channel="miniapp",
+            question=question,
+            result=answer,
+            user_id=user.id if user else None,
+        )
+    )
+    db.add(log)
+    await db.commit()
+    await db.refresh(log)
+    return ResponseModel.success(data={
+        **answer,
+        "log_id": log.id,
+        "feedback_token": build_feedback_token(
+            log_id=log.id,
+            site_id=site_id,
+            user_id=user.id if user else None,
+        ),
+    })
+
+
+@router.post("/customer-service/ask-logs/{log_id}/feedback", summary="智能客服回答反馈")
+async def submit_customer_service_feedback(
+    log_id: int,
+    body: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: Optional[User] = Depends(get_optional_user),
+):
+    """记录智能客服回答是否有帮助。"""
+    site_id = get_site_id(request)
+    feedback = (body.get("feedback") or "").strip()
+    comment = (body.get("comment") or "").strip()
+    if feedback not in {"helpful", "unhelpful"}:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 40003, "message": "反馈类型不支持"},
+        )
+    feedback_token = (body.get("feedback_token") or "").strip()
+    if not verify_feedback_token(
+        feedback_token,
+        log_id=log_id,
+        site_id=site_id,
+        user_id=user.id if user else None,
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40303, "message": "feedback_token 无效或已不匹配"},
+        )
+
+    conditions = [
+        CustomerServiceAskLog.id == log_id,
+        CustomerServiceAskLog.site_id == site_id,
+        CustomerServiceAskLog.is_deleted.is_(False),
+    ]
+    if user:
+        conditions.append(
+            or_(
+                CustomerServiceAskLog.user_id == user.id,
+                CustomerServiceAskLog.user_id.is_(None),
+            )
+        )
+
+    result = await db.execute(select(CustomerServiceAskLog).where(*conditions))
+    log = result.scalar_one_or_none()
+    if not log:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": 40401, "message": "问答记录不存在"},
+        )
+    if log.feedback:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": 40901, "message": "该回答已提交过反馈"},
+        )
+    log.feedback = feedback
+    log.feedback_comment = comment[:500] if comment else None
+    await db.commit()
+    return ResponseModel.success(message="反馈已记录")
 
 
 @router.get("/disclaimers/{disclaimer_id}", summary="免责声明内容")

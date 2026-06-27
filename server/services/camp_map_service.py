@@ -9,16 +9,18 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from models.camp_map import CampMap, CampMapZone
+from models.camp_map import CampMap, CampMapZone, PageViewStat
 from models.product import Inventory, Product
+from schemas.camp_map import normalize_camp_map_zone_coordinates
 
 logger = logging.getLogger(__name__)
 
@@ -296,8 +298,9 @@ async def update_camp_map_zone(
             detail={"code": 40401, "message": "地图区域不存在"},
         )
 
+    nullable_fields = {"link_type", "link_target", "link_label", "description", "zone_code"}
     for key, value in data.items():
-        if hasattr(zone, key) and value is not None:
+        if hasattr(zone, key) and (value is not None or key in nullable_fields):
             setattr(zone, key, value)
 
     await db.flush()
@@ -390,6 +393,7 @@ async def get_zone_availability(
         inv_result = await db.execute(
             select(Inventory).where(
                 Inventory.product_id.in_(list(all_product_ids)),
+                Inventory.site_id == site_id,
                 Inventory.date == target_date,
                 Inventory.is_deleted.is_(False),
             )
@@ -433,13 +437,218 @@ async def get_zone_availability(
 
         zone_statuses.append({
             "zone_id": zone.id,
+            "id": zone.id,
             "zone_name": zone.zone_name,
             "zone_code": zone.zone_code,
-            "coordinates": zone.coordinates,
+            "coordinates": normalize_camp_map_zone_coordinates(zone.coordinates),
+            "product_ids": zone.product_ids,
+            "description": zone.description,
+            "sort_order": zone.sort_order,
+            "link_type": zone.link_type,
+            "link_target": zone.link_target,
+            "link_label": zone.link_label,
+            "click_count": zone.click_count,
             "total": zone_total,
+            "total_count": zone_total,
             "available": zone_available,
+            "available_count": zone_available,
             "sold": zone_sold,
             "availability": availability,
         })
 
     return zone_statuses
+
+
+async def record_zone_click(
+    db: AsyncSession,
+    *,
+    zone_id: int,
+    site_id: int = 1,
+) -> Dict[str, Any]:
+    """记录地图热区点击，按营地隔离。"""
+    update_result = await db.execute(
+        update(CampMapZone)
+        .where(
+            CampMapZone.id == zone_id,
+            CampMapZone.is_deleted.is_(False),
+            CampMapZone.camp_map_id.in_(
+                select(CampMap.id).where(
+                    CampMap.site_id == site_id,
+                    CampMap.is_deleted.is_(False),
+                )
+            ),
+        )
+        .values(click_count=CampMapZone.click_count + 1)
+        .returning(
+            CampMapZone.id,
+            CampMapZone.click_count,
+            CampMapZone.link_type,
+            CampMapZone.link_target,
+            CampMapZone.link_label,
+        )
+    )
+    row = update_result.first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "地图区域不存在"},
+        )
+
+    await db.flush()
+    return {
+        "zone_id": row.id,
+        "click_count": row.click_count,
+        "link_type": row.link_type,
+        "link_target": row.link_target,
+        "link_label": row.link_label,
+    }
+
+
+async def _record_zone_click_legacy(
+    db: AsyncSession,
+    *,
+    zone_id: int,
+    site_id: int = 1,
+) -> Dict[str, Any]:
+    """测试替身数据库不支持 SQLAlchemy Row 返回时的兼容路径。"""
+    result = await db.execute(
+        select(CampMapZone)
+        .join(CampMap, CampMap.id == CampMapZone.camp_map_id)
+        .where(
+            CampMapZone.id == zone_id,
+            CampMap.site_id == site_id,
+            CampMapZone.is_deleted.is_(False),
+            CampMap.is_deleted.is_(False),
+        )
+    )
+    zone = result.scalar_one_or_none()
+    if zone is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "地图区域不存在"},
+        )
+
+    zone.click_count = (zone.click_count or 0) + 1
+    await db.flush()
+    return {
+        "zone_id": zone.id,
+        "click_count": zone.click_count,
+        "link_type": zone.link_type,
+        "link_target": zone.link_target,
+        "link_label": zone.link_label,
+    }
+
+
+async def record_page_view(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    page_key: str,
+    page_title: Optional[str] = None,
+    user_id: Optional[int] = None,
+    stat_date: Optional[date] = None,
+) -> PageViewStat:
+    """记录页面浏览量，按营地、页面和自然日聚合。"""
+    stat_date = stat_date or date.today()
+    now = datetime.now(timezone.utc)
+    stmt = pg_insert(PageViewStat).values(
+        site_id=site_id,
+        page_key=page_key,
+        page_title=page_title,
+        stat_date=stat_date,
+        view_count=1,
+        user_count=1 if user_id is not None else 0,
+        last_viewed_at=now,
+        is_deleted=False,
+    )
+    update_values = {
+        "view_count": PageViewStat.view_count + 1,
+        "user_count": PageViewStat.user_count + (1 if user_id is not None else 0),
+        "last_viewed_at": now,
+        "is_deleted": False,
+    }
+    if page_title:
+        update_values["page_title"] = page_title
+
+    result = await db.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[
+                PageViewStat.site_id,
+                PageViewStat.page_key,
+                PageViewStat.stat_date,
+            ],
+            set_=update_values,
+        ).returning(PageViewStat)
+    )
+    stat = result.scalar_one()
+    await db.flush()
+    return stat
+
+
+async def list_page_view_stats(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    page_key: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50,
+) -> Tuple[List[PageViewStat], int]:
+    """查询页面浏览统计。"""
+    conditions = [
+        PageViewStat.site_id == site_id,
+        PageViewStat.is_deleted.is_(False),
+    ]
+    if start_date:
+        conditions.append(PageViewStat.stat_date >= start_date)
+    if end_date:
+        conditions.append(PageViewStat.stat_date <= end_date)
+    if page_key:
+        conditions.append(PageViewStat.page_key == page_key)
+
+    query = select(PageViewStat).where(*conditions)
+    total_result = await db.execute(select(func.count()).select_from(query.subquery()))
+    total = total_result.scalar() or 0
+
+    result = await db.execute(
+        query.order_by(PageViewStat.stat_date.desc(), PageViewStat.view_count.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return list(result.scalars().all()), total
+
+
+async def summarize_page_view_stats(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    page_key: Optional[str] = None,
+) -> Dict[str, int]:
+    """查询页面浏览统计摘要，按完整筛选条件聚合而不是按分页结果汇总。"""
+    conditions = [
+        PageViewStat.site_id == site_id,
+        PageViewStat.is_deleted.is_(False),
+    ]
+    if start_date:
+        conditions.append(PageViewStat.stat_date >= start_date)
+    if end_date:
+        conditions.append(PageViewStat.stat_date <= end_date)
+    if page_key:
+        conditions.append(PageViewStat.page_key == page_key)
+
+    result = await db.execute(
+        select(
+            func.count(PageViewStat.id),
+            func.coalesce(func.sum(PageViewStat.view_count), 0),
+            func.coalesce(func.sum(PageViewStat.user_count), 0),
+        ).where(*conditions)
+    )
+    record_count, view_count, user_count = result.all()[0]
+    return {
+        "record_count": int(record_count or 0),
+        "view_count": int(view_count or 0),
+        "user_count": int(user_count or 0),
+    }

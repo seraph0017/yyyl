@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>一月一露 v1.8 生产上线审查文档</title>
+  <style>
+    :root {
+      --forest: #2d4a3e;
+      --copper: #a77a38;
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: #d8e0e8;
+      --soft: #f7faf8;
+      --warn: #9f5f12;
+      --danger: #a43f3f;
+      --ok: #21734e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 44px 32px 80px;
+      color: var(--ink);
+      background: #fff;
+      font: 15px/1.72 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    }
+    h1, h2, h3 { color: #17211c; line-height: 1.3; }
+    h1 { margin: 0 0 14px; font-size: 32px; }
+    h2 { margin: 38px 0 14px; padding-top: 10px; border-top: 2px solid var(--forest); font-size: 23px; }
+    h3 { margin: 24px 0 10px; font-size: 18px; }
+    p { margin: 8px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 22px; table-layout: fixed; }
+    th, td { border: 1px solid var(--line); padding: 9px 10px; vertical-align: top; word-break: break-word; }
+    th { background: #eef4f1; color: #18352a; text-align: left; }
+    code { padding: 1px 5px; border-radius: 4px; background: #eef4f1; font-family: Menlo, Consolas, monospace; font-size: 0.92em; }
+    ul, ol { padding-left: 22px; }
+    .meta { padding: 16px 18px; border: 1px solid var(--line); border-left: 5px solid var(--forest); background: var(--soft); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; }
+    .ok { color: var(--ok); }
+    .warn { color: var(--warn); }
+    .danger { color: var(--danger); }
+    .badge-ok { color: var(--ok); background: #e7f4ed; }
+    .badge-warn { color: var(--warn); background: #fff4df; }
+    .badge-pending { color: #36506c; background: #edf4fb; }
+    .callout { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--line); background: #fbfcfd; }
+  </style>
+</head>
+<body>
+  <h1>一月一露 v1.8 生产上线审查文档</h1>
+  <div class="meta">
+    <p><strong>版本</strong>：v1.8-production-review-rev15</p>
+    <p><strong>日期</strong>：2026-06-27</p>
+    <p><strong>已完成代码范围</strong>：共享库存池、完整库存日历与批量库存管理、订单报价、购物车结算接入共享库存、退款/超时释放幂等、年卡购买/激活并发护栏、企业微信群机器人、小程序智能客服/知识库、企业微信群机器人共用知识库问答、微信手机号授权登录、高危操作二次确认加固、统一会员卡展示与年卡购买闭环、Admin 高风险页面、Miniapp 商品详情与订单确认真实报价、员工核销工作台、真实可扫码票券二维码、现场临时订单/现场收款、统一商品管理完整编辑器、退款审批队列、微信支付 late SUCCESS 库存重锁、购物车免责声明闭环，以及本轮 agent 复审提出的安全/交互问题修复。</p>
+    <p><strong>发布原则</strong>：v1.8 不分期，所有上线范围一次交付；当前代码已完成本地上线审查，但生产发布前仍必须完成用户审批本 HTML、staging 迁移与 smoke test。本文档不是生产发布动作记录，当前未发布生产。</p>
+  </div>
+
+  <h2>1. 当前上线结论</h2>
+  <table>
+    <thead>
+      <tr><th>检查项</th><th>当前状态</th><th>证据</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>共享库存是否允许跨商品共享</td>
+        <td><span class="badge badge-ok">已实现</span></td>
+        <td>通过 <code>inventory_pool</code> + <code>inventory_pool_binding</code> 显式绑定；同营地、active 绑定命中后作为库存事实源。</td>
+      </tr>
+      <tr>
+        <td>D5 企业微信群机器人</td>
+        <td><span class="badge badge-ok">已实现</span></td>
+        <td>配置、加密存储、测试发送、发送日志、后端脱敏、webhook 白名单均已接入。</td>
+      </tr>
+      <tr>
+        <td>核心本地验证</td>
+        <td><span class="badge badge-ok">已通过</span></td>
+        <td>后端编译通过，后端全量 231 tests OK；Admin 合同测试 11/11 和生产构建通过；小程序合同测试 34/34、类型检查、西郊/大聋谷构建通过；HTML 解析与 git diff 空白检查通过。</td>
+      </tr>
+      <tr>
+        <td>分 agent 复审</td>
+        <td><span class="badge badge-ok">已通过</span></td>
+        <td>后端、Admin、Miniapp agent 均已完成本轮复审并 APPROVED；退款管理跨站/角色 guard、late SUCCESS 库存重锁、商品类型切换旧扩展清理、退款队列、现场收款、购物车免责声明确认闭环、智能客服/知识库与移动端交互阻断均已关闭。</td>
+      </tr>
+      <tr>
+        <td>生产发布</td>
+        <td><span class="badge badge-pending">待用户审批 / 未发布</span></td>
+        <td>三端代码通过本地验证与 agent 复审；仍需完成 v1.7→v1.8 Alembic head staging 迁移演练、smoke test、用户审查本 HTML 后才能发布生产。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. 已实现范围</h2>
+  <table>
+    <thead>
+      <tr><th>模块</th><th>实现说明</th><th>关键文件</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>共享库存池</td>
+        <td>新增库存池与绑定模型；允许一个库存池显式绑定多个商品/SKU，实现跨商品共享库存。绑定目标目前生产可用范围为商品和 SKU；活动场次/租赁资产因缺少可校验实体，后端会明确拒绝。</td>
+        <td><code>server/models/inventory_pool.py</code><br><code>server/services/inventory_pool_service.py</code><br><code>server/routers/admin.py</code></td>
+      </tr>
+      <tr>
+        <td>完整库存日历与批量库存管理</td>
+        <td>Admin 库存日历返回缺失日期 <code>closed/0</code> 格；显式绑定共享库存池的商品/SKU 展示为只读共享库存事实源，即使池或绑定 inactive 也不会回退写普通日期库存。批量调整支持日期范围、星期过滤、商品/SKU 目标、开启/关闭、设总量和增减；普通库存写入有唯一索引与并发冲突 409 保护。</td>
+        <td><code>server/services/inventory_calendar_service.py</code><br><code>server/alembic/versions/c3d4e5f6a7b8_v1_8_add_inventory_calendar_unique_index.py</code><br><code>admin/src/views/inventory-pools/index.vue</code></td>
+      </tr>
+      <tr>
+        <td>订单报价</td>
+        <td>新增 <code>POST /api/v1/orders/quote</code>，订单确认页先取后端真实价格、优惠、押金、库存来源，不在前端硬算总价。</td>
+        <td><code>server/routers/orders.py</code><br><code>server/services/order_service.py</code><br><code>uni-app/src/pages/order-confirm/index.vue</code></td>
+      </tr>
+      <tr>
+        <td>库存锁定与释放</td>
+        <td>直购、购物车结算、支付成功、取消、支付失败、支付超时、退款成功均识别 <code>OrderItem.inventory_pool_id</code> 并回写库存池。</td>
+        <td><code>server/services/order_service.py</code><br><code>server/routers/cart.py</code><br><code>server/tasks/inventory.py</code></td>
+      </tr>
+      <tr>
+        <td>退款幂等</td>
+        <td>新增 <code>RefundRecord.inventory_released</code>，保证退款记录最多释放一次库存，覆盖旧库存和共享库存池；<code>uq_refund_record_active_order</code> 防止同订单重复进行中退款，<code>uq_ft_refund_record</code> 防止同退款记录重复财务流水；微信退款 SUCCESS 重放不再重复扣款、累加退款金额或释放库存。</td>
+        <td><code>server/models/refund.py</code><br><code>server/models/finance.py</code><br><code>server/services/refund_service.py</code><br><code>server/alembic/versions/0a1b2c3d4e5f_v1_8_annual_card_refund_concurrency_guard.py</code></td>
+      </tr>
+      <tr>
+        <td>统一会员卡与年卡购买闭环</td>
+        <td><code>GET /api/v1/members/membership-card</code> 聚合年卡/次数卡旧数据；<code>POST /api/v1/members/annual-card/purchase</code> 创建 <code>annual_card</code> 订单并写入脱敏/加密业务快照；购买前锁用户并清理过期待支付单，唯一索引防止同用户同营地重复待支付年卡单；支付成功后幂等创建 <code>AnnualCard</code>，同订单并发激活通过 savepoint 返回已创建年卡；年卡会员费直接进入可提现账户，7 天外退款拒绝，退款成功后年卡置为 <code>refunded</code>。</td>
+        <td><code>server/services/member_service.py</code><br><code>server/services/order_service.py</code><br><code>server/services/refund_service.py</code><br><code>server/services/settlement_service.py</code><br><code>server/tests/test_annual_card_purchase.py</code></td>
+      </tr>
+      <tr>
+        <td>商品价格日历</td>
+        <td>价格日历返回 <code>inventory_source</code> 和 <code>inventory_pool_id</code>；支持 SKU 级共享库存池查询。</td>
+        <td><code>server/routers/products.py</code><br><code>server/services/product_service.py</code><br><code>server/schemas/product.py</code></td>
+      </tr>
+      <tr>
+        <td>企业微信群机器人</td>
+        <td>支持机器人配置、webhook/secret 加密存储、测试发送、日志查询；只允许企业微信群机器人 webhook，日志出库脱敏敏感字段和手机号。</td>
+        <td><code>server/models/enterprise_wechat.py</code><br><code>server/services/enterprise_wechat_robot_service.py</code><br><code>admin/src/views/enterprise-wechat/index.vue</code></td>
+      </tr>
+      <tr>
+        <td>Admin 高风险页面</td>
+        <td>新增共享库存和企业微信页面；路由、菜单和后端接口均限制 <code>super_admin</code>；请求携带 <code>X-Site-Id</code>。</td>
+        <td><code>admin/src/views/inventory-pools/index.vue</code><br><code>admin/src/router/index.ts</code><br><code>admin/src/layout/index.vue</code></td>
+      </tr>
+      <tr>
+        <td>Miniapp 商品详情与确认页</td>
+        <td>商品详情价格日历来自后端，选择日期逐日校验库存；订单确认页报价、提交前刷新报价，购物车路径调用 <code>/cart/checkout</code>。</td>
+        <td><code>uni-app/src/pages/product-detail/index.vue</code><br><code>uni-app/src/pages/order-confirm/index.vue</code></td>
+      </tr>
+      <tr>
+        <td>员工核销与真实票券二维码</td>
+        <td>员工端支持待核销、今日订单、核销历史、订单详情和扫码核销；票券页不再使用占位/toast，使用 v2-L QR 矩阵渲染真实 <code>qrcode_token</code>，刷新 token 后同步重绘。后端核销要求订单 paid 且状态为 paid/verified/completed，票券必须 pending；状态轮询绑定 staff/site/source owner，避免跨员工、跨营地或 admin/user 同 ID 主体泄露。</td>
+        <td><code>server/services/ticket_service.py</code><br><code>server/routers/tickets.py</code><br><code>uni-app/src/pages/staff/index.vue</code><br><code>uni-app/src/pages/ticket/index.vue</code><br><code>uni-app/src/utils/qrcode.ts</code></td>
+      </tr>
+      <tr>
+        <td>Admin 登录错误提示</td>
+        <td>解析 FastAPI <code>detail.message</code>，错误密码展示真实业务提示；登录/刷新接口不触发无意义 token refresh。</td>
+        <td><code>admin/src/utils/http-error.js</code><br><code>admin/src/utils/request.ts</code><br><code>admin/src/components/landing/LoginDialog.vue</code></td>
+      </tr>
+      <tr>
+        <td>微信手机号授权登录</td>
+        <td><code>/api/v1/auth/phone-login</code> 已从 TODO 改为真实调用微信 <code>wxa/business/getuserphonenumber</code>，成功后写入 <code>User.phone</code> 并返回带脱敏手机号的登录态。</td>
+        <td><code>server/services/auth_service.py</code><br><code>server/routers/auth.py</code><br><code>server/tests/test_auth_service.py</code></td>
+      </tr>
+      <tr>
+        <td>高危操作二次确认</td>
+        <td><code>/api/v1/admin/confirm/verify-password</code> 和旧兼容入口 <code>/confirm/verify-code</code> 不再使用 SHA256 或 hash 前缀；统一用 bcrypt 校验操作密码，并返回绑定 admin、显式 <code>X-Site-Id</code>、action、request_hash 的 10 分钟确认 token。前端按实际 JSON 请求体归一化后计算 hash，避免 <code>undefined</code> 字段导致确认 token 与提交 body 不一致。</td>
+        <td><code>server/routers/admin.py</code><br><code>server/tests/test_admin_confirm_routes.py</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. 数据库迁移与基线</h2>
+  <div class="callout">
+    <p><strong>迁移基线要求</strong>：v1.8 首个迁移 <code>c9d8e7f6a5b4</code> 依赖 v1.7 迁移 <code>b7e2f8a9c1d4</code>。staging/production 不能只检查库存池相关迁移，必须先确认数据库已包含 v1.7 head，再执行到 v1.8 head <code>0a1b2c3d4e5f</code>。</p>
+  </div>
+  <table>
+    <thead>
+      <tr><th>迁移</th><th>内容</th><th>上线检查</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>b7e2f8a9c1d4</code></td>
+        <td>v1.7 二维码、退款、结算、订单导出等基线迁移；v1.8 迁移链从该 revision 继续。</td>
+        <td>上线前先执行 <code>alembic current</code>，确认环境至少已包含该 revision；未包含时先补 v1.7 迁移。</td>
+      </tr>
+      <tr>
+        <td><code>c9d8e7f6a5b4</code></td>
+        <td>新增 <code>inventory_pool</code>、<code>inventory_pool_binding</code>，含库存数量不变量和 active 唯一绑定索引。</td>
+        <td>执行后检查 <code>available + locked + sold = total</code>，检查同站点 active 绑定唯一性。</td>
+      </tr>
+      <tr>
+        <td><code>d2e3f4a5b6c7</code></td>
+        <td>新增企业微信群机器人配置与发送日志表。</td>
+        <td>确认 webhook/secret 只保存密文，日志请求体/响应体可写入。</td>
+      </tr>
+      <tr>
+        <td><code>e4f5a6b7c8d9</code></td>
+        <td><code>order_item</code> 新增 <code>inventory_pool_id</code> 外键和索引。</td>
+        <td>确认旧订单该字段为 NULL，新订单命中共享池时写入池 ID。</td>
+      </tr>
+      <tr>
+        <td><code>f6a7b8c9d0e1</code></td>
+        <td><code>refund_record</code> 新增 <code>inventory_released</code> 幂等标记。</td>
+        <td>确认旧退款记录默认 false；上线后同一退款记录重复回调不会重复回补库存。</td>
+      </tr>
+      <tr>
+        <td><code>a1b2c3d4e5f6</code></td>
+        <td><code>ticket</code> 新增营地隔离和二维码 hash 字段；新增 <code>ticket_verify_log</code>，含 <code>staff_source</code> 与核销审计索引。</td>
+        <td>确认旧票券补齐 <code>site_id</code>；确认日志可区分 <code>user/admin</code> 员工来源且不保存明文 QR token。</td>
+      </tr>
+      <tr>
+        <td><code>b2c3d4e5f6a7</code></td>
+        <td>地图热区新增链接与点击统计；新增页面浏览统计表。</td>
+        <td>确认 CMS/地图页面浏览、热区点击统计可写入并按营地隔离。</td>
+      </tr>
+      <tr>
+        <td><code>c3d4e5f6a7b8</code></td>
+        <td>普通日期库存新增 active 唯一索引 <code>uq_inventory_site_product_sku_date_slot_active</code>，按 site/product/coalesced sku/date/coalesced time_slot 防止并发重复格。</td>
+        <td>迁移前会检测重复 active 库存行；如存在重复必须先人工合并，再执行建索引。</td>
+      </tr>
+      <tr>
+        <td><code>d4e5f6a7b8c9</code></td>
+        <td>新增智能客服知识库与问答日志表，支持小程序问答、反馈 token、Admin 知识库管理和企业微信群机器人共用知识库。</td>
+        <td>确认知识库按 <code>site_id</code> 隔离；反馈 token 绑定 log/site/user；企业微信群发送日志不落敏感明文。</td>
+      </tr>
+      <tr>
+        <td><code>e5f6a7b8c9d0</code></td>
+        <td><code>order</code> 新增 <code>biz_data</code> JSONB；<code>annual_card.order_id</code> 新增唯一索引，保障年卡支付回调和补偿激活幂等。</td>
+        <td>确认旧订单 <code>biz_data</code> 为 NULL；确认历史年卡不存在重复 <code>order_id</code> 后再建唯一索引。</td>
+      </tr>
+      <tr>
+        <td><code>0a1b2c3d4e5f</code></td>
+        <td>新增年卡待支付订单、进行中退款记录、退款财务流水的并发唯一护栏；迁移会先取消过期待支付年卡单，并在建索引前检测历史重复数据。</td>
+        <td>执行前如提示重复年卡待支付订单、重复进行中退款或重复退款流水，必须先人工审计处理；索引谓词不使用 <code>now()</code>，过期清理由服务层和迁移预处理承担。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. 本地验证证据</h2>
+  <table>
+    <thead>
+      <tr><th>类别</th><th>命令</th><th>结果</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>后端完整单测</td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest discover -s tests -p 'test_*.py' -v</code></td>
+        <td><span class="ok">231 tests OK</span>；覆盖 v1.7/v1.8 合同、订单、支付、退款、票券、天气、微信支付、智能客服知识库、统一会员卡与年卡购买闭环、临时订单/现场收款、退款队列权限、购物车免责声明闭环等本地测试。仅有测试环境默认 JWT/AES key warning。</td>
+      </tr>
+      <tr>
+        <td>年卡/退款并发幂等 focused 回归</td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_annual_card_purchase.py tests/test_member_unified_contract.py tests/test_refund_service.py tests/test_v18_contracts.py -v</code></td>
+        <td><span class="ok">84 tests OK</span>；覆盖年卡购买订单、待支付订单唯一竞态、支付后激活 savepoint 幂等、booking-check 站点透传、退款 SUCCESS 重放、退款财务流水唯一护栏和 v1.8 合同。</td>
+      </tr>
+      <tr>
+        <td>手机号授权单测</td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_auth_service.py -v</code></td>
+        <td><span class="ok">2 tests OK</span>；覆盖微信手机号接口调用、手机号落库与异常响应；已包含于 231 个后端全量测试。</td>
+      </tr>
+      <tr>
+        <td>员工核销安全回归</td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_ticket_service.py tests/test_auth_middleware.py -v</code></td>
+        <td><span class="ok">73 tests OK</span>；覆盖扫码订单/票券状态拒绝、年卡验证码提交前复核订单状态、状态轮询 staff/site/source owner 校验、admin token 数据库角色复核、普通用户拒绝访问以及 v1.8 票券合同。</td>
+      </tr>
+      <tr>
+        <td>v1.8 后端合同与智能客服测试</td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_customer_service_knowledge.py tests/test_v18_contracts.py -v</code></td>
+        <td><span class="ok">60 tests OK</span>；覆盖共享库存、完整库存日历、企业微信、地图浏览、订单报价、手机号授权、票券核销、购物车报价、智能客服知识库、反馈 token、上传限流和客服配置权限；已包含于后端全量测试。</td>
+      </tr>
+      <tr>
+        <td>高危确认单测</td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_admin_confirm_routes.py -v</code></td>
+        <td><span class="ok">8 tests OK</span>；覆盖 bcrypt 操作密码、super_admin 限制、显式 <code>X-Site-Id</code>、token 绑定 admin/site/action/request_hash、请求内容 mismatch、空 request_hash 拒绝、hash 前缀不能通过旧确认码入口。</td>
+      </tr>
+      <tr>
+        <td>后端编译</td>
+        <td><code>PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m py_compile ...</code></td>
+        <td><span class="ok">通过</span>；覆盖后端模型、schema、router、service、middleware、task、test 的 Python 编译检查。</td>
+      </tr>
+      <tr>
+        <td>Admin 合同测试</td>
+        <td><code>cd admin &amp;&amp; node --test tests/v18-admin-contract.test.mjs</code></td>
+        <td><span class="ok">11/11 pass</span>；覆盖共享库存、企业微信、智能客服知识库、现场收款、统一商品编辑器、退款队列、统一会员卡入口、知识库问答预览绑定当前问题、高危确认 request_hash、地图热区、页面浏览报表等 Admin 合同。</td>
+      </tr>
+      <tr>
+        <td>Admin 生产构建</td>
+        <td><code>cd admin &amp;&amp; npm run build</code></td>
+        <td><span class="ok">通过</span>；仅 Vite 大 chunk 警告。</td>
+      </tr>
+      <tr>
+        <td>Miniapp 合同测试</td>
+        <td><code>cd uni-app &amp;&amp; node --test tests/v18-product-flow.test.mjs</code></td>
+        <td><span class="ok">34/34 pass</span>；覆盖真实价格日历、购物车 quote/checkout、购物车免责声明确认、临时单领取错误态、SKU 选择、下架 SKU 禁用、会员卡统一页、错误提示单次展示、地图/浏览埋点、员工页守卫、现场收款、真实 QR 矩阵渲染、智能客服知识库问答、FAQ fallback、反馈 token 和标准解码器读回原始 token。</td>
+      </tr>
+      <tr>
+        <td>Miniapp 类型检查</td>
+        <td><code>cd uni-app &amp;&amp; npm run type-check</code></td>
+        <td><span class="ok">通过</span></td>
+      </tr>
+      <tr>
+        <td>西郊林场构建</td>
+        <td><code>cd uni-app &amp;&amp; npm run build:wx:xijiao</code></td>
+        <td><span class="ok">通过</span>；仅 Sass/uni-app 弃用警告。</td>
+      </tr>
+      <tr>
+        <td>大聋谷构建</td>
+        <td><code>cd uni-app &amp;&amp; npm run build:wx:dalonggu</code></td>
+        <td><span class="ok">通过</span>；仅 Sass/uni-app 弃用警告。</td>
+      </tr>
+      <tr>
+        <td>Diff 检查</td>
+        <td><code>git diff --check</code></td>
+        <td><span class="ok">通过</span></td>
+      </tr>
+      <tr>
+        <td>HTML 基础解析</td>
+        <td><code>python3 - &lt;&lt;'PY' ... HTMLParser().feed(...)</code></td>
+        <td><span class="ok">通过</span>；覆盖 <code>docs/v1.8_production_review.html</code>、<code>prd/yyyl_prd_v1.8_increment.html</code>、<code>docs/prd_v18_review.html</code>。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. Agent 复审记录</h2>
+  <table>
+    <thead>
+      <tr><th>Agent</th><th>范围</th><th>当前结论</th><th>处理状态</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>后端 agent</td>
+        <td>共享库存、订单、退款、购物车、企业微信、智能客服知识库、迁移</td>
+        <td><span class="badge badge-ok">APPROVED</span></td>
+        <td>最新复审 APPROVED，评分 9.0；CRITICAL/HIGH 为 0。late SUCCESS 重锁普通/共享库存、商品类型切换旧扩展清理、退款管理跨站/角色 guard、退款队列按 <code>RefundRecord.status=pending</code> 过滤、购物车 quote/checkout 免责声明一致性均已关闭。后端编译通过，全量 231 tests OK。</td>
+      </tr>
+      <tr>
+        <td>Admin agent</td>
+        <td>共享库存页、企业微信页、智能客服知识库页、现场收款、退款队列、统一商品编辑器、权限、请求隔离、登录错误提示</td>
+        <td><span class="badge badge-ok">APPROVED</span></td>
+        <td>最新复审 APPROVED，评分 9.1；CRITICAL/HIGH 为 0。退款队列已使用 <code>/admin/refunds?status=pending</code> 与 <code>RefundRecord.id</code> 审批，现场收款主链路和统一商品编辑器均达到上线标准。Admin 合同 11/11 和生产构建通过。</td>
+      </tr>
+      <tr>
+        <td>Miniapp agent</td>
+        <td>商品详情页、订单确认页、购物车结算、购物车免责声明确认、员工核销页、员工现场收款、票券二维码、智能客服页、类型与页面交互</td>
+        <td><span class="badge badge-ok">APPROVED</span></td>
+        <td>最新复审 APPROVED，评分 9.3；CRITICAL/HIGH 为 0。临时单坏 scene 不再回落 direct，员工现场收款触控尺寸达 88rpx，购物车免责声明先弹窗确认、仅用户确认后携带 <code>disclaimer_signed=1</code>，确认页 quote/checkout 均透传签署态。小程序合同 34/34、类型检查和双营地构建通过。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>6. 上线前必须人工检查</h2>
+  <ol>
+    <li>在 staging 执行 <code>alembic current</code>，确认已包含 v1.7 revision <code>b7e2f8a9c1d4</code>；再执行 <code>alembic upgrade head</code> 到 v1.8 head <code>0a1b2c3d4e5f</code>。如迁移提示重复年卡待支付订单、重复进行中退款或重复退款流水，先人工审计处理再继续。</li>
+    <li>创建两个商品绑定同一个共享库存池，下单任一商品后确认另一商品价格日历可用量同步减少。</li>
+    <li>打开 Admin 共享库存的库存日历，确认缺失日期显示关闭/0；对普通库存执行设总量、增减、开启、关闭批量调整；对共享库存目标确认普通批量调整被拒绝并只能走共享池调整。</li>
+    <li>在不带、错误、跨营地 <code>X-Site-Id</code> 的情况下尝试高风险写操作，确认二次确认 token 无法生成或无法消费。</li>
+    <li>模拟未支付订单超时，确认共享池 <code>locked</code> 回到 <code>available</code>。</li>
+    <li>模拟支付成功后退款成功，确认共享池 <code>sold</code> 只回补一次；重复微信退款通知不重复回补、不重复扣减资金、不重复增加订单已退金额。</li>
+    <li>用普通 admin 登录后台，确认无法看到/访问共享库存和企业微信高风险模块；用 super_admin 可操作。</li>
+    <li>创建企业微信群机器人并测试发送，确认日志中 webhook、secret、key、token、手机号均不明文展示。</li>
+    <li>上传客服知识库文档，分别在 Admin 问答测试、小程序智能客服、企业微信群机器人知识库问答发送中验证来源引用、人工兜底、反馈 token 和日志站点隔离；修改企业微信群问题后必须重新预览才能发送。</li>
+    <li>小程序两营地分别导入微信开发者工具，检查商品详情日历、订单确认、购物车结算、智能客服和支付跳转。</li>
+    <li>生产发布前备份数据库、Admin 静态资源和图片目录，确认 Podman 蓝绿回滚命令可用。</li>
+  </ol>
+
+  <h2>7. 上线前剩余风险</h2>
+  <table>
+    <thead>
+      <tr><th>风险</th><th>影响</th><th>上线处理</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>手机号授权刚完成本地单测，仍需真实微信联调</td>
+        <td>后端已接入 <code>wxa/business/getuserphonenumber</code>，但生产依赖小程序 AppID/Secret、微信授权按钮和真实 <code>phone_code</code>。</td>
+        <td>上线前 staging/灰度必须用微信开发者工具或真机完成授权登录、下单前补绑手机号回归。</td>
+      </tr>
+      <tr>
+        <td>现场商品临时单仍是手输商品/SKU ID</td>
+        <td>Admin 与员工端现场商品临时单链路可用，但现场操作存在输错 ID 的体验风险。</td>
+        <td>不阻断本次上线；后续补商品搜索、常用商品和 SKU 选择器。</td>
+      </tr>
+      <tr>
+        <td>活动场次/租赁资产共享池绑定暂未开放</td>
+        <td>当前只允许商品/SKU 绑定；活动/租赁实体模型接入前不能配置这两类目标。</td>
+        <td>已在后端拒绝、Admin 页面隐藏；后续接入对应实体后再放开。</td>
+      </tr>
+      <tr>
+        <td>Admin 构建存在 Vite 大 chunk 警告</td>
+        <td>不阻塞功能，但影响首屏资源体积。</td>
+        <td>本次不作为阻断；后续可做 manualChunks 拆包。</td>
+      </tr>
+      <tr>
+        <td>Sass/uni-app 构建弃用警告</td>
+        <td>不影响当前构建产物，未来依赖升级可能需要迁移。</td>
+        <td>本次不作为阻断；后续升级 Sass 写法。</td>
+      </tr>
+      <tr>
+        <td>生产真实微信支付/企业微信联调依赖外部配置</td>
+        <td>本地测试覆盖签名/通知解析，生产仍需真实商户和机器人配置校验。</td>
+        <td>上线前必须在 staging 或灰度环境完成 smoke test。</td>
+      </tr>
+          </tbody>
+  </table>
+
+  <h2>8. 用户审批区</h2>
+  <div class="callout">
+    <p><strong>审批要求</strong>：当前文档用于生产发布前审查。代码已完成本地验证与三端 agent 复审，但仍必须完成用户审批、staging 迁移与 smoke test 后，才能勾选“允许正式发布”。当前未执行生产发布。</p>
+  </div>
+  <table>
+    <thead>
+      <tr><th>审查项</th><th>用户确认</th><th>备注</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>v1.8 是否按“不分期、一步到位”的当前代码范围交付</td><td>□ 通过 / □ 不通过</td><td></td></tr>
+      <tr><td>跨商品共享库存池显式绑定方案是否通过</td><td>□ 通过 / □ 不通过</td><td></td></tr>
+      <tr><td>企业微信群机器人方案是否通过</td><td>□ 通过 / □ 不通过</td><td></td></tr>
+      <tr><td>三端 agent 复审是否均 APPROVED</td><td>□ 通过 / □ 不通过</td><td></td></tr>
+      <tr><td>staging 迁移和生产 smoke test 是否通过</td><td>□ 通过 / □ 不通过</td><td></td></tr>
+      <tr><td>是否允许正式发布生产</td><td>□ 允许 / □ 不允许</td><td></td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

@@ -1,7 +1,8 @@
 """
 资金结算服务
 
-支付成功进入 pending 账户，订单完成后从 pending 结算到 available。
+普通现金订单支付成功进入 pending 账户，订单完成后从 pending 结算到 available。
+年卡会员费支付成功后直接进入 available。
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ async def record_payment_pending_income(
     db: AsyncSession,
     order,
 ) -> Optional[FinanceTransaction]:
-    """支付成功后将现金类订单金额计入 pending 账户，按订单幂等。"""
+    """支付成功后记录现金收入，按订单幂等。"""
     if getattr(order, "payment_method", None) not in CASH_PAYMENT_METHODS:
         return None
 
@@ -38,7 +39,18 @@ async def record_payment_pending_income(
 
     account = await _get_or_create_finance_account(db, site_id=order.site_id)
     amount = Decimal(str(order.actual_amount))
-    account.pending_amount += amount
+    if getattr(order, "order_type", None) == "annual_card":
+        account.available_amount += amount
+        account_type = "available"
+        to_account = "available"
+        remark = "年卡会员费支付成功进入可提现账户"
+        order.settled_amount = Decimal(str(getattr(order, "settled_amount", 0) or 0)) + amount
+        order.settlement_status = "settled"
+    else:
+        account.pending_amount += amount
+        account_type = "pending"
+        to_account = "pending"
+        remark = "订单支付成功进入待结算账户"
     account.total_income += amount
 
     tx = FinanceTransaction(
@@ -46,11 +58,11 @@ async def record_payment_pending_income(
         order_id=order.id,
         type="income",
         amount=amount,
-        account_type="pending",
+        account_type=account_type,
         from_account="wechat" if order.payment_method == "wechat_pay" else "mock_pay",
-        to_account="pending",
+        to_account=to_account,
         status="completed",
-        remark="订单支付成功进入待结算账户",
+        remark=remark,
         site_id=order.site_id,
     )
     db.add(tx)

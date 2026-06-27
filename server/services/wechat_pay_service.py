@@ -16,7 +16,7 @@ import logging
 import secrets
 import string
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -110,6 +110,7 @@ async def create_jsapi_prepay(order: Any, site_id: int = 1) -> Dict[str, Any]:
         "amount": {"total": _yuan_to_fen(order.actual_amount), "currency": "CNY"},
         "payer": {"openid": order.user.openid},
     }
+    payload["time_expire"] = _wechat_time_expire(getattr(order, "expire_at", None))
     response = await _wechat_post(
         config,
         "/v3/pay/transactions/jsapi",
@@ -143,6 +144,41 @@ async def create_refund(
         },
     }
     return await _wechat_post(config, "/v3/refund/domestic/refunds", payload)
+
+
+async def create_codepay_transaction(
+    order: Any,
+    *,
+    auth_code: str,
+    site_id: int = 1,
+    device_id: str | None = None,
+) -> Dict[str, Any]:
+    """调用微信支付付款码接口。
+
+    付款码金额必须来自服务端正式订单，不能信任前端传入金额。
+    """
+    config = get_wechat_pay_config(site_id)
+    scene_info: Dict[str, Any] = {}
+    if device_id:
+        scene_info["device_id"] = device_id
+    payload = {
+        "appid": config.app_id,
+        "mchid": config.mch_id,
+        "description": f"一月一露现场收款 {order.order_no}",
+        "out_trade_no": order.order_no,
+        "auth_code": auth_code,
+        "amount": {"total": _yuan_to_fen(order.actual_amount), "currency": "CNY"},
+    }
+    if scene_info:
+        payload["scene_info"] = scene_info
+    return await _wechat_post(config, "/v3/pay/transactions/codepay", payload)
+
+
+async def query_codepay_transaction(order: Any, *, site_id: int = 1) -> Dict[str, Any]:
+    """按商户订单号查询付款码交易状态。"""
+    config = get_wechat_pay_config(site_id)
+    path = f"/v3/pay/transactions/out-trade-no/{order.order_no}?mchid={config.mch_id}"
+    return await _wechat_get(config, path)
 
 
 def build_mini_program_pay_params(
@@ -238,6 +274,23 @@ async def _wechat_post(config: WechatPayConfig, path: str, payload: Dict[str, An
     return response.json()
 
 
+async def _wechat_get(config: WechatPayConfig, path: str) -> Dict[str, Any]:
+    timestamp = _utc_timestamp()
+    nonce = _nonce_str()
+    authorization = _build_authorization(config, "GET", path, timestamp, nonce, "")
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            f"{WECHAT_PAY_API_BASE}{path}",
+            headers={
+                "Authorization": authorization,
+                "Accept": "application/json",
+            },
+        )
+    if response.status_code >= 400:
+        raise WechatPayError(f"微信支付查询失败({response.status_code}): {response.text}")
+    return response.json()
+
+
 def _build_authorization(
     config: WechatPayConfig,
     method: str,
@@ -278,6 +331,14 @@ def _read_text_file(path: str, label: str) -> str:
 def _yuan_to_fen(value: Any) -> int:
     amount = Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return int(amount * 100)
+
+
+def _wechat_time_expire(expire_at: Optional[datetime]) -> str:
+    if expire_at is None:
+        expire_at = datetime.now(timezone.utc) + timedelta(minutes=30)
+    if expire_at.tzinfo is None:
+        expire_at = expire_at.replace(tzinfo=timezone.utc)
+    return expire_at.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S+08:00")
 
 
 def _utc_timestamp() -> str:

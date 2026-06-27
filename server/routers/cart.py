@@ -9,7 +9,6 @@
 """
 
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Dict, List, Optional
 
@@ -20,12 +19,12 @@ from sqlalchemy.orm import selectinload
 
 from database import get_db
 from middleware.auth import get_current_user
-from models.order import Cart, CartItem, Order, OrderItem, OrderStatus, PaymentStatus
+from models.order import Cart, CartItem
 from models.product import Product, ProductStatus, SKU, SKUStatus
 from models.user import User
 from schemas.cart import CartAddItemRequest, CartCheckoutRequest
 from schemas.common import ResponseModel
-from utils.helpers import generate_order_no
+from services import order_service
 
 router = APIRouter(prefix="/api/v1/cart", tags=["购物车"])
 
@@ -93,14 +92,17 @@ async def list_cart_items(
         if sku:
             price = sku.price
             stock_available = sku.stock > 0
+            stock = sku.stock
             image = sku.image_url or (product.images[0]["url"] if product and product.images else None)
         elif product:
             price = product.base_price
             stock_available = True  # 非SKU商品不按此处检查
+            stock = product.stock or 0
             image = product.images[0]["url"] if product.images else None
         else:
             price = Decimal("0")
             stock_available = False
+            stock = 0
             image = None
 
         item_total = price * item.quantity
@@ -121,6 +123,7 @@ async def list_cart_items(
             "price": str(price),
             "item_total": str(item_total),
             "stock_available": stock_available,
+            "stock": stock,
             "sku_spec_values": sku.spec_values if sku else None,
         })
 
@@ -131,6 +134,47 @@ async def list_cart_items(
             "total_price": str(total_price),
         },
     })
+
+
+@router.post("/quote", summary="购物车报价")
+async def quote_cart(
+    item_ids: List[int] = Body(..., embed=True),
+    disclaimer_signed: bool = Body(default=False, embed=True),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """购物车确认页报价：复用订单服务真实价格、库存和优惠。"""
+    cart = await _get_or_create_cart(db, user.id)
+    result = await db.execute(
+        select(CartItem).where(
+            CartItem.id.in_(item_ids),
+            CartItem.cart_id == cart.id,
+            CartItem.is_deleted.is_(False),
+        )
+    )
+    cart_items = result.scalars().all()
+    if not cart_items:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 40001, "message": "未找到选中的购物车商品"},
+        )
+
+    order_items_payload = [
+        {
+            "product_id": item.product_id,
+            "sku_id": item.sku_id,
+            "quantity": item.quantity,
+            "dates": [],
+        }
+        for item in cart_items
+    ]
+    quote = await order_service.quote_order(
+        db,
+        user,
+        order_items_payload,
+        disclaimer_signed=disclaimer_signed,
+    )
+    return ResponseModel.success(data=quote)
 
 
 @router.post("/items", summary="添加商品到购物车")
@@ -306,6 +350,7 @@ async def checkout(
     item_ids = body.item_ids
     address_id = body.address_id
     remark = body.remark
+    disclaimer_signed = body.disclaimer_signed
 
     # 获取购物车
     cart = await _get_or_create_cart(db, user.id)
@@ -369,151 +414,35 @@ async def checkout(
                     detail={"code": 40004, "message": f"商品「{product.name}」库存不足"},
                 )
 
-    # 按商品类型（order_type）分组拆单
+    # 按商品类型（order_type）分组拆单，并复用订单服务统一锁库存/计价/站点隔离。
     type_groups: Dict[str, List[CartItem]] = defaultdict(list)
     for item in cart_items:
         product = products_map[item.product_id]
         order_type = product.type  # Product.type 即为订单的 order_type
         type_groups[order_type].append(item)
 
-    now = datetime.now(timezone.utc)
-
-    if len(type_groups) == 1:
-        # 只有一种类型，直接创建单个订单（无需父子关系）
-        order_type = list(type_groups.keys())[0]
-        items_in_group = list(type_groups.values())[0]
-
-        total_amount = Decimal("0")
-        order_items_to_add = []
-        for ci in items_in_group:
-            product = products_map[ci.product_id]
-            sku = skus_map.get(ci.sku_id) if ci.sku_id else None
-            unit_price = sku.price if sku else product.base_price
-            item_total = unit_price * ci.quantity
-            total_amount += item_total
-
-            order_items_to_add.append({
-                "product_id": ci.product_id,
-                "sku_id": ci.sku_id,
-                "quantity": ci.quantity,
-                "unit_price": unit_price,
-                "actual_price": unit_price,
-            })
-
-        # 获取支付超时
-        first_product = products_map[items_in_group[0].product_id]
-        timeout_seconds = first_product.normal_payment_timeout
-
-        order = Order(
-            order_no=generate_order_no(),
-            user_id=user.id,
-            order_type=order_type,
-            status=OrderStatus.PENDING_PAYMENT.value,
-            total_amount=total_amount,
-            discount_amount=Decimal("0"),
-            actual_amount=total_amount,
-            payment_status=PaymentStatus.UNPAID.value,
+    created_orders = []
+    for items_in_group in type_groups.values():
+        order_items_payload = [
+            {
+                "product_id": item.product_id,
+                "sku_id": item.sku_id,
+                "quantity": item.quantity,
+                "dates": [],
+            }
+            for item in items_in_group
+        ]
+        order = await order_service.create_order(
+            db,
+            user,
+            order_items_payload,
             address_id=address_id,
             remark=remark,
-            expire_at=now + timedelta(seconds=timeout_seconds),
-            site_id=user.site_id,
+            disclaimer_signed=disclaimer_signed,
+            payment_method="wechat_pay",
+            source_channel="cart",
         )
-        db.add(order)
-        await db.flush()
-
-        for oi_data in order_items_to_add:
-            oi = OrderItem(
-                order_id=order.id,
-                product_id=oi_data["product_id"],
-                sku_id=oi_data["sku_id"],
-                quantity=oi_data["quantity"],
-                unit_price=oi_data["unit_price"],
-                actual_price=oi_data["actual_price"],
-            )
-            db.add(oi)
-
-        created_order_ids = [order.id]
-        parent_order_no = order.order_no
-    else:
-        # 多种类型，创建父订单 + 子订单
-        parent_total = Decimal("0")
-
-        parent_order = Order(
-            order_no=generate_order_no(),
-            user_id=user.id,
-            order_type="mixed",
-            status=OrderStatus.PENDING_PAYMENT.value,
-            total_amount=Decimal("0"),
-            discount_amount=Decimal("0"),
-            actual_amount=Decimal("0"),
-            payment_status=PaymentStatus.UNPAID.value,
-            address_id=address_id,
-            remark=remark,
-            expire_at=now + timedelta(seconds=1800),
-            site_id=user.site_id,
-        )
-        db.add(parent_order)
-        await db.flush()
-
-        child_order_ids = []
-
-        for order_type, items_in_group in type_groups.items():
-            sub_total = Decimal("0")
-            order_items_data = []
-
-            for ci in items_in_group:
-                product = products_map[ci.product_id]
-                sku = skus_map.get(ci.sku_id) if ci.sku_id else None
-                unit_price = sku.price if sku else product.base_price
-                item_total = unit_price * ci.quantity
-                sub_total += item_total
-
-                order_items_data.append({
-                    "product_id": ci.product_id,
-                    "sku_id": ci.sku_id,
-                    "quantity": ci.quantity,
-                    "unit_price": unit_price,
-                    "actual_price": unit_price,
-                })
-
-            child_order = Order(
-                order_no=generate_order_no(),
-                user_id=user.id,
-                parent_order_id=parent_order.id,
-                order_type=order_type,
-                status=OrderStatus.PENDING_PAYMENT.value,
-                total_amount=sub_total,
-                discount_amount=Decimal("0"),
-                actual_amount=sub_total,
-                payment_status=PaymentStatus.UNPAID.value,
-                address_id=address_id,
-                remark=remark,
-                expire_at=now + timedelta(seconds=1800),
-                site_id=user.site_id,
-            )
-            db.add(child_order)
-            await db.flush()
-
-            for oi_data in order_items_data:
-                oi = OrderItem(
-                    order_id=child_order.id,
-                    product_id=oi_data["product_id"],
-                    sku_id=oi_data["sku_id"],
-                    quantity=oi_data["quantity"],
-                    unit_price=oi_data["unit_price"],
-                    actual_price=oi_data["actual_price"],
-                )
-                db.add(oi)
-
-            parent_total += sub_total
-            child_order_ids.append(child_order.id)
-
-        # 更新父订单金额
-        parent_order.total_amount = parent_total
-        parent_order.actual_amount = parent_total
-
-        created_order_ids = child_order_ids
-        parent_order_no = parent_order.order_no
+        created_orders.append(order)
 
     # 清除购物车中已结算的 items（软删除）
     for item in cart_items:
@@ -523,8 +452,8 @@ async def checkout(
 
     return ResponseModel.success(
         data={
-            "order_no": parent_order_no,
-            "order_ids": created_order_ids,
+            "order_no": created_orders[0].order_no,
+            "order_ids": [order.id for order in created_orders],
         },
         message="结算完成",
     )

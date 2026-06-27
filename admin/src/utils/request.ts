@@ -2,8 +2,10 @@
 import axios, { type AxiosRequestConfig, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import router from '@/router'
+import { extractErrorMessage, isAuthEndpoint } from '@/utils/http-error'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const DEFAULT_SITE_ID = import.meta.env.VITE_SITE_ID || '1'
 
 const service = axios.create({
   baseURL: BASE_URL,
@@ -26,6 +28,12 @@ const clearToken = () => {
   localStorage.removeItem('user_info')
 }
 
+const getCurrentSiteId = () => {
+  return localStorage.getItem('admin_site_id')
+    || localStorage.getItem('site_id')
+    || DEFAULT_SITE_ID
+}
+
 // Token刷新控制
 let isRefreshing = false
 let refreshSubscribers: Array<(token: string) => void> = []
@@ -46,6 +54,7 @@ service.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    config.headers['X-Site-Id'] = getCurrentSiteId()
     // CSRF Token
     const csrfToken = localStorage.getItem('csrf_token')
     if (csrfToken && config.method !== 'get') {
@@ -68,8 +77,11 @@ service.interceptors.response.use(
 
     // 业务code检查
     if (data.code !== undefined && data.code !== 0 && data.code !== 200) {
-      ElMessage.error(data.message || '操作失败')
-      return Promise.reject(new Error(data.message || '操作失败'))
+      const message = extractErrorMessage(data, '操作失败')
+      if (!isAuthEndpoint(response.config.url)) {
+        ElMessage.error(message)
+      }
+      return Promise.reject(new Error(message))
     }
 
     return data
@@ -84,6 +96,11 @@ service.interceptors.response.use(
 
     // 401: Token过期，尝试刷新
     if (response.status === 401 && !config._isRetry) {
+      if (isAuthEndpoint(config?.url)) {
+        const message = extractErrorMessage(response.data, '登录失败，请检查用户名和密码')
+        return Promise.reject(new Error(message))
+      }
+
       if (!isRefreshing) {
         isRefreshing = true
         try {
@@ -92,6 +109,8 @@ service.interceptors.response.use(
 
           const { data } = await axios.post(`${BASE_URL}/auth/refresh`, {
             refresh_token: refreshToken,
+          }, {
+            headers: { 'X-Site-Id': getCurrentSiteId() },
           })
 
           const newToken = data.data?.access_token || data.access_token
@@ -136,7 +155,7 @@ service.interceptors.response.use(
     }
 
     // 其他错误
-    const message = response.data?.message || response.data?.detail || `请求失败 (${response.status})`
+    const message = extractErrorMessage(response.data, `请求失败 (${response.status})`)
     ElMessage.error(message)
     return Promise.reject(error)
   }
@@ -163,5 +182,5 @@ export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<
   return service.delete(url, config) as Promise<T>
 }
 
-export { setToken, clearToken, getToken }
+export { setToken, clearToken, getToken, getCurrentSiteId }
 export default service

@@ -14,6 +14,7 @@ from datetime import date
 from typing import List
 
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -27,11 +28,14 @@ from schemas.member import (
     AnnualCardConfigSchema,
     AnnualCardInfo,
     AnnualCardPurchaseRequest,
+    MembershipCardConfigSchema,
+    MembershipCardInfo,
     PointsExchangeRequest,
     PointsInfo,
     TimesCardInfo,
 )
 from services import member_service
+from models.member import TimesCardConfig
 
 router = APIRouter(prefix="/api/v1/members", tags=["会员"])
 
@@ -47,7 +51,7 @@ async def get_annual_card(
     """获取当前用户的有效年卡信息，包含年卡配置列表"""
     site_id = get_site_id(request)
     # 用户有效年卡
-    card = await member_service.get_user_annual_card(db, user.id)
+    card = await member_service.get_user_annual_card(db, user.id, site_id=site_id)
     card_info = AnnualCardInfo.model_validate(card) if card else None
 
     # 年卡配置列表（供购买参考）—— 按 site_id 过滤
@@ -60,19 +64,48 @@ async def get_annual_card(
     })
 
 
+@router.get("/membership-card", summary="统一会员卡信息")
+async def get_membership_card(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """获取用户统一会员卡聚合信息。"""
+    site_id = get_site_id(request)
+    current_cards = await member_service.get_user_membership_cards(db, user.id, site_id=site_id)
+    available_configs = await member_service.get_membership_card_configs(db, site_id=site_id)
+    return ResponseModel.success(data={
+        "current_cards": [MembershipCardInfo.model_validate(card) for card in current_cards],
+        "available_configs": [MembershipCardConfigSchema.model_validate(config) for config in available_configs],
+    })
+
+
 @router.post("/annual-card/purchase", summary="购买年卡")
 async def purchase_annual_card(
     body: AnnualCardPurchaseRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """购买年卡：校验身份信息→创建年卡订单"""
-    # TODO: member_service.purchase_annual_card(db, user, body)
-    return ResponseModel.success(data=None, message="年卡购买功能开发中")
+    site_id = get_site_id(request)
+    order = await member_service.purchase_annual_card(db, user, body, site_id=site_id)
+    return ResponseModel.success(
+        data={
+            "order_id": order.id,
+            "order_no": order.order_no,
+            "order_type": order.order_type,
+            "payment_status": order.payment_status,
+            "actual_amount": order.actual_amount,
+            "expire_at": order.expire_at,
+        },
+        message="年卡购买订单创建成功",
+    )
 
 
 @router.get("/annual-card/booking-check", summary="年卡预定权益校验")
 async def check_annual_card_booking(
+    request: Request,
     annual_card_id: int = Query(..., description="年卡ID"),
     booking_dates: str = Query(..., description="预定日期列表，逗号分隔，格式YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
@@ -81,9 +114,14 @@ async def check_annual_card_booking(
     """校验年卡预定权益：滑动窗口连续天数限制 + 每日限额"""
     # 解析日期字符串
     dates = [date.fromisoformat(d.strip()) for d in booking_dates.split(",")]
+    site_id = get_site_id(request)
 
     result = await member_service.check_annual_card_booking(
-        db, user.id, annual_card_id, dates,
+        db,
+        user.id,
+        annual_card_id,
+        dates,
+        site_id=site_id,
     )
     check_info = AnnualCardBookingCheck.model_validate(result)
     return ResponseModel.success(data=check_info)
@@ -93,11 +131,13 @@ async def check_annual_card_booking(
 
 @router.get("/times-cards", summary="次数卡列表")
 async def list_times_cards(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """获取当前用户的次数卡列表"""
-    cards = await member_service.get_user_times_cards(db, user.id)
+    site_id = get_site_id(request)
+    cards = await member_service.get_user_times_cards(db, user.id, site_id=site_id)
     items = [TimesCardInfo.model_validate(c) for c in cards]
     return ResponseModel.success(data=items)
 
@@ -105,13 +145,37 @@ async def list_times_cards(
 @router.post("/times-cards/activate", summary="激活次数卡")
 async def activate_times_card(
     body: ActivationCodeActivateRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """使用激活码激活次数卡"""
-    card = await member_service.activate_times_card(db, user.id, body.code)
+    site_id = get_site_id(request)
+    card = await member_service.activate_times_card(db, user.id, body.code, site_id=site_id)
     result = TimesCardInfo.model_validate(card)
     return ResponseModel.success(data=result, message="次数卡激活成功")
+
+
+@router.post("/membership-card/activate", summary="激活统一会员卡")
+async def activate_membership_card(
+    body: ActivationCodeActivateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """使用激活码激活统一会员卡。"""
+    site_id = get_site_id(request)
+    card = await member_service.activate_times_card(db, user.id, body.code, site_id=site_id)
+    cfg_result = await db.execute(
+        select(TimesCardConfig).where(
+            TimesCardConfig.id == card.config_id,
+            TimesCardConfig.site_id == site_id,
+            TimesCardConfig.is_deleted.is_(False),
+        )
+    )
+    config = cfg_result.scalar_one_or_none()
+    result = member_service.serialize_membership_card_info(card, config)
+    return ResponseModel.success(data=MembershipCardInfo.model_validate(result), message="会员卡激活成功")
 
 
 # ========== 积分 ==========

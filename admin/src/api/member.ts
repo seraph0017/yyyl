@@ -1,7 +1,7 @@
 import { get, post, put } from '@/utils/request'
 import type {
   MemberInfo, MemberSearchParams, AnnualCardConfig, TimesCardConfig,
-  TimesConsumptionRule, ActivationCode, PointsExchangeConfig, PaginatedResponse
+  TimesConsumptionRule, ActivationCode, PointsExchangeConfig, PaginatedResponse, MembershipCardInfo
 } from '@/types'
 
 // 会员
@@ -11,6 +11,10 @@ export function getMembers(params: MemberSearchParams) {
 
 export function getMemberDetail(userId: number) {
   return get<{ data: MemberInfo }>(`/admin/members/${userId}`)
+}
+
+export function getMembershipCards(params?: { page?: number; page_size?: number; card_kind?: 'annual' | 'times' }) {
+  return get<{ data: PaginatedResponse<MembershipCardInfo> }>('/admin/membership-cards', params)
 }
 
 export function adjustPoints(userId: number, data: { points: number; reason: string }) {

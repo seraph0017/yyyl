@@ -35,3 +35,4 @@ class CartCheckoutRequest(BaseModel):
     item_ids: List[int] = Field(min_length=1, description="要结算的购物车商品ID列表")
     address_id: Optional[int] = Field(default=None, description="收货地址ID（周边商品/邮寄）")
     remark: Optional[str] = Field(default=None, max_length=200, description="备注")
+    disclaimer_signed: bool = Field(default=False, description="是否已签署免责声明")

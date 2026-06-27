@@ -4,7 +4,7 @@ v1.7 统一退款服务
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.finance import FinanceAccount, FinanceTransaction
+from models.member import AnnualCard, AnnualCardConfig
 from models.order import Order
 from models.refund import RefundRecord, RefundRecordItem
 from services import order_service, wechat_pay_service
@@ -34,7 +35,20 @@ async def create_refund_record(
     items: Optional[list[dict[str, Any]]] = None,
 ) -> RefundRecord:
     """创建退款记录并按订单处理策略更新订单/票/库存状态。"""
-    _validate_order_refundable(order)
+    locked_result = await db.execute(
+        select(Order)
+        .where(
+            Order.id == order.id,
+            Order.site_id == order.site_id,
+            Order.is_deleted.is_(False),
+        )
+        .with_for_update()
+    )
+    locked_order = locked_result.scalar_one_or_none()
+    if locked_order is not None:
+        order = locked_order
+
+    await _validate_order_refundable(db, order)
     _validate_refund_permission(
         refund_mode=refund_mode,
         order_action=order_action,
@@ -72,29 +86,13 @@ async def create_refund_record(
             refund_record=refund,
             order_item_id=item.id,
             refund_amount=item_amount,
-            quantity=getattr(item, "quantity", 1) or 1,
+            quantity=_resolve_item_refund_quantity(item, items),
             release_inventory=release_inventory,
         )
         db.add(refund_item)
-        item.refund_status = "refunded"
-
-        if order_action == "cancel_order" and release_inventory and getattr(item, "date", None):
-            await order_service._refund_inventory(
-                db,
-                item.product_id,
-                item.date,
-                item.quantity,
-                order.id,
-                item.sku_id,
-                item.time_slot,
-            )
-
-    order.refunded_amount = Decimal(str(getattr(order, "refunded_amount", 0) or 0)) + refund_amount
 
     if order_action == "cancel_order":
-        order.status = "cancelled"
-        order.payment_status = "refunded"
-        _void_tickets(order, selected_items)
+        order.refund_status = "pending"
 
     await db.flush()
     return refund
@@ -114,6 +112,7 @@ async def get_order_for_refund(
             Order.site_id == site_id,
             Order.is_deleted.is_(False),
         )
+        .with_for_update()
     )
     order = result.scalar_one_or_none()
     if not order:
@@ -126,6 +125,7 @@ async def list_refunds(
     *,
     site_id: int,
     order_id: Optional[int] = None,
+    refund_status: Optional[str] = None,
     page: int = 1,
     page_size: int = 20,
 ) -> tuple[list[RefundRecord], int]:
@@ -135,6 +135,8 @@ async def list_refunds(
     )
     if order_id:
         query = query.where(RefundRecord.order_id == order_id)
+    if refund_status:
+        query = query.where(RefundRecord.status == refund_status)
 
     total_result = await db.execute(select(func.count()).select_from(query.subquery()))
     total = total_result.scalar() or 0
@@ -144,6 +146,26 @@ async def list_refunds(
         .limit(page_size)
     )
     return list(result.scalars().all()), total
+
+
+async def find_pending_refund_for_order(
+    db: AsyncSession,
+    *,
+    order_id: int,
+    site_id: int,
+) -> Optional[RefundRecord]:
+    """查找订单当前可审批的退款记录，用于兼容旧审批入口的幂等处理。"""
+    result = await db.execute(
+        select(RefundRecord)
+        .where(
+            RefundRecord.order_id == order_id,
+            RefundRecord.site_id == site_id,
+            RefundRecord.status.in_(["pending", "processing"]),
+            RefundRecord.is_deleted.is_(False),
+        )
+        .order_by(RefundRecord.created_at.desc())
+    )
+    return result.scalars().first()
 
 
 async def get_refund_detail(
@@ -233,7 +255,7 @@ async def handle_wechat_refund_notification(
         select(RefundRecord).where(
             RefundRecord.refund_no == refund_no,
             RefundRecord.is_deleted.is_(False),
-        )
+        ).with_for_update()
     )
     refund = result.scalar_one_or_none()
     if not refund:
@@ -248,6 +270,8 @@ async def handle_wechat_refund_notification(
         )
     elif refund_status in {"ABNORMAL", "CLOSED"}:
         refund.status = "failed"
+        order = await _get_order_by_id(db, order_id=refund.order_id, site_id=refund.site_id)
+        order.refund_status = "rejected"
 
     await db.flush()
     return refund
@@ -260,10 +284,30 @@ async def apply_refund_success(
     wechat_refund_id: Optional[str] = None,
 ) -> Optional[FinanceTransaction]:
     """退款成功后扣减财务账户并写退款流水，按退款记录幂等。"""
+    if isinstance(refund, RefundRecord):
+        locked_result = await db.execute(
+            select(RefundRecord)
+            .where(
+                RefundRecord.id == refund.id,
+                RefundRecord.site_id == refund.site_id,
+                RefundRecord.is_deleted.is_(False),
+            )
+            .with_for_update()
+        )
+        locked_refund = locked_result.scalar_one_or_none()
+        if locked_refund is not None:
+            refund = locked_refund
+
     existing = await _find_existing_refund_tx(db, refund_id=refund.id, site_id=refund.site_id)
-    if existing:
+    if existing or _is_refund_success_already_applied(refund):
+        order = await _get_order_by_id(db, order_id=refund.order_id, site_id=refund.site_id)
         refund.status = "completed"
         refund.completed_at = refund.completed_at or datetime.now(timezone.utc)
+        if getattr(order, "refund_status", None) not in {"refunded", "partial"}:
+            order.refund_status = "refunded"
+        if getattr(refund, "order_action", None) == "cancel_order":
+            order.status = "cancelled"
+            order.payment_status = "refunded"
         if wechat_refund_id:
             refund.wechat_refund_id = wechat_refund_id
         await db.flush()
@@ -275,24 +319,8 @@ async def apply_refund_success(
     account_type = _resolve_refund_account_type(order)
 
     if account_type == "available":
-        if account.available_amount < amount:
-            refund.status = "failed"
-            order.refund_status = "rejected"
-            await db.flush()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": 40942, "message": f"可提现余额不足，当前: {account.available_amount}"},
-            )
         account.available_amount -= amount
     else:
-        if account.pending_amount < amount:
-            refund.status = "failed"
-            order.refund_status = "rejected"
-            await db.flush()
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail={"code": 40943, "message": f"待结算余额不足，当前: {account.pending_amount}"},
-            )
         account.pending_amount -= amount
 
     tx = FinanceTransaction(
@@ -309,8 +337,18 @@ async def apply_refund_success(
         refund_record_id=refund.id,
     )
     db.add(tx)
+    selected_items = _select_order_items_for_refund_record(order, refund)
+    if not getattr(refund, "inventory_released", False):
+        await _release_refund_record_inventory(db, refund, order=order, selected_items=selected_items)
+    _apply_refund_record_to_order(order, refund, selected_items=selected_items)
     refund.status = "completed"
     order.refund_status = "refunded"
+    if getattr(refund, "release_inventory", False):
+        _void_tickets(order, selected_items)
+    await _mark_annual_card_refunded(db, order)
+    if getattr(refund, "order_action", None) == "cancel_order":
+        order.status = "cancelled"
+        order.payment_status = "refunded"
     refund.completed_at = datetime.now(timezone.utc)
     if wechat_refund_id:
         refund.wechat_refund_id = wechat_refund_id
@@ -318,12 +356,48 @@ async def apply_refund_success(
     return tx
 
 
-def _validate_order_refundable(order: Order) -> None:
+def _is_refund_success_already_applied(refund: RefundRecord) -> bool:
+    """退款记录已完成时，重放入口只补状态元数据，不再执行资金/库存副作用。"""
+    return getattr(refund, "status", None) == "completed" or bool(getattr(refund, "completed_at", None))
+
+
+def _apply_refund_record_to_order(
+    order: Order,
+    refund: RefundRecord,
+    selected_items: Optional[list[Any]] = None,
+) -> None:
+    """退款真正生效后更新订单账面金额和订单项退款状态。"""
+    existing_amount = Decimal(str(getattr(order, "refunded_amount", 0) or 0))
+    refund_amount = Decimal(str(getattr(refund, "refund_amount", 0) or 0))
+    target_amount = existing_amount + refund_amount
+    actual_amount = Decimal(str(getattr(order, "actual_amount", 0) or 0))
+    order.refunded_amount = min(target_amount, actual_amount)
+
+    refund_items = list(getattr(refund, "items", []) or [])
+    refund_item_ids = {item.order_item_id for item in refund_items}
+    if selected_items is None:
+        selected_items = [
+            item
+            for item in (getattr(order, "items", []) or [])
+            if getattr(item, "id", None) in refund_item_ids
+        ]
+    for item in selected_items:
+        item.refund_status = "refunded"
+
+
+async def _validate_order_refundable(db: AsyncSession, order: Order) -> None:
     if getattr(order, "status", None) not in {"paid", "verified", "completed"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"code": 40940, "message": "订单状态不允许退款"},
         )
+    if getattr(order, "refund_status", None) in {"pending", "processing", "refunded"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40943, "message": "订单已有退款处理中或已退款"},
+        )
+    if getattr(order, "order_type", None) == "annual_card":
+        await _validate_annual_card_refund_window(db, order)
 
 
 def _validate_refund_permission(
@@ -384,6 +458,14 @@ def _resolve_item_refund_amount(item: Any, items: Optional[list[dict[str, Any]]]
     return Decimal(str(item.actual_price))
 
 
+def _resolve_item_refund_quantity(item: Any, items: Optional[list[dict[str, Any]]]) -> int:
+    if items:
+        for item_data in items:
+            if int(item_data["order_item_id"]) == item.id:
+                return int(item_data.get("quantity") or 1)
+    return int(getattr(item, "quantity", 1) or 1)
+
+
 def _resolve_risk_level(
     order: Order,
     refund_mode: str,
@@ -397,11 +479,79 @@ def _resolve_risk_level(
     return "normal"
 
 
-def _void_tickets(order: Order, selected_items: list[Any]) -> None:
-    selected_item_ids = {item.id for item in selected_items}
+def _void_tickets(order: Order, selected_items: Optional[list[Any]]) -> None:
+    if selected_items is None:
+        selected_item_ids = {item.id for item in (getattr(order, "items", []) or [])}
+    else:
+        selected_item_ids = {item.id for item in selected_items}
     for ticket in getattr(order, "tickets", []) or []:
         if getattr(ticket, "order_item_id", None) in selected_item_ids:
             ticket.verify_status = "refunded"
+
+
+def _select_order_items_for_refund_record(order: Order, refund: RefundRecord) -> list[Any]:
+    """按退款明细选出实际生效的订单项；兼容旧记录缺明细时全量处理。"""
+    order_items = list(getattr(order, "items", []) or [])
+    refund_items = list(getattr(refund, "items", []) or [])
+    refund_item_ids = {item.order_item_id for item in refund_items}
+    if refund_item_ids:
+        return [
+            item
+            for item in order_items
+            if getattr(item, "id", None) in refund_item_ids
+        ]
+    return order_items
+
+
+async def _release_refund_record_inventory(
+    db: AsyncSession,
+    refund: RefundRecord,
+    *,
+    order: Optional[Order] = None,
+    selected_items: Optional[list[Any]] = None,
+) -> None:
+    """按退款记录幂等释放库存，兼容旧库存和 v1.8 共享库存池。"""
+    if not getattr(refund, "release_inventory", False):
+        return
+    if getattr(refund, "inventory_released", False):
+        return
+
+    if selected_items is None:
+        if order is None:
+            order = await _get_order_by_id(db, order_id=refund.order_id, site_id=refund.site_id)
+        refund_items = list(getattr(refund, "items", []) or [])
+        releasable_quantities = {
+            item.order_item_id: getattr(item, "quantity", None)
+            for item in refund_items
+            if getattr(item, "release_inventory", True)
+        }
+        releasable_item_ids = set(releasable_quantities)
+        if releasable_item_ids:
+            selected_items = [
+                item
+                for item in (getattr(order, "items", []) or [])
+                if getattr(item, "id", None) in releasable_item_ids
+            ]
+        else:
+            selected_items = list(getattr(order, "items", []) or [])
+    else:
+        refund_items = list(getattr(refund, "items", []) or [])
+        releasable_quantities = {
+            item.order_item_id: getattr(item, "quantity", None)
+            for item in refund_items
+            if getattr(item, "release_inventory", True)
+        }
+
+    for item in selected_items:
+        refund_quantity = releasable_quantities.get(getattr(item, "id", None))
+        await order_service._refund_order_item_inventory(
+            db,
+            item,
+            refund.order_id,
+            quantity=refund_quantity,
+        )
+
+    refund.inventory_released = True
 
 
 async def _get_order_by_id(
@@ -411,7 +561,9 @@ async def _get_order_by_id(
     site_id: int,
 ) -> Order:
     result = await db.execute(
-        select(Order).where(
+        select(Order)
+        .options(selectinload(Order.items), selectinload(Order.tickets))
+        .where(
             Order.id == order_id,
             Order.site_id == site_id,
             Order.is_deleted.is_(False),
@@ -445,12 +597,57 @@ async def _find_existing_refund_tx(
             FinanceTransaction.site_id == site_id,
             FinanceTransaction.type == "refund",
             FinanceTransaction.is_deleted.is_(False),
-        )
+        ).with_for_update()
     )
     return result.scalar_one_or_none()
 
 
 def _resolve_refund_account_type(order: Order) -> str:
+    if getattr(order, "order_type", None) == "annual_card":
+        return "available"
     if getattr(order, "settlement_status", None) == "settled":
         return "available"
     return "pending"
+
+
+async def _validate_annual_card_refund_window(db: AsyncSession, order: Order) -> None:
+    membership_data = (getattr(order, "biz_data", None) or {}).get("membership_card") or {}
+    refund_days = membership_data.get("refund_days")
+    config_id = membership_data.get("config_id")
+    if refund_days is None and config_id:
+        result = await db.execute(
+            select(AnnualCardConfig).where(
+                AnnualCardConfig.id == int(config_id),
+                AnnualCardConfig.site_id == order.site_id,
+                AnnualCardConfig.is_deleted.is_(False),
+            )
+        )
+        config = result.scalar_one_or_none()
+        refund_days = getattr(config, "refund_days", None)
+    refund_days = int(refund_days or 7)
+
+    paid_at = getattr(order, "payment_time", None) or getattr(order, "created_at", None)
+    if paid_at is None:
+        return
+    if paid_at.tzinfo is None:
+        paid_at = paid_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > paid_at + timedelta(days=refund_days):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40942, "message": f"年卡购买超过{refund_days}天，无法退款"},
+        )
+
+
+async def _mark_annual_card_refunded(db: AsyncSession, order: Order) -> None:
+    if getattr(order, "order_type", None) != "annual_card":
+        return
+    result = await db.execute(
+        select(AnnualCard).where(
+            AnnualCard.order_id == order.id,
+            AnnualCard.site_id == order.site_id,
+            AnnualCard.is_deleted.is_(False),
+        )
+    )
+    card = result.scalar_one_or_none()
+    if card:
+        card.status = "refunded"

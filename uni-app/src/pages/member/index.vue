@@ -1,83 +1,75 @@
 <template>
-  <!-- 会员中心 -->
   <view class="page-member">
-    <view class="member-tabs">
-      <view
-        :class="['member-tab', activeTab === index ? 'member-tab--active' : '']"
-        v-for="(item, index) in tabs"
-        :key="item.key"
-        @tap="onTabChange(index)"
-      >
-        <text>{{ item.name }}</text>
-      </view>
+    <view class="member-header">
+      <text class="member-header__eyebrow">会员中心</text>
+      <text class="member-header__title">会员卡</text>
+      <text class="member-header__desc">统一查看你的会员权益、状态和激活入口</text>
     </view>
 
-    <!-- 年卡 -->
-    <view class="member-content" v-if="activeTab === 0">
-      <view class="annual-card" v-if="annualCard">
-        <view class="annual-card__header">
-          <text class="annual-card__title">👑 年卡会员</text>
-          <text class="annual-card__status">{{ annualCard.status === 'active' ? '生效中' : '已过期' }}</text>
+    <view class="member-card" v-if="membershipCard">
+      <view class="member-card__top">
+        <view>
+          <text class="member-card__name">会员卡</text>
+          <text class="member-card__meta">{{ membershipCard.card_type_label }} · {{ membershipCard.usage_mode_label }}</text>
         </view>
-        <view class="annual-card__info">
-          <view class="annual-card__stat">
-            <text class="annual-card__stat-num">{{ annualCard.remaining_days }}</text>
-            <text class="annual-card__stat-label">剩余天数</text>
-          </view>
-          <view class="annual-card__date">{{ annualCard.start_date }} ~ {{ annualCard.end_date }}</view>
-        </view>
-        <view class="annual-card__benefits">
-          <text class="annual-card__benefits-title">权益使用情况</text>
-          <view class="benefit-item" v-for="b in annualCard.benefits" :key="b.product_name">
-            <text class="benefit-item__name">{{ b.product_name }}</text>
-            <text class="benefit-item__usage">已用{{ b.used_times }}次 {{ b.total_times ? '/ 限' + b.total_times + '次' : '/ 不限次' }}</text>
-          </view>
-        </view>
+        <text :class="['member-card__status', `member-card__status--${membershipCard.status}`]">{{ membershipCard.status_label }}</text>
       </view>
-      <EmptyState v-else icon="💳" title="暂未开通年卡" description="开通年卡享受更多权益" buttonText="了解年卡" />
-    </view>
 
-    <!-- 次数卡 -->
-    <view class="member-content" v-if="activeTab === 1">
-      <view class="times-card card" v-for="item in timesCards" :key="item.id">
-        <view class="times-card__header">
-          <text class="times-card__name">🎟️ {{ item.name }}</text>
-          <text :class="['times-card__status', `times-card__status--${item.status}`]">{{ item.status === 'active' ? '有效' : '已过期' }}</text>
+      <view class="member-card__stats">
+        <view class="member-card__stat">
+          <text class="member-card__stat-value">{{ membershipCard.remaining_days_label }}</text>
+          <text class="member-card__stat-label">剩余天数</text>
         </view>
-        <view class="times-card__stats">
-          <view class="times-card__stat">
-            <text class="times-card__stat-num">{{ item.remaining_times }}</text>
-            <text class="times-card__stat-label">剩余次数</text>
-          </view>
-          <view class="times-card__stat">
-            <text class="times-card__stat-num">{{ item.total_times }}</text>
-            <text class="times-card__stat-label">总次数</text>
-          </view>
+        <view class="member-card__stat">
+          <text class="member-card__stat-value">{{ membershipCard.remaining_times_label }}</text>
+          <text class="member-card__stat-label">剩余次数</text>
         </view>
-        <text class="times-card__date">有效期：{{ item.start_date }} ~ {{ item.end_date }}</text>
       </view>
-      <!-- 激活输入 -->
-      <view class="activate-section card">
-        <text class="activate-title">输入激活码领取次数卡</text>
-        <view class="activate-input-row">
-          <input class="activate-input" placeholder="请输入16位激活码" :value="activateCode" @input="onActivateInput" :maxlength="16" />
-          <view class="activate-btn" @tap="onActivateCard"><text>激活</text></view>
+
+      <view class="member-card__grid">
+        <view class="member-card__field">
+          <text class="member-card__field-label">卡种</text>
+          <text class="member-card__field-value">{{ membershipCard.card_type_label }}</text>
+        </view>
+        <view class="member-card__field">
+          <text class="member-card__field-label">使用模式</text>
+          <text class="member-card__field-value">{{ membershipCard.usage_mode_label }}</text>
+        </view>
+        <view class="member-card__field">
+          <text class="member-card__field-label">状态</text>
+          <text class="member-card__field-value">{{ membershipCard.status_label }}</text>
+        </view>
+        <view class="member-card__field">
+          <text class="member-card__field-label">有效期</text>
+          <text class="member-card__field-value">{{ membershipCard.valid_range_label }}</text>
+        </view>
+        <view class="member-card__field">
+          <text class="member-card__field-label">适用商品</text>
+          <text class="member-card__field-value member-card__field-value--muted">{{ membershipCard.applicable_products_label }}</text>
         </view>
       </view>
     </view>
 
-    <!-- 积分 -->
-    <view class="member-content" v-if="activeTab === 2">
-      <view class="points-card card">
-        <text class="points-card__label">当前积分</text>
-        <text class="points-card__value">⭐ {{ points }}</text>
-        <text class="points-card__tip">消费1元=1积分，积分有效期12个月</text>
-      </view>
-      <view class="points-section card">
-        <text class="points-section__title">积分明细</text>
-        <view class="points-record"><text>购买A区营位</text><text class="points-record__add">+128</text></view>
-        <view class="points-record"><text>购买活动票</text><text class="points-record__add">+258</text></view>
-        <view class="points-record"><text>积分兑换</text><text class="points-record__minus">-200</text></view>
+    <view class="member-card member-card--empty" v-else>
+      <text class="member-card__name">会员卡</text>
+      <text class="member-card__empty-text">暂未获取到可用会员卡</text>
+      <text class="member-card__empty-desc">可以先激活旧卡，或等待统一会员卡接口接入。</text>
+    </view>
+
+    <view class="activation-panel">
+      <text class="activation-panel__title">激活会员卡</text>
+      <text class="activation-panel__desc">支持统一激活接口，旧激活码流程也兼容</text>
+      <view class="activation-panel__row">
+        <input
+          class="activation-panel__input"
+          placeholder="请输入激活码"
+          :value="activateCode"
+          @input="onActivateInput"
+          :maxlength="32"
+        />
+        <view class="activation-panel__button" @tap="onActivateCard">
+          <text>激活</text>
+        </view>
       </view>
     </view>
   </view>
@@ -85,149 +77,416 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
-import { get, post } from '@/utils/request'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { ensureLogin } from '@/utils/auth'
-import EmptyState from '@/components/empty-state/index.vue'
-import type { IAnnualCard, ITimesCard } from '@/types'
+import { get, post } from '@/utils/request'
+import type {
+  IMembershipCard,
+  IMembershipCardApiResponse,
+  ITimesCard,
+  IAnnualCard,
+} from '@/types'
 
-const tabs = ref([
-  { key: 'annual', name: '年卡' },
-  { key: 'times', name: '次数卡' },
-  { key: 'points', name: '积分' },
-])
-const activeTab = ref(0)
-const annualCard = ref<IAnnualCard | null>(null)
-const timesCards = ref<ITimesCard[]>([])
-const points = ref(0)
+const membershipCard = ref<IMembershipCard | null>(null)
 const activateCode = ref('')
+const loading = ref(false)
 
-onLoad((options) => {
-  if (options?.tab) {
-    const idx = tabs.value.findIndex(t => t.key === options.tab)
-    if (idx >= 0) activeTab.value = idx
-  }
+const cardTypeLabelMap: Record<IMembershipCard['card_type'], string> = {
+  annual: '年卡',
+  times: '次数卡',
+}
+
+const usageModeLabelMap: Record<IMembershipCard['usage_mode'], string> = {
+  unlimited: '无限',
+  limited: '次数限制',
+}
+
+const statusLabelMap: Record<IMembershipCard['status'], string> = {
+  active: '生效中',
+  expired: '已过期',
+  cancelled: '已取消',
+  inactive: '未激活',
+}
+
+onLoad(() => {
   loadData()
 })
 
+onShow(() => {
+  if (!membershipCard.value && !loading.value) {
+    loadData()
+  }
+})
+
 async function loadData() {
+  loading.value = true
   try {
     const loggedIn = await ensureLogin()
     if (!loggedIn) return
-    const [annualData, timesData, pointsData] = await Promise.all([
-      get<IAnnualCard | null>('/members/annual-card').catch(() => null),
-      get<ITimesCard[]>('/members/times-cards').catch(() => []),
-      get<{ points: number }>('/members/points').catch(() => ({ points: 0 })),
-    ])
-    annualCard.value = annualData
-    timesCards.value = timesData || []
-    points.value = pointsData?.points || 0
+    membershipCard.value = await loadMembershipCard()
   } catch {
-    uni.showToast({ title: '加载会员数据失败', icon: 'error' })
+    uni.showToast({ title: '加载会员卡失败', icon: 'error' })
+  } finally {
+    loading.value = false
   }
 }
 
-function onTabChange(index: number) {
-  activeTab.value = index
+async function loadMembershipCard(): Promise<IMembershipCard | null> {
+  const unifiedCard = await get<IMembershipCardApiResponse>('/members/membership-card', undefined, {
+    showError: false,
+  }).catch(() => null)
+  if (unifiedCard) {
+    return normalizeMembershipCard(unifiedCard)
+  }
+
+  const [annualData, timesData] = await Promise.all([
+    get<{ current_card: IAnnualCard | null }>('/members/annual-card', undefined, { showError: false }).catch(() => ({ current_card: null })),
+    get<ITimesCard[]>('/members/times-cards', undefined, { showError: false }).catch(() => []),
+  ])
+
+  return buildMembershipCard(annualData.current_card, timesData || [])
 }
 
-function onActivateInput(e: any) {
-  activateCode.value = e.detail.value
+function normalizeMembershipCard(data: IMembershipCardApiResponse): IMembershipCard {
+  if ('card_type' in data) {
+    return {
+      ...data,
+      card_type_label: data.card_type_label || cardTypeLabelMap[data.card_type],
+      usage_mode_label: data.usage_mode_label || usageModeLabelMap[data.usage_mode],
+      status_label: data.status_label || statusLabelMap[data.status],
+      valid_range_label: data.valid_range_label || formatValidRange(data.start_date, data.end_date),
+      remaining_days_label: data.remaining_days_label || formatCountLabel(data.remaining_days, '天'),
+      remaining_times_label: data.remaining_times_label || formatCountLabel(data.remaining_times, '次'),
+      applicable_products_label: data.applicable_products_label || formatApplicableProducts(data.applicable_products),
+    }
+  }
+
+  return buildMembershipCard(data.current_card, data.times_cards || [])
+}
+
+function buildMembershipCard(currentCard: IAnnualCard | null, timesCards: ITimesCard[]): IMembershipCard {
+  if (currentCard) {
+    const benefitProducts = currentCard.benefits.map(item => item.product_name).filter(Boolean)
+    return {
+      card_type: 'annual',
+      card_type_label: '年卡',
+      usage_mode: 'unlimited',
+      usage_mode_label: '无限',
+      status: currentCard.status === 'active' ? 'active' : currentCard.status === 'expired' ? 'expired' : 'cancelled',
+      status_label: statusLabelMap[currentCard.status === 'active' ? 'active' : currentCard.status === 'expired' ? 'expired' : 'cancelled'],
+      start_date: currentCard.start_date,
+      end_date: currentCard.end_date,
+      valid_range_label: formatValidRange(currentCard.start_date, currentCard.end_date),
+      remaining_days: currentCard.remaining_days,
+      remaining_days_label: formatCountLabel(currentCard.remaining_days, '天'),
+      remaining_times: null,
+      remaining_times_label: '不限',
+      applicable_products: benefitProducts,
+      applicable_products_label: formatApplicableProducts(benefitProducts),
+      activation_mode: 'code',
+    }
+  }
+
+  const activeTimesCard = timesCards.find(item => item.status === 'active') || timesCards[0] || null
+  const applicableProducts = activeTimesCard?.applicable_products || []
+  return {
+    card_type: 'times',
+    card_type_label: '次数卡',
+    usage_mode: 'limited',
+    usage_mode_label: activeTimesCard ? '次数限制' : '次数限制',
+    status: activeTimesCard ? activeTimesCard.status : 'inactive',
+    status_label: statusLabelMap[activeTimesCard ? activeTimesCard.status : 'inactive'],
+    start_date: activeTimesCard?.start_date || '',
+    end_date: activeTimesCard?.end_date || '',
+    valid_range_label: formatValidRange(activeTimesCard?.start_date || '', activeTimesCard?.end_date || ''),
+    remaining_days: null,
+    remaining_days_label: '不限',
+    remaining_times: activeTimesCard ? activeTimesCard.remaining_times : 0,
+    remaining_times_label: formatCountLabel(activeTimesCard ? activeTimesCard.remaining_times : 0, '次'),
+    applicable_products: applicableProducts,
+    applicable_products_label: formatApplicableProducts(applicableProducts),
+    activation_mode: 'code',
+  }
+}
+
+function formatValidRange(startDate: string, endDate: string): string {
+  if (startDate && endDate) {
+    return `${startDate} ~ ${endDate}`
+  }
+  if (startDate || endDate) {
+    return startDate || endDate
+  }
+  return '暂无'
+}
+
+function formatCountLabel(value: number | null, unit: '天' | '次'): string {
+  if (value === null) {
+    return '不限'
+  }
+  return `${value}${unit}`
+}
+
+function formatApplicableProducts(products: Array<string | number>): string {
+  if (!products.length) {
+    return '全部适用商品'
+  }
+  return products.map(item => String(item)).join('、')
 }
 
 async function onActivateCard() {
-  if (!activateCode.value.trim()) {
+  const code = activateCode.value.trim()
+  if (!code) {
     uni.showToast({ title: '请输入激活码', icon: 'none' })
     return
   }
+
   try {
-    await post('/members/times-cards/activate', { code: activateCode.value })
-    uni.showToast({ title: '激活成功！', icon: 'success' })
+    await post('/members/membership-card/activate', { code }, { showError: false })
+    uni.showToast({ title: '激活成功', icon: 'success' })
     activateCode.value = ''
-    loadData()
+    await loadData()
+    return
   } catch {
-    uni.showToast({ title: '激活失败', icon: 'error' })
+    try {
+      await post('/members/times-cards/activate', { code }, { showError: false })
+      uni.showToast({ title: '激活成功', icon: 'success' })
+      activateCode.value = ''
+      await loadData()
+      return
+    } catch {
+      uni.showToast({ title: '激活失败', icon: 'error' })
+    }
   }
+}
+
+function onActivateInput(e: InputEvent) {
+  const target = e.target as HTMLInputElement | null
+  activateCode.value = target?.value || ''
 }
 </script>
 
 <style lang="scss" scoped>
-.page-member { min-height: 100vh; background-color: var(--color-bg); }
-
-.member-tabs {
-  display: flex; background-color: var(--color-bg-white); border-bottom: 1rpx solid #F0F0F0; position: sticky; top: 0; z-index: 10;
+.page-member {
+  min-height: 100vh;
+  padding: 24rpx;
+  background: linear-gradient(180deg, #f6f7f2 0%, #ffffff 34%, #f7f2e8 100%);
+  box-sizing: border-box;
 }
 
-.member-tab {
-  flex: 1; text-align: center; padding: 24rpx 0; position: relative;
-  text { font-size: var(--font-size-base); color: var(--color-text-secondary); }
-  &--active {
-    text { color: var(--color-primary); font-weight: 600; }
-    &::after { content: ''; position: absolute; bottom: 4rpx; left: 50%; transform: translateX(-50%); width: 40rpx; height: 6rpx; background-color: var(--color-primary); border-radius: 3rpx; }
+.member-header {
+  margin-bottom: 24rpx;
+  &__eyebrow {
+    display: block;
+    font-size: 24rpx;
+    color: #8b8f7a;
+    margin-bottom: 8rpx;
+  }
+  &__title {
+    display: block;
+    font-size: 44rpx;
+    font-weight: 700;
+    color: #2d4a3e;
+    margin-bottom: 8rpx;
+  }
+  &__desc {
+    display: block;
+    font-size: 26rpx;
+    color: #69736d;
+    line-height: 1.6;
   }
 }
 
-.member-content { padding: 24rpx; }
+.member-card {
+  background: linear-gradient(135deg, #2d4a3e 0%, #3d5d4f 48%, #6d5130 100%);
+  border-radius: 24rpx;
+  padding: 28rpx;
+  color: #fff;
+  margin-bottom: 20rpx;
+  box-shadow: 0 12rpx 28rpx rgba(45, 74, 62, 0.18);
 
-.annual-card {
-  background: linear-gradient(135deg, #1A1A1A, #333); border-radius: var(--radius-xl); padding: 32rpx; color: #fff;
-  &__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24rpx; }
-  &__title { font-size: var(--font-size-xl); font-weight: 700; color: #FFD700; }
-  &__status { font-size: var(--font-size-sm); color: #81C784; padding: 4rpx 16rpx; border: 1rpx solid #81C784; border-radius: var(--radius-round); }
-  &__info { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 28rpx; }
-  &__stat { display: flex; flex-direction: column; }
-  &__stat-num { font-size: 56rpx; font-weight: 700; color: #FFD700; }
-  &__stat-label { font-size: var(--font-size-sm); color: rgba(255,255,255,0.6); }
-  &__date { font-size: var(--font-size-sm); color: rgba(255,255,255,0.5); }
-  &__benefits { border-top: 1rpx solid rgba(255,255,255,0.1); padding-top: 20rpx; }
-  &__benefits-title { font-size: var(--font-size-base); font-weight: 500; margin-bottom: 12rpx; display: block; }
-}
-
-.benefit-item {
-  display: flex; justify-content: space-between; padding: 8rpx 0;
-  &__name { font-size: var(--font-size-sm); color: rgba(255,255,255,0.8); }
-  &__usage { font-size: var(--font-size-sm); color: #FFD700; }
-}
-
-.times-card {
-  padding: 24rpx; margin-bottom: 16rpx;
-  &__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20rpx; }
-  &__name { font-size: var(--font-size-md); font-weight: 600; }
-  &__status { font-size: var(--font-size-xs); padding: 4rpx 12rpx; border-radius: var(--radius-round);
-    &--active { background-color: var(--color-primary-bg); color: var(--color-primary); }
-    &--expired { background-color: rgba(229,57,53,0.08); color: var(--color-red); }
+  &--empty {
+    background: #ffffff;
+    color: #2d4a3e;
+    border: 1rpx solid #e8ece5;
   }
-  &__stats { display: flex; gap: 48rpx; margin-bottom: 12rpx; }
-  &__stat { display: flex; flex-direction: column; }
-  &__stat-num { font-size: var(--font-size-xxl); font-weight: 700; color: var(--color-primary); }
-  &__stat-label { font-size: var(--font-size-xs); color: var(--color-text-placeholder); }
-  &__date { font-size: var(--font-size-sm); color: var(--color-text-placeholder); }
+
+  &__top {
+    display: flex;
+    justify-content: space-between;
+    gap: 20rpx;
+    margin-bottom: 24rpx;
+  }
+
+  &__name {
+    display: block;
+    font-size: 34rpx;
+    font-weight: 700;
+    margin-bottom: 6rpx;
+  }
+
+  &__meta {
+    display: block;
+    font-size: 24rpx;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  &--empty &__meta {
+    color: #6b766f;
+  }
+
+  &__status {
+    flex-shrink: 0;
+    height: 44rpx;
+    line-height: 44rpx;
+    padding: 0 16rpx;
+    border-radius: 999rpx;
+    font-size: 22rpx;
+    background: rgba(255, 255, 255, 0.18);
+    &--active {
+      background: rgba(129, 199, 132, 0.2);
+      color: #dff4e4;
+    }
+    &--expired,
+    &--cancelled,
+    &--inactive {
+      background: rgba(255, 255, 255, 0.14);
+      color: rgba(255, 255, 255, 0.82);
+    }
+  }
+
+  &__stats {
+    display: flex;
+    gap: 20rpx;
+    margin-bottom: 20rpx;
+  }
+
+  &__stat {
+    flex: 1;
+    min-width: 0;
+    padding: 20rpx 18rpx;
+    border-radius: 20rpx;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  &__stat-value {
+    display: block;
+    font-size: 34rpx;
+    font-weight: 700;
+    margin-bottom: 6rpx;
+  }
+
+  &__stat-label {
+    display: block;
+    font-size: 22rpx;
+    color: rgba(255, 255, 255, 0.78);
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16rpx;
+  }
+
+  &__field {
+    min-width: 0;
+    padding: 16rpx 18rpx;
+    border-radius: 18rpx;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  &--empty &__field {
+    background: #f6f8f3;
+  }
+
+  &__field-label {
+    display: block;
+    font-size: 22rpx;
+    color: rgba(255, 255, 255, 0.72);
+    margin-bottom: 8rpx;
+  }
+
+  &--empty &__field-label {
+    color: #7b857d;
+  }
+
+  &__field-value {
+    display: block;
+    font-size: 26rpx;
+    font-weight: 600;
+    word-break: break-word;
+    line-height: 1.45;
+    &--muted {
+      font-weight: 500;
+    }
+  }
+
+  &__empty-text {
+    display: block;
+    font-size: 30rpx;
+    font-weight: 600;
+    margin: 18rpx 0 8rpx;
+  }
+
+  &__empty-desc {
+    display: block;
+    font-size: 24rpx;
+    color: #6b766f;
+    line-height: 1.6;
+  }
 }
 
-.activate-section { padding: 24rpx; }
-.activate-title { font-size: var(--font-size-md); font-weight: 600; display: block; margin-bottom: 16rpx; }
-.activate-input-row { display: flex; gap: 16rpx; }
-.activate-input { flex: 1; height: 80rpx; background-color: var(--color-bg-grey); border-radius: var(--radius-md); padding: 0 20rpx; font-size: var(--font-size-base); letter-spacing: 4rpx; }
-.activate-btn { height: 80rpx; padding: 0 36rpx; display: flex; align-items: center; background-color: var(--color-primary); border-radius: var(--radius-md);
-  text { color: #fff; font-size: var(--font-size-base); font-weight: 600; }
-  &:active { opacity: 0.85; }
-}
+.activation-panel {
+  padding: 24rpx;
+  border-radius: 24rpx;
+  background: #fff;
+  border: 1rpx solid #e8ece5;
 
-.points-card {
-  padding: 32rpx; text-align: center;
-  &__label { font-size: var(--font-size-base); color: var(--color-text-secondary); display: block; }
-  &__value { font-size: 56rpx; font-weight: 700; color: var(--color-primary); display: block; margin: 12rpx 0; }
-  &__tip { font-size: var(--font-size-sm); color: var(--color-text-placeholder); }
-}
+  &__title {
+    display: block;
+    font-size: 30rpx;
+    font-weight: 700;
+    color: #2d4a3e;
+    margin-bottom: 8rpx;
+  }
 
-.points-section { padding: 24rpx; margin-top: 16rpx;
-  &__title { font-size: var(--font-size-md); font-weight: 600; display: block; margin-bottom: 16rpx; }
-}
+  &__desc {
+    display: block;
+    font-size: 24rpx;
+    color: #6b766f;
+    margin-bottom: 20rpx;
+  }
 
-.points-record {
-  display: flex; justify-content: space-between; padding: 16rpx 0; border-bottom: 1rpx solid #F5F5F5;
-  text { font-size: var(--font-size-base); color: var(--color-text-secondary); }
-  &__add { color: var(--color-primary) !important; font-weight: 600; }
-  &__minus { color: var(--color-red) !important; font-weight: 600; }
+  &__row {
+    display: flex;
+    gap: 16rpx;
+  }
+
+  &__input {
+    flex: 1;
+    height: 80rpx;
+    min-width: 0;
+    padding: 0 20rpx;
+    border-radius: 18rpx;
+    background: #f6f8f3;
+    font-size: 28rpx;
+    letter-spacing: 2rpx;
+    box-sizing: border-box;
+  }
+
+  &__button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 80rpx;
+    padding: 0 32rpx;
+    border-radius: 18rpx;
+    background: #c8a872;
+    flex-shrink: 0;
+    text {
+      color: #fff;
+      font-size: 28rpx;
+      font-weight: 600;
+    }
+  }
 }
 </style>

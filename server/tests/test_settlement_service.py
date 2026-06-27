@@ -24,7 +24,11 @@ class SettlementServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_record_payment_pending_income_adds_to_pending_once(self):
         db = FakeDb()
-        account = SimpleNamespace(pending_amount=Decimal("10.00"), total_income=Decimal("10.00"))
+        account = SimpleNamespace(
+            pending_amount=Decimal("10.00"),
+            available_amount=Decimal("0.00"),
+            total_income=Decimal("10.00"),
+        )
         order = SimpleNamespace(
             id=12,
             site_id=1,
@@ -45,6 +49,40 @@ class SettlementServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tx.account_type, "pending")
         self.assertEqual(tx.order_id, 12)
         self.assertTrue(db.flushed)
+
+    async def test_annual_card_income_goes_directly_to_available(self):
+        db = FakeDb()
+        account = SimpleNamespace(
+            pending_amount=Decimal("10.00"),
+            available_amount=Decimal("20.00"),
+            total_income=Decimal("30.00"),
+        )
+        order = SimpleNamespace(
+            id=12,
+            site_id=1,
+            order_type="annual_card",
+            actual_amount=Decimal("399.00"),
+            payment_method="wechat_pay",
+            payment_no="WX123",
+            settlement_status="unsettled",
+            settled_amount=Decimal("0.00"),
+        )
+
+        with (
+            patch.object(self.service, "_find_existing_income_tx", AsyncMock(return_value=None)),
+            patch.object(self.service, "_get_or_create_finance_account", AsyncMock(return_value=account)),
+        ):
+            tx = await self.service.record_payment_pending_income(db, order)
+
+        self.assertEqual(account.pending_amount, Decimal("10.00"))
+        self.assertEqual(account.available_amount, Decimal("419.00"))
+        self.assertEqual(account.total_income, Decimal("429.00"))
+        self.assertEqual(order.settlement_status, "settled")
+        self.assertEqual(order.settled_amount, Decimal("399.00"))
+        self.assertEqual(tx.type, "income")
+        self.assertEqual(tx.account_type, "available")
+        self.assertEqual(tx.from_account, "wechat")
+        self.assertEqual(tx.to_account, "available")
 
     async def test_record_payment_pending_income_is_idempotent(self):
         db = FakeDb()

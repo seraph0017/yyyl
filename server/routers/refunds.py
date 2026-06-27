@@ -2,7 +2,7 @@
 v1.7 退款路由
 """
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -21,6 +21,34 @@ from services import refund_service
 router = APIRouter(prefix="/api/v1", tags=["退款"])
 
 
+def _get_admin_role_code(admin: AdminUser) -> str:
+    return getattr(getattr(admin, "role", None), "role_code", "") or ""
+
+
+def _ensure_refund_admin_access(admin: AdminUser, site_id: int) -> None:
+    role_code = _get_admin_role_code(admin)
+    if role_code == "super_admin":
+        return
+    if role_code != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40301, "message": "无权访问退款管理"},
+        )
+    if getattr(admin, "site_id", None) != site_id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40311, "message": "无权操作其他营地退款"},
+        )
+
+
+def _ensure_super_admin(admin: AdminUser) -> None:
+    if _get_admin_role_code(admin) != "super_admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40301, "message": "仅超级管理员可审批退款"},
+        )
+
+
 @router.post("/admin/orders/{order_id}/refunds", summary="创建退款操作")
 async def create_refund(
     order_id: int,
@@ -30,6 +58,7 @@ async def create_refund(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_refund_admin_access(admin, site_id)
     order = await refund_service.get_order_for_refund(db, order_id=order_id, site_id=site_id)
     refund = await refund_service.create_refund_record(
         db,
@@ -57,6 +86,7 @@ async def list_order_refunds(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_refund_admin_access(admin, site_id)
     refunds, _ = await refund_service.list_refunds(db, site_id=site_id, order_id=order_id)
     return ResponseModel.success(
         data=[RefundRecordResponse.model_validate(item).model_dump(mode="json") for item in refunds]
@@ -68,13 +98,16 @@ async def list_refunds(
     request: Request,
     page: int = 1,
     page_size: int = 20,
+    status: str | None = None,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_refund_admin_access(admin, site_id)
     refunds, total = await refund_service.list_refunds(
         db,
         site_id=site_id,
+        refund_status=status,
         page=page,
         page_size=page_size,
     )
@@ -94,6 +127,7 @@ async def get_refund_detail(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_refund_admin_access(admin, site_id)
     refund = await refund_service.get_refund_detail(db, site_id=site_id, refund_id=refund_id)
     return ResponseModel.success(data=RefundRecordResponse.model_validate(refund).model_dump(mode="json"))
 
@@ -107,6 +141,8 @@ async def approve_refund(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_refund_admin_access(admin, site_id)
+    _ensure_super_admin(admin)
     refund = await refund_service.approve_refund(
         db,
         refund_id=refund_id,
@@ -125,6 +161,8 @@ async def reject_refund(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_refund_admin_access(admin, site_id)
+    _ensure_super_admin(admin)
     refund = await refund_service.reject_refund(
         db,
         refund_id=refund_id,

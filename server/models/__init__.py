@@ -28,6 +28,24 @@ from models.product import (  # noqa: F401
     SKU,
 )
 
+# v1.8 跨商品共享库存池模块 (2张表)
+from models.inventory_pool import (  # noqa: F401
+    InventoryPool,
+    InventoryPoolBinding,
+)
+
+# v1.8 企业微信群机器人模块 (2张表)
+from models.enterprise_wechat import (  # noqa: F401
+    EnterpriseWechatRobotConfig,
+    EnterpriseWechatRobotMessageLog,
+)
+
+# v1.8 智能客服知识库模块 (2张表)
+from models.customer_service import (  # noqa: F401
+    CustomerServiceAskLog,
+    CustomerServiceKnowledgeArticle,
+)
+
 # 搭配售卖模块 (3张表) - v1.5新增
 from models.bundle import (  # noqa: F401
     BundleConfig,
@@ -41,7 +59,9 @@ from models.order import (  # noqa: F401
     CartItem,
     Order,
     OrderItem,
+    TemporaryOrderSession,
     Ticket,
+    TicketVerifyLog,
 )
 
 # 会员模块 (9张表)
@@ -95,6 +115,7 @@ from models.camp_map import (  # noqa: F401
     CampMap,
     CampMapZone,
     MiniGame,
+    PageViewStat,
 )
 
 # 报销模块 (2张表) - v1.5新增
@@ -129,4 +150,4 @@ from models.refund import (  # noqa: F401
     RefundRecordItem,
 )
 
-# 所有模型总计: 60 + 6 = 66 张表
+# 所有模型总计: 72 张表

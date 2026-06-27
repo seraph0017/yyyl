@@ -19,6 +19,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query, Request
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -42,6 +43,20 @@ from schemas.product import (
 from services import inventory_service, product_service
 
 router = APIRouter(tags=["商品"])
+
+
+def _get_admin_role_code(admin: AdminUser) -> str:
+    return getattr(getattr(admin, "role", None), "role_code", "") or ""
+
+
+def _ensure_admin_site_access(admin: AdminUser, site_id: int) -> None:
+    if _get_admin_role_code(admin) == "super_admin":
+        return
+    if getattr(admin, "site_id", None) != site_id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40311, "message": "无权操作其他营地数据"},
+        )
 
 
 # ========== C端接口 ==========
@@ -91,7 +106,9 @@ async def get_product_detail(
     if product.site_id != site_id:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
-    detail = ProductDetail.model_validate(product)
+    detail = ProductDetail.model_validate(product).model_copy(
+        update={"stock": product_service.resolve_product_detail_stock(product)}
+    )
     return ResponseModel.success(data=detail)
 
 
@@ -128,6 +145,7 @@ async def get_price_calendar(
     request: Request,
     date_start: date = Query(..., description="起始日期"),
     date_end: date = Query(..., description="结束日期"),
+    sku_id: Optional[int] = Query(None, description="SKU ID，用于 SKU 级共享库存绑定"),
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
@@ -139,7 +157,7 @@ async def get_price_calendar(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
     calendar = await product_service.get_price_calendar(
-        db, product_id, date_start, date_end,
+        db, product_id, date_start, date_end, sku_id=sku_id,
     )
     items = [PriceCalendarItem.model_validate(item) for item in calendar]
     return ResponseModel.success(data=items)
@@ -157,6 +175,7 @@ async def admin_list_products(
 ):
     """管理端商品列表，可查看所有状态的商品"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     products, total = await product_service.list_products(
         db,
         site_id=site_id,
@@ -188,11 +207,31 @@ async def create_product(
 ):
     """管理端创建商品"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     data = body.model_dump(exclude_none=True)
     data["site_id"] = site_id
     product = await product_service.create_product(db, data, operator_id=admin.id)
     detail = ProductDetail.model_validate(product)
     return ResponseModel.success(data=detail, message="商品创建成功")
+
+
+@router.get("/api/v1/admin/products/{product_id}", summary="管理端商品详情")
+async def admin_get_product_detail(
+    product_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """管理端获取商品详情，用于统一商品编辑器回填全量字段。"""
+    site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
+    product = await product_service.get_product_detail(db, product_id)
+    if product.site_id != site_id:
+        raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
+    detail = ProductDetail.model_validate(product).model_copy(
+        update={"stock": product_service.resolve_product_detail_stock(product)}
+    )
+    return ResponseModel.success(data=detail)
 
 
 @router.put("/api/v1/admin/products/{product_id}", summary="更新商品")
@@ -205,6 +244,7 @@ async def update_product(
 ):
     """管理端更新商品信息"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     # 校验商品属于当前营地
     existing = await product_service.get_product_detail(db, product_id)
     if existing.site_id != site_id:
@@ -214,6 +254,24 @@ async def update_product(
     product = await product_service.update_product(db, product_id, data, operator_id=admin.id)
     detail = ProductDetail.model_validate(product)
     return ResponseModel.success(data=detail, message="商品更新成功")
+
+
+@router.delete("/api/v1/admin/products/{product_id}", summary="删除商品")
+async def delete_product(
+    product_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """管理端软删除商品。"""
+    site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
+    product = await product_service.get_product_detail(db, product_id)
+    if product.site_id != site_id:
+        raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
+    product.is_deleted = True
+    await db.flush()
+    return ResponseModel.success(data={"id": product.id}, message="商品已删除")
 
 
 @router.patch("/api/v1/admin/products/{product_id}/status", summary="上架/下架商品")
@@ -226,6 +284,7 @@ async def update_product_status(
 ):
     """管理端上架/下架商品"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     existing = await product_service.get_product_detail(db, product_id)
     if existing.site_id != site_id:
         from fastapi import HTTPException
@@ -248,6 +307,7 @@ async def batch_update_status(
 ):
     """管理端批量上架/下架商品"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     # 过滤出属于当前营地的商品ID
     from sqlalchemy import select as sa_select
     from models.product import Product
