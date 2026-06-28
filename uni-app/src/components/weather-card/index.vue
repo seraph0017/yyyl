@@ -1,5 +1,5 @@
 <template>
-  <view class="weather-card" v-if="!loadFailed">
+  <view class="weather-card">
     <!-- 加载骨架 -->
     <view class="weather-card__skeleton" v-if="loading">
       <view class="skeleton-bar skeleton-bar--lg" />
@@ -9,8 +9,16 @@
 
     <!-- 天气内容 -->
     <view class="weather-card__content" v-else>
+      <view class="weather-unavailable" v-if="weatherUnavailable">
+        <text class="weather-unavailable__icon">🌤️</text>
+        <view class="weather-unavailable__body">
+          <text class="weather-unavailable__title">天气暂不可用，请以现场天气为准</text>
+          <text class="weather-unavailable__desc">出行前建议关注最新天气，备好防晒、防雨和保暖装备</text>
+        </view>
+      </view>
+
       <!-- 当前天气 -->
-      <view class="weather-current">
+      <view class="weather-current" v-else>
         <view class="weather-current__left">
           <text class="weather-current__icon">{{ weatherEmoji }}</text>
           <view class="weather-current__info">
@@ -80,7 +88,7 @@ import { get } from '@/utils/request'
 import type { IWeatherCurrent, IWeatherForecast, IWeatherForecastResponse, IWeatherHourlyForecast } from '@/types'
 
 const loading = ref(true)
-const loadFailed = ref(false)
+const weatherUnavailable = ref(false)
 
 const current = ref<IWeatherCurrent>({
   temperature: 0,
@@ -170,7 +178,7 @@ function formatDate(dateStr: string): string {
 /** 加载数据 */
 async function loadWeather() {
   loading.value = true
-  loadFailed.value = false
+  weatherUnavailable.value = false
 
   try {
     const [currentData, forecastRes] = await Promise.all([
@@ -186,7 +194,9 @@ async function loadWeather() {
       forecast.value = forecastRes.forecasts.slice(0, 3)
     }
   } catch {
-    loadFailed.value = true
+    weatherUnavailable.value = true
+    forecast.value = []
+    hourlyForecast.value = []
   } finally {
     loading.value = false
   }
@@ -305,6 +315,45 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: 6rpx;
+  }
+}
+
+.weather-unavailable {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  min-height: 156rpx;
+
+  &__icon {
+    width: 92rpx;
+    height: 92rpx;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border-radius: var(--radius-lg);
+    background: rgba(255, 255, 255, 0.62);
+    font-size: 46rpx;
+  }
+
+  &__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8rpx;
+  }
+
+  &__title {
+    font-size: var(--font-size-base);
+    color: var(--color-text);
+    font-weight: 700;
+    line-height: 1.35;
+  }
+
+  &__desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-secondary);
+    line-height: 1.5;
   }
 }
 

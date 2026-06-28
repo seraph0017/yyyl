@@ -59,7 +59,7 @@ from schemas.admin import (
     SalesRankingItem,
     TrendDataResponse,
 )
-from schemas.common import PaginatedResponse, PaginationParams, ResponseModel
+from schemas.common import AdminPaginationParams, PaginatedResponse, PaginationParams, ResponseModel
 from schemas.member import MembershipCardConfigSchema
 from services.enterprise_wechat_robot_service import (
     send_text_message,
@@ -900,7 +900,7 @@ async def list_members(
 @router.get("/membership-cards", summary="统一会员卡列表")
 async def list_membership_cards(
     request: Request,
-    pagination: PaginationParams = Depends(),
+    pagination: AdminPaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):

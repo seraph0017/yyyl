@@ -7,6 +7,7 @@
 - 宿主机蓝绿端口：`8001` / `8002`
 - Nginx 通过 `upstream yyyl_api_backend` 切换流量
 - 微信支付证书目录 `/opt/yyyl/secure` 会只读挂载到容器同路径，供 `WECHAT_KEY_PATH`、`WECHAT_CERT_PATH`、`WECHAT_PLATFORM_PUBLIC_KEY_PATH` 使用
+- 图片目录 `/opt/yyyl/server/images` 会可写挂载到容器 `/app/images`，供 CMS 上传、小程序码和现场临时订单码等运行时图片写入
 
 ## 首次准备
 

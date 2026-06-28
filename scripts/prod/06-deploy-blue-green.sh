@@ -97,7 +97,7 @@ podman run -d --name "yyyl-api-$NEXT" \
   "${HEALTH_ARGS[@]}" \
   -v "$LOG_DIR:/app/logs:Z" \
   -v "$DATA_DIR:/data:Z" \
-  -v "$IMAGES_DIR:/app/images:ro,Z" \
+  -v "$IMAGES_DIR:/app/images:Z" \
   "${SECURE_VOLUME_ARGS[@]}" \
   --env-file "$ENV_FILE" \
   --env APP_ENV=production \

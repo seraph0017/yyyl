@@ -19,6 +19,9 @@ const staffPath = new URL('../src/pages/staff/index.vue', import.meta.url)
 const ticketPath = new URL('../src/pages/ticket/index.vue', import.meta.url)
 const qrCodePath = new URL('../src/utils/qrcode.ts', import.meta.url)
 const customerServicePath = new URL('../src/pages/customer-service/index.vue', import.meta.url)
+const defaultHomePagePath = new URL('../src/components/default-home-page/index.vue', import.meta.url)
+const weatherCardPath = new URL('../src/components/weather-card/index.vue', import.meta.url)
+const requestUtilPath = new URL('../src/utils/request.ts', import.meta.url)
 
 test('product detail no longer uses fake calendar stock or fixed camping prices', async () => {
   const source = await readFile(productDetailPath, 'utf8')
@@ -451,6 +454,26 @@ test('customer service keeps faq fallback avoids duplicate errors and uses stabl
   assert.match(source, /&__btn[\s\S]*height:\s*88rpx/, '人工客服按钮触控高度应不小于 88rpx')
   assert.match(source, /&__send[\s\S]*height:\s*88rpx/, '发送按钮触控高度应不小于 88rpx')
   assert.match(source, /\.source_refs__item[\s\S]*max-width:\s*100%[\s\S]*word-break:\s*break-word/, '来源引用长标题应有溢出保护')
+})
+
+test('home weather card remains visible with fallback when weather request fails', async () => {
+  const homeSource = await readFile(defaultHomePagePath, 'utf8')
+  const weatherSource = await readFile(weatherCardPath, 'utf8')
+
+  assert.match(homeSource, /<weather-card\s*\/>/, '默认首页应保留天气卡片')
+  assert.doesNotMatch(weatherSource, /<view class="weather-card" v-if="!loadFailed">/, '天气请求失败不应让首页天气卡整块消失')
+  assert.doesNotMatch(weatherSource, /loadFailed\.value = true/, '天气请求失败不应进入整块隐藏状态')
+  assert.match(weatherSource, /weatherUnavailable/, '天气卡应有接口不可用兜底态')
+  assert.match(weatherSource, /天气暂不可用，请以现场天气为准/, '天气卡兜底态应给用户明确提示')
+})
+
+test('miniapp request defaults to production api when env files are missing', async () => {
+  const source = await readFile(requestUtilPath, 'utf8')
+
+  assert.match(source, /DEFAULT_API_BASE_URL\s*=\s*'https:\/\/www\.yyylcamp\.com\/api\/v1'/, '默认 API 域名应指向线上服务')
+  assert.match(source, /DEFAULT_SERVER_BASE\s*=\s*'https:\/\/www\.yyylcamp\.com'/, '默认资源域名应指向线上服务')
+  assert.doesNotMatch(source, /VITE_API_BASE_URL\s*\|\|\s*'http:\/\/localhost:8000\/api\/v1'/, '缺少 env 时不应回落到 localhost API')
+  assert.doesNotMatch(source, /VITE_SERVER_BASE\s*\|\|\s*'http:\/\/localhost:8000'/, '缺少 env 时不应回落到 localhost 资源域名')
 })
 
 function decodeQrMatrix(matrix) {

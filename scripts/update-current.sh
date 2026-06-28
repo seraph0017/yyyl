@@ -68,6 +68,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 测试阶段已将商品、SKU、日期定价统一压到 \`0.01\` 元，便于验证完整支付链路。
 - 天气服务已接入彩云天气数据源：服务端按营地坐标请求彩云 API，进程内缓存 30 分钟；未配置 \`CAIYUN_API_TOKEN\` 或第三方异常时返回兜底天气。
 - 小程序首页天气卡展示当前天气、未来小时级天气和未来几天预报；商品详情预定日期区域和日历展示对应日期天气。
+- 小程序首页天气卡不是可移除项；2026-06-28 已修复天气接口失败时整块隐藏的问题，现在请求失败会保留天气卡并显示“天气暂不可用，请以现场天气为准”的兜底态。
 - 小程序首页三日天气卡已改为居中三列布局；商品详情日历日期格内已在日期下方展示对应天气图标。
 - 西郊林场天气坐标已修正为经度 \`121.120115\`、纬度 \`30.955131\`，天气接口响应新增 \`location_name\` 便于确认地点。
 - 生产 \`/opt/yyyl/server/.env\` 已配置 \`CAIYUN_API_TOKEN\`（来自 PJproject 彩云默认 APP_TOKEN，勿打印明文），当前线上天气接口已返回小时级天气。
@@ -77,7 +78,14 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.7 验证已通过：后端 35 个相关单测 OK，Admin \`npm run build\` OK，小程序 \`npm run type-check\`、\`build:wx:xijiao\`、\`build:wx:dalonggu\` OK。Admin 仅有 Vite 大 chunk 警告，小程序仅有 uni-app/Sass 既有弃用警告。
 - 本地 v1.8 已按用户要求直接实现代码，不再停留在 PRD：共享库存池支持显式跨商品/SKU 绑定；D5 按企业微信群机器人实现；订单报价、购物车结算、价格日历、退款库存幂等、Admin 高风险页面、小程序商品详情/确认页、小程序智能客服/知识库、现场临时订单/现场收款、统一商品管理完整编辑器、退款审批队列均已接入。
 - v1.8 已完成三端 agent 最新复审均 APPROVED：后端复审 APPROVED 9.0，Admin 复审 APPROVED 9.1，小程序复审 APPROVED 9.3；三端 CRITICAL/HIGH 均为 0。后端退款权限、late SUCCESS 库存重锁、商品类型切换旧扩展清理、Admin 退款队列/现场收款/统一商品编辑器、小程序临时单错误态/员工现场收款触控/购物车免责声明确认闭环均已按 review 修复。
-- v1.8 当前发布审查口径：本地代码与三端构建达到上线审查标准；生产发布仍需用户审批 \`docs/v1.8_production_review.html\`、staging 迁移和 smoke test。当前未执行生产发布。
+- v1.8 生产发布已执行：本地提交 \`df0e695 feat: 实现 v1.8 全量上线能力\` 已打包发布到生产，生产源码备份为 \`/opt/yyyl/backups/source-before-v18-20260627222038\`；API 镜像 \`yyyl-api:v1.8-df0e695\` 已蓝绿切到 \`yyyl-api-blue\` / \`127.0.0.1:8001\`，旧 \`yyyl-api-green\` 已停止；Admin 静态资源已发布到 \`/www/server/nginx/html/\`；生产数据库 Alembic 已迁移到 \`1a2b3c4d5e6f\` (head)。
+- 2026-06-28 22:14 已按用户要求重发服务端到 \`www.yyylcamp.com\`：复用生产镜像 \`yyyl-api:v1.8-df0e695\` 做 Podman 蓝绿切换，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，旧 \`yyyl-api-blue\` 已停止保留用于回滚。发布后 \`https://www.yyylcamp.com/health\` 与 \`/api/v1/products?page_size=1&status=on_sale\` 均返回 200。
+- v1.8 小程序双营地构建产物已重新生成并确认 AppID 为 \`wx98ecb419c0a6aeb7\`，构建目录包括 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`；微信开发者工具上传发布仍待执行。
+- 2026-06-28 小程序本地构建网络不通根因已确认并修复：\`uni-app/.env.xijiao\` 和 \`uni-app/.env.dalonggu\` 之前缺失，Vite 构建时回退到 \`http://localhost:8000/api/v1\`，导致微信开发者工具模拟器请求本机而不是生产域名。已在本机补齐两个被 git ignore 的环境文件，将 \`VITE_API_BASE_URL\` 设为 \`https://www.yyylcamp.com/api/v1\`、\`VITE_SERVER_BASE\` 设为 \`https://www.yyylcamp.com\`，并重新构建西郊/大聋谷小程序包；当前开发者工具西郊分类页已显示线上商品。
+- 2026-06-28 已将小程序请求层默认兜底改为生产域名：即使缺少 \`.env.{site}\` 或使用通用 \`mp-weixin\` 构建，\`uni-app/src/utils/request.ts\` 也会默认请求 \`https://www.yyylcamp.com/api/v1\`，避免再次出现 \`localhost:8000\`。
+- 生产 SSL 证书已更换为 Let’s Encrypt ECDSA 证书，域名 \`www.yyylcamp.com\`，有效期 \`2026-06-27 13:55:06 UTC\` 至 \`2026-09-25 13:55:05 UTC\`；当前 Nginx 证书路径仍为 \`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt\` 与 \`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key\`。已配置 certbot webroot 和部署 hook \`/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh\`，并启用 \`certbot-renew.timer\`。
+- SSL 续期注意：\`certbot certonly --webroot --dry-run\` 和正式签发已成功，公网 \`http://www.yyylcamp.com/.well-known/acme-challenge/...\` 已验证 200；但一次 \`certbot renew --dry-run\` 在 Let’s Encrypt 二次校验阶段出现超时/挂起，当前证书不受影响。下次续期前建议复跑 \`certbot renew --dry-run\`，若仍失败，优先检查腾讯云安全组/线路对公网 80 的稳定可达性。
+- 本地 \`main\` 已提交 \`df0e695\` 且领先 \`origin/main\` 1 个提交；\`git push origin main\` 因 GitHub HTTPS 凭据不可用失败（\`could not read Username\`），远端尚未更新。
 - v1.8 已补并复验多个发布阻断/复审问题：
   - \`/api/v1/auth/phone-login\` 真实调用微信 \`wxa/business/getuserphonenumber\` 获取手机号，写入 \`User.phone\` 并返回带脱敏手机号的登录态。
   - 高危操作二次确认统一 bcrypt 校验操作密码，确认 token 绑定 admin/site/action/request_hash；高风险库存池和企业微信写接口会按当前请求 body 复算 SHA-256 摘要，校验 \`X-Site-Id\` 目标站点。
@@ -95,8 +103,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - 现场临时订单/现场收款已接入：后台和员工端支持自定义金额/商品临时单、顾客扫码真实小程序码、付款码支付和 codepay 查询补偿；小程序扫码认领临时单，坏 scene 保持临时单错误态。
   - 统一商品管理完整编辑器已接入：Admin 可编辑基础信息、详情、类型扩展、SKU、状态、SKU 图片和 JSON 规格，并在商品类型切换时清理旧扩展。
   - 购物车免责声明闭环已接入：购物车结算先弹免责声明确认，用户确认后才携带 \`disclaimer_signed=1\`；\`/cart/quote\` 和 \`/cart/checkout\` 默认未签署，确认页显式透传签署态，后端最终由 \`order_service.create_order\` 校验 \`require_disclaimer\`。
-- v1.8 最新验证：后端编译 \`python -m compileall -q models schemas routers services middleware tasks tests\` OK；后端全量 \`python -m unittest discover -s tests -p 'test_*.py' -v\` 231 tests OK；Admin \`node --test tests/v18-admin-contract.test.mjs\` 11/11 OK 且 \`npm run build\` OK；小程序 \`node --test tests/v18-product-flow.test.mjs\` 34/34 OK、\`npm run type-check\` OK、\`build:wx:xijiao\` 和 \`build:wx:dalonggu\` OK；\`git diff --check\` 和三份 HTML 解析 OK。
-- v1.8 生产上线审查 HTML：\`docs/v1.8_production_review.html\`，当前版本 \`v1.8-production-review-rev15\`。该文档用于用户生产发布前审查；必须完成用户审批、staging 迁移和 smoke test 后，才可正式发布生产。当前未发布生产。
+- v1.8 最新验证：后端编译 \`python -m compileall -q models schemas routers services middleware tasks tests\` OK；后端全量 \`python -m unittest discover -s tests -p 'test_*.py' -v\` 231 tests OK；Admin \`node --test tests/v18-admin-contract.test.mjs\` 11/11 OK 且 \`npm run build\` OK；小程序 \`node --test tests/v18-product-flow.test.mjs\` 35/35 OK、\`npm run type-check\` OK、\`build:wx:xijiao\` 和 \`build:wx:dalonggu\` OK；\`git diff --check\` 和三份 HTML 解析 OK。
+- v1.8 生产上线审查 HTML：\`docs/v1.8_production_review.html\`，当前版本 \`v1.8-production-review-rev15\`。生产发布已按该版本代码执行，后续如继续迭代需另起增量版本或补充上线复盘。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -107,9 +115,10 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 4. 后续常规发布最好修复服务器 Docker Hub 拉取 \`python:3.11-slim\` 超时问题；最近一次上线采用基于既有镜像的离线派生方式。
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
 6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
-7. v1.7 上线前先审阅并执行迁移 \`server/alembic/versions/b7e2f8a9c1d4_v1_7_add_qrcode_refund_settlement_export.py\`，再按三端构建产物发布。
-8. v1.8 上线前先确认 Alembic 基线：数据库必须已包含 v1.7 revision \`b7e2f8a9c1d4\`，再执行十个 v1.8 迁移到 head \`0a1b2c3d4e5f\`：\`c9d8e7f6a5b4_v1_8_add_inventory_pool.py\`、\`d2e3f4a5b6c7_v1_8_add_enterprise_wechat_robot.py\`、\`e4f5a6b7c8d9_v1_8_add_order_item_inventory_pool.py\`、\`f6a7b8c9d0e1_v1_8_add_refund_inventory_released.py\`、\`a1b2c3d4e5f6_v1_8_add_ticket_verify_log.py\`、\`b2c3d4e5f6a7_v1_8_add_map_analytics.py\`、\`c3d4e5f6a7b8_v1_8_add_inventory_calendar_unique_index.py\`、\`d4e5f6a7b8c9_v1_8_add_customer_service_knowledge.py\`、\`e5f6a7b8c9d0_v1_8_add_order_biz_data.py\`、\`0a1b2c3d4e5f_v1_8_annual_card_refund_concurrency_guard.py\`。
-9. v1.8 staging smoke test 必测：两个商品显式绑定同一共享库存池后库存联动；Admin 库存日历缺失日期关闭/0、普通批量调整和共享池写保护；高风险确认缺失/错误 \`X-Site-Id\` 被拒绝；支付超时释放 locked；退款成功只回补一次库存；普通 admin 无法访问共享库存/企业微信高风险模块；退款队列只显示 pending RefundRecord 且跨站/非 super 审批被拒；现场收款顾客扫码、付款码和 codepay 查询补偿；统一商品编辑器切换类型不保留旧扩展；购物车免责声明确认后才能结算；企业微信群机器人发送与日志脱敏；客服知识库上传、Admin 问答、小程序智能客服、企业微信群知识库问答共用同一知识库；两营地小程序导入微信开发者工具检查商品详情、订单确认、购物车结算、智能客服和支付跳转。
+7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
+8. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
+9. Git 远端尚未推送：本地 \`main\` ahead \`origin/main\` 1，最近推送因 GitHub HTTPS 凭据不可用失败。补好 GitHub 凭据或改 SSH remote 后再推送 \`df0e695\`。
+10. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 \`certbot renew --dry-run\`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
 
@@ -119,14 +128,20 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 生产环境文件：\`/opt/yyyl/server/.env\`，不要打印或提交其中的密钥。
 - 微信支付证书目录：\`/opt/yyyl/secure/wechat-pay\`，不要复制证书内容到文档或聊天。
 - Nginx 站点配置：\`/www/server/panel/vhost/nginx/ttt.conf\`。
+- SSL 证书路径：\`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt\`，私钥路径：\`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key\`（不要打印私钥内容）。Let’s Encrypt 源证书在 \`/etc/letsencrypt/live/www.yyylcamp.com/\`，自动续期部署 hook 为 \`/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh\`。
 - 生产图片目录：\`/opt/yyyl/server/images\`；本次测试图目录：\`/opt/yyyl/server/images/test\`。
 - 最近生产备份：
+  - v1.8 发布前源码备份：\`/opt/yyyl/backups/source-before-v18-20260627222038\`。
+  - v1.8 Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-v18-20260627222038.tgz\`。
+  - SSL 证书替换前备份：\`/opt/yyyl/backups/ssl-www.yyylcamp.com-20260627225424\`。
+  - ACME challenge 调整前 Nginx 备份：\`/opt/yyyl/backups/ttt.conf.acme-20260627224911.bak\`、\`/opt/yyyl/backups/ttt.conf.acme-location-20260627224941.bak\`。
   - SKU 图片字段备份：\`/opt/yyyl/backups/yyyl_sku_image_url_backup_20260618_064248.json\`。
   - 用户头像字段备份：\`/opt/yyyl/backups/yyyl_user_avatar_url_backup_20260618_065016.json\`。
   - Nginx 图片映射前配置备份：\`/opt/yyyl/backups/ttt.conf.images_fix_20260618_144345.bak\`。
   - Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-20260620135346.tgz\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
 - 最近生产镜像：
+  - \`yyyl-api:v1.8-df0e695\`：v1.8 全量上线镜像，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，数据库版本 \`1a2b3c4d5e6f\`。
   - \`yyyl-api:53e092e-weather-ui\`：修正西郊林场天气坐标并返回 \`location_name\`，当前活跃容器 \`yyyl-api-blue\`，Nginx upstream 指向 \`127.0.0.1:8001\`。
   - \`yyyl-api:c82570a-weather\`：接入彩云天气，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`。
   - \`yyyl-api:payment-cert-mount\`：补充证书挂载并映射微信支付异常。
@@ -169,6 +184,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 微信手机号授权登录已补齐真实服务：\`server/services/auth_service.py::phone_login()\`、\`_get_phone_number()\`、\`_get_wechat_access_token()\`；路由 \`server/routers/auth.py::phone_login()\` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：\`server/routers/admin.py::verify_operation_password()\` 使用 bcrypt \`verify_password()\`，返回短 TTL \`confirm_token\`；\`verify_confirm_code()\` 不再接受 hash 前缀。
 - 本地和远端 Git 最近提交：
+  - \`df0e695 feat: 实现 v1.8 全量上线能力\`（本地已提交，尚未推送到 GitHub）
   - \`65c5d55 feat: 接入真实微信支付\`
   - \`069ce33 test: 覆盖订单创建响应重载\`
   - \`0156e83 docs: add current handoff workflow\`
@@ -262,6 +278,12 @@ curl -fsS -H 'X-Site-Id: 1' 'https://www.yyylcamp.com/api/v1/weather/forecast?da
 curl -fsSI https://www.yyylcamp.com/images/test/test-sku-01.jpg
 curl -fsSI https://www.yyylcamp.com/images/test/test-avatar-01.jpg
 curl -fsSI https://www.yyylcamp.com/images/shop-drinks.jpg
+
+# 生产 SSL 证书检查
+curl -fsSI https://www.yyylcamp.com/health
+openssl s_client -servername www.yyylcamp.com -connect www.yyylcamp.com:443 </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -dates
+ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \\
+  'certbot certificates; systemctl status certbot-renew.timer --no-pager; nginx -t'
 \`\`\`
 
 ## Repo Snapshot

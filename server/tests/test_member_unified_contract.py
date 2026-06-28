@@ -1,4 +1,5 @@
 import unittest
+import inspect
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -41,6 +42,19 @@ class _FakeDb:
 
 
 class MemberUnifiedContractTest(unittest.IsolatedAsyncioTestCase):
+    def test_admin_membership_cards_allows_bulk_page_size_for_overview(self):
+        from pydantic import ValidationError
+        from routers import admin as admin_router
+
+        pagination_model = inspect.signature(admin_router.list_membership_cards).parameters["pagination"].annotation
+
+        try:
+            pagination = pagination_model(page=1, page_size=200)
+        except ValidationError as exc:
+            self.fail(f"会员卡总览批量加载 page_size=200 不应被拒绝: {exc}")
+
+        self.assertEqual(pagination.page_size, 200)
+
     def test_unified_schema_and_mapping_shape(self):
         from schemas.member import MembershipCardConfigSchema, MembershipCardInfo
         from services import member_service
