@@ -77,13 +77,14 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-06-29 已完成图片加载优化的分 agent review 并修复阻断项：后端 CMS 上传会为 JPG/PNG/WebP 自动生成 \`thumb/large/banner\` 派生图，坏图/超大图会返回 400 并清理原图和派生图；批量脚本 \`server/scripts/generate_image_variants.py\` 可在容器内补齐旧图、默认只补缺失规格、单张坏图不中断后续处理。
 - 2026-06-29 小程序图片解析已支持同域绝对 URL、JPG/PNG/WebP、已有 \`thumb/large/banner\` 路径规整；商品卡片、详情轮播、CMS Banner/CMS Image 均按场景加载派生图，变体 404 时本地回退原图，原图也失败时显示占位，不再修改 props/CMS 配置对象。
 - 2026-06-29 Admin 素材库预览已改为优先使用 \`/images/thumb/...\`，缩略图缺失时回退原图；选择素材仍保留原始 \`file_url\`。Podman 蓝绿发布脚本会创建并校验 \`/app/images\` 可写，生产 README 已补 Nginx 图片映射、容器内补图命令和后端/Admin/小程序发布顺序。
+- 2026-06-29 图片优化已发布到生产：本地提交 \`4b92d69 feat: 优化图片派生图加载链路\` 已同步到 \`/opt/yyyl\`；因生产机 Docker Hub 拉取 \`python:3.11-slim\` 超时，本次基于 \`localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628\` 离线派生镜像 \`yyyl-api:image-variants-4b92d69\`，API 蓝绿切到 \`yyyl-api-green\` / \`127.0.0.1:8002\`，旧 \`yyyl-api-blue\` 已停止保留用于回滚；Admin 静态资源已发布到 \`/www/server/nginx/html/\`；生产旧图补齐结果 \`source=24 generated=3 skipped=21 failed=0\`，\`thumb/large/banner\` 各 24 个文件，公网样例访问 200。
 - 本地 v1.7 已按需求实现完成并生成 HTML 报告：二维码独立生成、自定义页面二维码、订单高级筛选与导出、资金 pending/available 结算、增强退款策略、Admin 财务与退款界面、小程序扫码归因。
 - v1.7 验证已通过：后端 35 个相关单测 OK，Admin \`npm run build\` OK，小程序 \`npm run type-check\`、\`build:wx:xijiao\`、\`build:wx:dalonggu\` OK。Admin 仅有 Vite 大 chunk 警告，小程序仅有 uni-app/Sass 既有弃用警告。
 - 本地 v1.8 已按用户要求直接实现代码，不再停留在 PRD：共享库存池支持显式跨商品/SKU 绑定；D5 按企业微信群机器人实现；订单报价、购物车结算、价格日历、退款库存幂等、Admin 高风险页面、小程序商品详情/确认页、小程序智能客服/知识库、现场临时订单/现场收款、统一商品管理完整编辑器、退款审批队列均已接入。
 - v1.8 已完成三端 agent 最新复审均 APPROVED：后端复审 APPROVED 9.0，Admin 复审 APPROVED 9.1，小程序复审 APPROVED 9.3；三端 CRITICAL/HIGH 均为 0。后端退款权限、late SUCCESS 库存重锁、商品类型切换旧扩展清理、Admin 退款队列/现场收款/统一商品编辑器、小程序临时单错误态/员工现场收款触控/购物车免责声明确认闭环均已按 review 修复。
 - v1.8 生产发布已执行：本地提交 \`df0e695 feat: 实现 v1.8 全量上线能力\` 已打包发布到生产，生产源码备份为 \`/opt/yyyl/backups/source-before-v18-20260627222038\`；API 镜像 \`yyyl-api:v1.8-df0e695\` 已蓝绿切到 \`yyyl-api-blue\` / \`127.0.0.1:8001\`，旧 \`yyyl-api-green\` 已停止；Admin 静态资源已发布到 \`/www/server/nginx/html/\`；生产数据库 Alembic 已迁移到 \`1a2b3c4d5e6f\` (head)。
 - 2026-06-28 22:14 已按用户要求重发服务端到 \`www.yyylcamp.com\`：复用生产镜像 \`yyyl-api:v1.8-df0e695\` 做 Podman 蓝绿切换，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，旧 \`yyyl-api-blue\` 已停止保留用于回滚。发布后 \`https://www.yyylcamp.com/health\` 与 \`/api/v1/products?page_size=1&status=on_sale\` 均返回 200。
-- v1.8 小程序双营地构建产物已重新生成并确认 AppID 为 \`wx98ecb419c0a6aeb7\`，构建目录包括 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`；微信开发者工具上传发布仍待执行。
+- v1.8 小程序双营地构建产物已重新生成并确认 AppID 为 \`wx98ecb419c0a6aeb7\`，构建目录包括 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`；2026-06-29 图片优化后已再次构建这两个目录，微信开发者工具上传发布仍待执行。
 - 2026-06-28 小程序本地构建网络不通根因已确认并修复：\`uni-app/.env.xijiao\` 和 \`uni-app/.env.dalonggu\` 之前缺失，Vite 构建时回退到 \`http://localhost:8000/api/v1\`，导致微信开发者工具模拟器请求本机而不是生产域名。已在本机补齐两个被 git ignore 的环境文件，将 \`VITE_API_BASE_URL\` 设为 \`https://www.yyylcamp.com/api/v1\`、\`VITE_SERVER_BASE\` 设为 \`https://www.yyylcamp.com\`，并重新构建西郊/大聋谷小程序包；当前开发者工具西郊分类页已显示线上商品。
 - 2026-06-28 已将小程序请求层默认兜底改为生产域名：即使缺少 \`.env.{site}\` 或使用通用 \`mp-weixin\` 构建，\`uni-app/src/utils/request.ts\` 也会默认请求 \`https://www.yyylcamp.com/api/v1\`，避免再次出现 \`localhost:8000\`。
 - 生产 SSL 证书已更换为 Let’s Encrypt ECDSA 证书，域名 \`www.yyylcamp.com\`，有效期 \`2026-06-27 13:55:06 UTC\` 至 \`2026-09-25 13:55:05 UTC\`；当前 Nginx 证书路径仍为 \`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt\` 与 \`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key\`。已配置 certbot webroot 和部署 hook \`/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh\`，并启用 \`certbot-renew.timer\`。
@@ -120,9 +121,9 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
 6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
 7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
-8. 图片优化上线顺序：先发布后端 API 并确认 \`/app/images\` 可写；在当前活跃 API 容器里执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐旧图；再发布 Admin 静态资源；最后上传小程序构建包。
-9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-10. Git 远端尚未推送：本地 \`main\` ahead \`origin/main\` 1，最近推送因 GitHub HTTPS 凭据不可用失败。补好 GitHub 凭据或改 SSH remote 后再推送 \`df0e695\`。
+8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 \`/opt/yyyl/server/images/\`，仍需在当前活跃 API 容器执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐派生图。
+9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，最新构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
+10. GitHub \`origin/main\` 已推送到 \`4b92d69 feat: 优化图片派生图加载链路\`；生产 API 当前运行该提交对应业务代码。
 11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 \`certbot renew --dry-run\`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
@@ -136,6 +137,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - SSL 证书路径：\`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt\`，私钥路径：\`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key\`（不要打印私钥内容）。Let’s Encrypt 源证书在 \`/etc/letsencrypt/live/www.yyylcamp.com/\`，自动续期部署 hook 为 \`/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh\`。
 - 生产图片目录：\`/opt/yyyl/server/images\`；派生图目录为 \`thumb/\`、\`large/\`、\`banner/\`；本次测试图目录：\`/opt/yyyl/server/images/test\`。
 - 最近生产备份：
+  - 图片优化发布前源码备份：\`/opt/yyyl/backups/source-before-image-variants-20260629160504.tgz\`。
+  - 图片优化 Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-image-variants-20260629161130.tgz\`。
   - v1.8 发布前源码备份：\`/opt/yyyl/backups/source-before-v18-20260627222038\`。
   - v1.8 Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-v18-20260627222038.tgz\`。
   - SSL 证书替换前备份：\`/opt/yyyl/backups/ssl-www.yyylcamp.com-20260627225424\`。
@@ -146,6 +149,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-20260620135346.tgz\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
 - 最近生产镜像：
+  - \`yyyl-api:image-variants-4b92d69\`：图片派生图生产镜像，基于 \`localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628\` 离线派生，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`。
+  - \`yyyl-api:v1.8-hotfix-qrcode-membership-20260628\`：二维码和会员卡接口热修镜像，发布图片优化前活跃于 \`yyyl-api-blue\`，当前已停止保留用于回滚。
   - \`yyyl-api:v1.8-df0e695\`：v1.8 全量上线镜像，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，数据库版本 \`1a2b3c4d5e6f\`。
   - \`yyyl-api:53e092e-weather-ui\`：修正西郊林场天气坐标并返回 \`location_name\`，当前活跃容器 \`yyyl-api-blue\`，Nginx upstream 指向 \`127.0.0.1:8001\`。
   - \`yyyl-api:c82570a-weather\`：接入彩云天气，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`。
@@ -189,10 +194,11 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 微信手机号授权登录已补齐真实服务：\`server/services/auth_service.py::phone_login()\`、\`_get_phone_number()\`、\`_get_wechat_access_token()\`；路由 \`server/routers/auth.py::phone_login()\` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：\`server/routers/admin.py::verify_operation_password()\` 使用 bcrypt \`verify_password()\`，返回短 TTL \`confirm_token\`；\`verify_confirm_code()\` 不再接受 hash 前缀。
 - 本地和远端 Git 最近提交：
-  - \`df0e695 feat: 实现 v1.8 全量上线能力\`（本地已提交，尚未推送到 GitHub）
+  - \`4b92d69 feat: 优化图片派生图加载链路\`
+  - \`c29a7b3 docs: 优化项目 README 展示\`
+  - \`d903cb3 fix: 修复生产二维码和会员卡接口问题\`
+  - \`df0e695 feat: 实现 v1.8 全量上线能力\`
   - \`65c5d55 feat: 接入真实微信支付\`
-  - \`069ce33 test: 覆盖订单创建响应重载\`
-  - \`0156e83 docs: add current handoff workflow\`
 
 ## Verification Commands
 
