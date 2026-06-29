@@ -45,7 +45,11 @@ fi
 command -v podman >/dev/null 2>&1 || err "podman 未安装"
 command -v curl >/dev/null 2>&1 || err "curl 未安装"
 
-mkdir -p "$LOG_DIR" "$DATA_DIR"
+mkdir -p "$LOG_DIR" "$DATA_DIR" "$IMAGES_DIR"
+if ! touch "$IMAGES_DIR/.yyyl-write-test" 2>/dev/null; then
+  err "$IMAGES_DIR 不可写，请先修复宿主机图片目录权限"
+fi
+rm -f "$IMAGES_DIR/.yyyl-write-test"
 SECURE_VOLUME_ARGS=()
 if [ -d "$SECURE_DIR" ]; then
   SECURE_VOLUME_ARGS=(-v "$SECURE_DIR:$SECURE_DIR:ro,Z")
@@ -74,6 +78,21 @@ else
   log "拉取镜像: $IMAGE"
   podman pull "$IMAGE"
 fi
+
+APP_UID="$(podman run --rm --entrypoint id "$IMAGE" appuser 2>/dev/null || true)"
+if [ -n "$APP_UID" ]; then
+  APP_USER_ID="$(printf '%s' "$APP_UID" | sed -n 's/.*uid=\([0-9][0-9]*\).*/\1/p')"
+  APP_GROUP_ID="$(printf '%s' "$APP_UID" | sed -n 's/.*gid=\([0-9][0-9]*\).*/\1/p')"
+  if [ -n "$APP_USER_ID" ] && [ -n "$APP_GROUP_ID" ]; then
+    chown -R "$APP_USER_ID:$APP_GROUP_ID" "$IMAGES_DIR" 2>/dev/null || chmod -R u+rwX,g+rwX "$IMAGES_DIR"
+  fi
+fi
+podman run --rm \
+  $PODMAN_RUN_ARGS \
+  -v "$IMAGES_DIR:/app/images:Z" \
+  --entrypoint sh \
+  "$IMAGE" -lc 'touch /app/images/.yyyl-container-write-test && rm -f /app/images/.yyyl-container-write-test' \
+  || err "容器内 appuser 无法写入 /app/images，请修复 $IMAGES_DIR 权限或 SELinux 挂载策略"
 
 log "清理可能残留的 yyyl-api-$NEXT"
 podman rm -f "yyyl-api-$NEXT" 2>/dev/null || true

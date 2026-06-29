@@ -476,6 +476,16 @@ test('miniapp request defaults to production api when env files are missing', as
   assert.doesNotMatch(source, /VITE_SERVER_BASE\s*\|\|\s*'http:\/\/localhost:8000'/, '缺少 env 时不应回落到 localhost 资源域名')
 })
 
+test('miniapp request image variants cover png webp same-domain urls and normalized variants', async () => {
+  const source = await readFile(requestUtilPath, 'utf8')
+
+  assert.match(source, /jpe\?g\|png\|webp/, '图片变体转换应覆盖 JPG、PNG、WebP')
+  assert.match(source, /getSameServerImagePath/, '同域绝对 URL 应先规整成站内路径再应用派生图')
+  assert.match(source, /path\.replace\(IMAGE_VARIANT_PREFIX_RE,\s*'\/images\/'\)/, '已有 thumb/large/banner 路径应先还原为原图路径')
+  assert.match(source, /return `\$\{SERVER_BASE\}\$\{applyImageVariant\(sameServerPath, variant\)\}`/, '同域绝对图片 URL 应按场景转换派生图')
+  assert.match(source, /originalPath\.split\(\s*\/\[\?#\]\/\s*\)\[0\]/, '带 query/hash 的图片路径应按真实 pathname 判断扩展名')
+})
+
 function decodeQrMatrix(matrix) {
   const quiet = 4
   const scale = 8

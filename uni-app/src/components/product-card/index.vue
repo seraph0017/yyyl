@@ -4,10 +4,11 @@
     <view class="product-card__image-wrap">
       <image
         class="product-card__image"
-        :src="product.cover_image"
+        :src="displayCoverImage"
         mode="aspectFill"
-        v-if="product.cover_image"
+        v-if="displayCoverImage && !imageFailed"
         lazy-load
+        @error="onImageError"
       />
       <view class="product-card__placeholder" v-else>
         <text class="product-card__placeholder-icon">{{ categoryIcon }}</text>
@@ -49,7 +50,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { fallbackOriginalImageUrl } from '@/utils/request'
 import { getCategoryIcon } from '@/utils/util'
 import type { IProduct } from '@/types'
 import PriceTag from '../price-tag/index.vue'
@@ -62,11 +64,30 @@ const props = withDefaults(defineProps<{
 })
 
 const categoryIcon = computed(() => getCategoryIcon(props.product.category))
+const fallbackCoverImage = ref('')
+const imageFailed = ref(false)
+const displayCoverImage = computed(() => fallbackCoverImage.value || props.product.cover_image)
+
+watch(() => [props.product.id, props.product.cover_image], () => {
+  fallbackCoverImage.value = ''
+  imageFailed.value = false
+})
 
 function onTap() {
   uni.navigateTo({
     url: `/pages/product-detail/index?id=${props.product.id}`,
   })
+}
+
+function onImageError() {
+  const currentUrl = displayCoverImage.value
+  const fallbackUrl = fallbackOriginalImageUrl(currentUrl)
+  if (fallbackUrl && fallbackUrl !== currentUrl) {
+    fallbackCoverImage.value = fallbackUrl
+    return
+  }
+  fallbackCoverImage.value = ''
+  imageFailed.value = true
 }
 </script>
 

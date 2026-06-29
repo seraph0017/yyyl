@@ -27,7 +27,7 @@
           :key="idx"
         >
           <view class="detail-swiper__slide">
-            <image :src="item" mode="aspectFill" v-if="item !== 'placeholder'" />
+            <image :src="item" mode="aspectFill" v-if="item !== 'placeholder'" @error="onDetailImageError(idx)" />
             <view class="detail-swiper__placeholder" v-else>
               <text>🏕️</text>
               <text class="detail-swiper__placeholder-text">{{ product.name }}</text>
@@ -286,7 +286,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
-import { get, post, resolveImageUrl } from '@/utils/request'
+import { fallbackOriginalImageUrl, get, post, resolveImageUrl } from '@/utils/request'
 import { isCampsiteProduct, isRetailProduct, normalizeProductCategory } from '@/utils/product-rules'
 import { recordPageView } from '@/utils/analytics'
 import { brandConfig } from '@/config/sites'
@@ -410,7 +410,7 @@ async function loadProduct(id: number) {
     const detail = await get<Record<string, any>>(`/products/${id}`, undefined, { needAuth: false })
 
     const images = detail.images || []
-    const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '') : ''
+    const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '', 'thumb') : ''
     const tags: string[] = []
     if (detail.is_seckill) tags.push('秒杀')
 
@@ -433,7 +433,7 @@ async function loadProduct(id: number) {
       category,
       description: detail.description || '',
       cover_image: coverImage,
-      images: images.map((img: any) => resolveImageUrl(img.url || '')),
+      images: images.map((img: any) => resolveImageUrl(img.url || '', 'large')),
       base_price: parseFloat(detail.base_price) || 0,
       current_price: parseFloat(detail.base_price) || 0,
       original_price: parseFloat(detail.base_price) || 0,
@@ -724,6 +724,17 @@ function generateCalendar() {
 /** 轮播切换 */
 function onSwiperChange(e: any) {
   swiperCurrent.value = e.detail.current
+}
+
+function onDetailImageError(index: number) {
+  if (!product.value) return
+  const currentUrl = product.value.images[index]
+  const fallbackUrl = fallbackOriginalImageUrl(currentUrl)
+  if (fallbackUrl && fallbackUrl !== currentUrl) {
+    product.value.images[index] = fallbackUrl
+    return
+  }
+  product.value.images[index] = 'placeholder'
 }
 
 /** 打开/关闭日历 */

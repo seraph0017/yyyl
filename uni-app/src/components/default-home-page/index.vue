@@ -13,11 +13,11 @@
         previous-margin="24rpx"
         next-margin="24rpx"
       >
-        <swiper-item v-for="item in banners" :key="item.id" class="banner-swiper-item">
+        <swiper-item v-for="(item, index) in banners" :key="item.id" class="banner-swiper-item">
           <view
             class="banner-card"
             :class="{
-              'banner-card--active': swiperCurrent === banners.indexOf(item),
+              'banner-card--active': swiperCurrent === index,
               'banner-card--empty': !item.image,
             }"
             @tap="onBannerTap(item.id)"
@@ -27,6 +27,8 @@
               :src="item.image"
               mode="aspectFill"
               v-if="item.image"
+              :lazy-load="swiperCurrent !== index"
+              @error="onBannerImageError(index)"
             />
             <view class="banner-card__overlay" />
             <view class="banner-card__content" v-if="!item.image">
@@ -134,7 +136,7 @@
  * 内容与原首页完全一致
  */
 import { ref, onMounted } from 'vue'
-import { get, resolveImageUrl } from '@/utils/request'
+import { fallbackOriginalImageUrl, get, resolveImageUrl } from '@/utils/request'
 import { savePendingCategoryKey } from '@/utils/attribution'
 import { normalizeProductCategory } from '@/utils/product-rules'
 import type { IProduct, IProductAttribute, IBanner } from '@/types'
@@ -167,7 +169,7 @@ const loading = ref(true)
 /** 将后端商品列表项转为前端 IProduct */
 function mapProduct(item: Record<string, unknown>): IProduct {
   const images = (item.images as Array<{ url: string }>) || []
-  const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '') : ''
+  const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '', 'thumb') : ''
   const tags: string[] = []
   if (item.is_seckill) tags.push('秒杀')
 
@@ -188,7 +190,7 @@ function mapProduct(item: Record<string, unknown>): IProduct {
     category,
     description: (item.description as string) || '',
     cover_image: coverImage,
-    images: images.map((img) => resolveImageUrl(img.url || '')),
+    images: images.map((img) => resolveImageUrl(img.url || '', 'large')),
     base_price: parseFloat(String(item.base_price)) || 0,
     current_price: parseFloat(String(item.base_price)) || 0,
     original_price: parseFloat(String(item.base_price)) || 0,
@@ -212,13 +214,13 @@ async function loadData() {
     const [bannerData, productData] = await Promise.all([
       get<{ banners: IBanner[] }>('/pages/home_banner', undefined, { needAuth: false, showError: false })
         .catch(() => ({ banners: [] as IBanner[] })),
-      get<{ list: Record<string, unknown>[]; total: number }>('/products', { page_size: 18, status: 'on_sale' }, { needAuth: false, showError: false })
+      get<{ list: Record<string, unknown>[]; total: number }>('/products', { page_size: 10, status: 'on_sale' }, { needAuth: false, showError: false })
         .catch(() => ({ list: [] as Record<string, unknown>[], total: 0 })),
     ])
 
     const loadedBanners = (bannerData?.banners || []).map((b) => ({
       ...b,
-      image: resolveImageUrl(b.image),
+      image: resolveImageUrl(b.image, 'banner'),
     }))
     const products = (productData?.list || []).map(mapProduct)
 
@@ -246,6 +248,15 @@ async function loadData() {
 
 function onSwiperChange(e: { detail: { current: number } }) {
   swiperCurrent.value = e.detail.current
+}
+
+function onBannerImageError(index: number) {
+  const item = banners.value[index]
+  if (!item) return
+  const fallbackUrl = fallbackOriginalImageUrl(item.image)
+  if (fallbackUrl && fallbackUrl !== item.image) {
+    banners.value.splice(index, 1, { ...item, image: fallbackUrl })
+  }
 }
 
 function onCategoryTap(_key: string) {

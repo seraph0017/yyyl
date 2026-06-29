@@ -19,6 +19,9 @@
     fab podman-ps
     fab build --tag=v0.1.0
     fab build-api --tag=v0.1.0
+    fab local-build-api --tag=v0.1.0
+    fab local-push-image --image=api --tag=v0.1.0
+    fab registry-release-api --tag=v0.1.0
     fab push-image --image=api --tag=v0.1.0
     fab logs --name=yyyl-api --tail=200
     fab health
@@ -43,6 +46,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -171,6 +175,25 @@ def _run(c: Connection, command: str, *, warn: bool = False, hide: bool = False)
     return c.run(command, warn=warn, hide=hide, pty=False)
 
 
+def _local_run(args: list[str]) -> None:
+    print("$ " + " ".join(shlex.quote(arg) for arg in args))
+    subprocess.run(args, cwd=Path(__file__).resolve().parent, check=True)
+
+
+def _container_tool(tool: str = "") -> str:
+    if tool:
+        tool = _validate_arg("tool", tool)
+        if tool not in {"docker", "podman"}:
+            raise ValueError("tool must be docker or podman")
+        if not shutil.which(tool):
+            raise FileNotFoundError(f"{tool} is not installed or not in PATH")
+        return tool
+    for candidate in ("docker", "podman"):
+        if shutil.which(candidate):
+            return candidate
+    raise FileNotFoundError("docker or podman is required for local image build/push")
+
+
 def _ensure_source_checkout(c: Connection, cfg: dict[str, object]):
     repo_url = str(cfg.get("repo_url") or "")
     src_dir = str(cfg["src_dir"])
@@ -216,6 +239,17 @@ def _podman_build(c: Connection, cfg: dict[str, object], image: str, tag: str, d
     image_ref = _q(_image(cfg, image, tag))
     flag_str = " ".join(flags)
     _run(c, f"cd {src} && podman build {flag_str} -t {image_ref} -f {_q(dockerfile)} {_q(context)}")
+
+
+def _image_build_spec(image: str) -> tuple[str, str]:
+    image = _validate_arg("image", image)
+    if image == "api":
+        return "server/Dockerfile", "server"
+    if image == "admin":
+        return "admin/Dockerfile", "admin"
+    if image == "nginx":
+        return "nginx/Dockerfile", "nginx"
+    raise ValueError(f"unknown image {image!r}; expected one of: {', '.join(IMAGE_KEYS)}")
 
 
 def _prod_scripts_dir() -> Path:
@@ -340,7 +374,7 @@ def sync_code(ctx, target="prod", ref=DEFAULT_REF):
         "no_cache": "传递 --no-cache",
     }
 )
-def build_api(ctx, target="prod", tag="", ref="", pull=True, no_cache=False):
+def build_api(ctx, target="prod", tag="", ref="", pull=False, no_cache=False):
     """在服务器上用 Podman 构建 FastAPI 镜像。"""
     tag = _validate_arg("tag", tag)
     cfg = _config(target)
@@ -354,7 +388,7 @@ def build_api(ctx, target="prod", tag="", ref="", pull=True, no_cache=False):
 
 
 @task(help={"target": "目标名称，默认 prod", "tag": "镜像标签", "pull": "传递 --pull", "no_cache": "传递 --no-cache"})
-def build_admin(ctx, target="prod", tag="", pull=True, no_cache=False):
+def build_admin(ctx, target="prod", tag="", pull=False, no_cache=False):
     """在服务器上用 Podman 构建管理后台镜像。"""
     tag = _validate_arg("tag", tag)
     cfg = _config(target)
@@ -367,7 +401,7 @@ def build_admin(ctx, target="prod", tag="", pull=True, no_cache=False):
 
 
 @task(help={"target": "目标名称，默认 prod", "tag": "镜像标签", "pull": "传递 --pull", "no_cache": "传递 --no-cache"})
-def build_nginx(ctx, target="prod", tag="", pull=True, no_cache=False):
+def build_nginx(ctx, target="prod", tag="", pull=False, no_cache=False):
     """在服务器上用 Podman 构建 Nginx 网关镜像。"""
     tag = _validate_arg("tag", tag)
     cfg = _config(target)
@@ -380,12 +414,92 @@ def build_nginx(ctx, target="prod", tag="", pull=True, no_cache=False):
 
 
 @task(help={"target": "目标名称，默认 prod", "tag": "镜像标签", "ref": "Git ref", "pull": "传递 --pull"})
-def build(ctx, target="prod", tag="", ref="", pull=True):
+def build(ctx, target="prod", tag="", ref="", pull=False):
     """构建 api/admin/nginx 三个镜像。"""
     tag = _validate_arg("tag", tag)
     build_api(ctx, target=target, tag=tag, ref=ref or tag, pull=pull)
     build_admin(ctx, target=target, tag=tag, pull=pull)
     build_nginx(ctx, target=target, tag=tag, pull=pull)
+
+
+@task(
+    help={
+        "target": "目标名称，默认 prod，用于读取 registry/namespace/repo 配置",
+        "image": "api/admin/nginx",
+        "tag": "镜像标签",
+        "tool": "本地容器工具，docker 或 podman；默认自动检测",
+        "platform": "镜像平台，默认 linux/amd64",
+        "pull": "传递 --pull",
+        "no_cache": "传递 --no-cache",
+    }
+)
+def local_build_image(
+    ctx,
+    target="prod",
+    image="api",
+    tag="",
+    tool="",
+    platform="linux/amd64",
+    pull=False,
+    no_cache=False,
+):
+    """在本机/CI 构建镜像，适合推送到镜像仓库后由生产机拉取。"""
+    tag = _validate_arg("tag", tag)
+    platform = _validate_arg("platform", platform)
+    cfg = _config(target)
+    container_tool = _container_tool(tool)
+    dockerfile, context = _image_build_spec(image)
+    args = [
+        container_tool,
+        "build",
+        "--platform",
+        platform,
+        "-t",
+        _image(cfg, image, tag),
+        "-f",
+        dockerfile,
+    ]
+    if pull:
+        args.append("--pull")
+    if no_cache:
+        args.append("--no-cache")
+    args.append(context)
+    _local_run(args)
+
+
+@task(
+    help={
+        "target": "目标名称，默认 prod，用于读取 registry/namespace/repo 配置",
+        "tag": "镜像标签",
+        "tool": "本地容器工具，docker 或 podman；默认自动检测",
+        "platform": "镜像平台，默认 linux/amd64",
+        "pull": "传递 --pull",
+        "no_cache": "传递 --no-cache",
+    }
+)
+def local_build_api(ctx, target="prod", tag="", tool="", platform="linux/amd64", pull=False, no_cache=False):
+    """在本机/CI 构建 FastAPI 镜像。"""
+    local_build_image(
+        ctx,
+        target=target,
+        image="api",
+        tag=tag,
+        tool=tool,
+        platform=platform,
+        pull=pull,
+        no_cache=no_cache,
+    )
+
+
+@task(help={"target": "目标名称，默认 prod", "image": "api/admin/nginx", "tag": "镜像标签", "tool": "docker 或 podman"})
+def local_push_image(ctx, target="prod", image="api", tag="", tool=""):
+    """从本机/CI 推送镜像到配置的镜像仓库。"""
+    cfg = _config(target)
+    if not (cfg.get("registry") and cfg.get("namespace")):
+        raise ValueError("registry is not configured; set YYYL_REGISTRY and YYYL_NAMESPACE")
+    tag = _validate_arg("tag", tag)
+    container_tool = _container_tool(tool)
+    _local_run([container_tool, "push", _image(cfg, image, tag)])
 
 
 @task(help={"target": "目标名称，默认 prod", "image": "api/admin/nginx", "tag": "镜像标签"})
@@ -459,6 +573,30 @@ def release(ctx, target="prod", tag="", ref="", skip_build=False, skip_push=Fals
     if has_registry and not skip_push:
         push_image(ctx, target=target, image="api", tag=tag)
     deploy(ctx, target=target, tag=tag, skip_pull=not has_registry or skip_push)
+    health(ctx, target=target)
+
+
+@task(
+    help={
+        "target": "目标名称，默认 prod",
+        "tag": "镜像标签",
+        "tool": "本地容器工具，docker 或 podman；默认自动检测",
+        "platform": "镜像平台，默认 linux/amd64",
+        "skip_build": "跳过本地构建",
+        "skip_push": "跳过本地推送",
+    }
+)
+def registry_release_api(ctx, target="prod", tag="", tool="", platform="linux/amd64", skip_build=False, skip_push=False):
+    """本机/CI 构建并推送 API 镜像，生产机只拉取业务镜像并蓝绿发布。"""
+    tag = _validate_arg("tag", tag)
+    cfg = _config(target)
+    if not (cfg.get("registry") and cfg.get("namespace")):
+        raise ValueError("registry is not configured; set YYYL_REGISTRY and YYYL_NAMESPACE")
+    if not skip_build:
+        local_build_api(ctx, target=target, tag=tag, tool=tool, platform=platform)
+    if not skip_push:
+        local_push_image(ctx, target=target, image="api", tag=tag, tool=tool)
+    deploy(ctx, target=target, tag=tag, skip_pull=False)
     health(ctx, target=target)
 
 

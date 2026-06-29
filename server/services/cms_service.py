@@ -4,9 +4,9 @@ CMS 业务逻辑服务
 db 作为第一个参数传入。
 """
 
+import asyncio
 import json
 import mimetypes
-import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -26,6 +26,12 @@ from schemas.cms import (
     CmsPageCreate,
     CmsPageUpdate,
 )
+from utils.image_variants import (
+    ImageVariantError,
+    generate_image_variants,
+    inspect_image_size,
+    remove_image_variants,
+)
 from utils.sanitize import sanitize_cms_config
 
 # ---- 组件类型白名单（JSON Schema 基础校验） ----
@@ -44,6 +50,7 @@ ALLOWED_VIDEO_EXTS = {".mp4", ".webm"}
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10MB
 MAX_VIDEO_SIZE = 100 * 1024 * 1024  # 100MB
+IMAGES_ROOT = Path(__file__).resolve().parents[1] / "images"
 
 
 def _validate_config_schema(config: dict) -> None:
@@ -820,30 +827,7 @@ async def upload_asset(
             "code": "CMS_ASSET_MIME_MISMATCH", "message": "文件实际类型与扩展名不匹配",
         })
 
-    # 6. UUID 重命名
-    new_filename = f"{uuid.uuid4()}{ext}"
-    save_dir = Path("images/cms")
-    save_dir.mkdir(parents=True, exist_ok=True)
-    save_path = save_dir / new_filename
-
-    # 7. 写入磁盘
-    with open(save_path, "wb") as f:
-        f.write(content)
-
-    # 8. 获取图片尺寸
-    width, height = None, None
-    if file_type == "image":
-        from PIL import Image
-        img = Image.open(save_path)
-        width, height = img.size
-        # 分辨率限制
-        if width > 8000 or height > 8000:
-            os.remove(save_path)
-            raise HTTPException(status_code=400, detail={
-                "code": "CMS_ASSET_TOO_LARGE", "message": "图片分辨率超过8000×8000限制",
-            })
-
-    # 9. 存储容量检测（查询当前营地总容量）
+    # 6. 存储容量检测（查询当前营地总容量）
     total_result = await db.execute(
         select(func.sum(CmsAsset.file_size)).where(
             CmsAsset.site_id == site_id,
@@ -852,26 +836,71 @@ async def upload_asset(
     )
     total_size = total_result.scalar() or 0
     if total_size + len(content) > 10 * 1024 * 1024 * 1024:  # 10GB
-        os.remove(save_path)
         raise HTTPException(status_code=400, detail={
             "code": "CMS_ASSET_STORAGE_EXCEEDED", "message": "营地素材存储容量已满（上限10GB）",
         })
 
-    # 10. 创建记录
-    asset = CmsAsset(
-        site_id=site_id,
-        file_name=new_filename,
-        file_url=f"/images/cms/{new_filename}",
-        file_type=file_type,
-        file_size=len(content),
-        width=width,
-        height=height,
-        uploaded_by=admin_id,
-    )
-    db.add(asset)
-    await db.flush()
-    await db.refresh(asset)
-    return asset
+    # 7. UUID 重命名
+    new_filename = f"{uuid.uuid4()}{ext}"
+    save_dir = IMAGES_ROOT / "cms"
+    save_dir.mkdir(parents=True, exist_ok=True)
+    save_path = save_dir / new_filename
+
+    # 8. 写入磁盘并生成派生图
+    width, height = None, None
+    generated_variants: dict[str, Path] = {}
+    try:
+        await asyncio.to_thread(save_path.write_bytes, content)
+
+        if file_type == "image":
+            try:
+                width, height = await asyncio.to_thread(inspect_image_size, save_path)
+                generated_variants = await asyncio.to_thread(
+                    generate_image_variants,
+                    save_path,
+                    images_root=IMAGES_ROOT,
+                )
+            except ImageVariantError as exc:
+                raise HTTPException(status_code=400, detail={
+                    "code": "CMS_ASSET_INVALID_IMAGE",
+                    "message": str(exc),
+                }) from exc
+    except Exception:
+        save_path.unlink(missing_ok=True)
+        remove_image_variants(save_path, images_root=IMAGES_ROOT)
+        raise
+
+    try:
+        variant_size = sum(
+            path.stat().st_size
+            for path in generated_variants.values()
+        ) if file_type == "image" else 0
+        total_recorded_size = len(content) + variant_size
+        if total_size + total_recorded_size > 10 * 1024 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail={
+                "code": "CMS_ASSET_STORAGE_EXCEEDED",
+                "message": "营地素材存储容量已满（上限10GB）",
+            })
+
+        # 10. 创建记录
+        asset = CmsAsset(
+            site_id=site_id,
+            file_name=new_filename,
+            file_url=f"/images/cms/{new_filename}",
+            file_type=file_type,
+            file_size=total_recorded_size,
+            width=width,
+            height=height,
+            uploaded_by=admin_id,
+        )
+        db.add(asset)
+        await db.flush()
+        await db.refresh(asset)
+        return asset
+    except Exception:
+        save_path.unlink(missing_ok=True)
+        remove_image_variants(save_path, images_root=IMAGES_ROOT)
+        raise
 
 
 # ---- B端：删除素材（含 JSONB 引用检测） ----

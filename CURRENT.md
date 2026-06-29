@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-06-28 22:30:10 CST
+Last updated: 2026-06-29 11:19:34 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -25,6 +25,9 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 生产 `/opt/yyyl/server/.env` 已配置 `CAIYUN_API_TOKEN`（来自 PJproject 彩云默认 APP_TOKEN，勿打印明文），当前线上天气接口已返回小时级天气。
 - 生产测试数据配图已补齐：16 个 SKU 的 `image_url` 已回填到 `/images/test/test-sku-01.jpg` 至 `/images/test/test-sku-16.jpg`；10 个测试用户头像已回填到 `/images/test/test-avatar-01.jpg` 至 `/images/test/test-avatar-10.jpg`；商品主图 18 个已审计正常。
 - 生产 Nginx 已增加 `location ^~ /images/` 静态映射到 `/opt/yyyl/server/images/`，解决商品/测试图片公网 404。
+- 2026-06-29 已完成图片加载优化的分 agent review 并修复阻断项：后端 CMS 上传会为 JPG/PNG/WebP 自动生成 `thumb/large/banner` 派生图，坏图/超大图会返回 400 并清理原图和派生图；批量脚本 `server/scripts/generate_image_variants.py` 可在容器内补齐旧图、默认只补缺失规格、单张坏图不中断后续处理。
+- 2026-06-29 小程序图片解析已支持同域绝对 URL、JPG/PNG/WebP、已有 `thumb/large/banner` 路径规整；商品卡片、详情轮播、CMS Banner/CMS Image 均按场景加载派生图，变体 404 时本地回退原图，原图也失败时显示占位，不再修改 props/CMS 配置对象。
+- 2026-06-29 Admin 素材库预览已改为优先使用 `/images/thumb/...`，缩略图缺失时回退原图；选择素材仍保留原始 `file_url`。Podman 蓝绿发布脚本会创建并校验 `/app/images` 可写，生产 README 已补 Nginx 图片映射、容器内补图命令和后端/Admin/小程序发布顺序。
 - 本地 v1.7 已按需求实现完成并生成 HTML 报告：二维码独立生成、自定义页面二维码、订单高级筛选与导出、资金 pending/available 结算、增强退款策略、Admin 财务与退款界面、小程序扫码归因。
 - v1.7 验证已通过：后端 35 个相关单测 OK，Admin `npm run build` OK，小程序 `npm run type-check`、`build:wx:xijiao`、`build:wx:dalonggu` OK。Admin 仅有 Vite 大 chunk 警告，小程序仅有 uni-app/Sass 既有弃用警告。
 - 本地 v1.8 已按用户要求直接实现代码，不再停留在 PRD：共享库存池支持显式跨商品/SKU 绑定；D5 按企业微信群机器人实现；订单报价、购物车结算、价格日历、退款库存幂等、Admin 高风险页面、小程序商品详情/确认页、小程序智能客服/知识库、现场临时订单/现场收款、统一商品管理完整编辑器、退款审批队列均已接入。
@@ -55,6 +58,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - 统一商品管理完整编辑器已接入：Admin 可编辑基础信息、详情、类型扩展、SKU、状态、SKU 图片和 JSON 规格，并在商品类型切换时清理旧扩展。
   - 购物车免责声明闭环已接入：购物车结算先弹免责声明确认，用户确认后才携带 `disclaimer_signed=1`；`/cart/quote` 和 `/cart/checkout` 默认未签署，确认页显式透传签署态，后端最终由 `order_service.create_order` 校验 `require_disclaimer`。
 - v1.8 最新验证：后端编译 `python -m compileall -q models schemas routers services middleware tasks tests` OK；后端全量 `python -m unittest discover -s tests -p 'test_*.py' -v` 231 tests OK；Admin `node --test tests/v18-admin-contract.test.mjs` 11/11 OK 且 `npm run build` OK；小程序 `node --test tests/v18-product-flow.test.mjs` 35/35 OK、`npm run type-check` OK、`build:wx:xijiao` 和 `build:wx:dalonggu` OK；`git diff --check` 和三份 HTML 解析 OK。
+- 2026-06-29 图片优化复验：`python -m py_compile server/utils/image_variants.py server/scripts/generate_image_variants.py server/services/cms_service.py` OK；`PYTHONPATH=server python -m unittest server.tests.test_image_variants -v` OK；`node --test uni-app/tests/v18-product-flow.test.mjs` 37/37 OK；`uni-app npm run type-check`、`build:wx:xijiao`、`build:wx:dalonggu` OK；`admin npm run build` OK；`git diff --check` OK。
 - v1.8 生产上线审查 HTML：`docs/v1.8_production_review.html`，当前版本 `v1.8-production-review-rev15`。生产发布已按该版本代码执行，后续如继续迭代需另起增量版本或补充上线复盘。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
@@ -67,9 +71,10 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
 6. 生产启用真实天气前，在 `/opt/yyyl/server/.env` 配置 `CAIYUN_API_TOKEN`；不要把 token 写入仓库或文档。
 7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
-8. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli`，构建产物位于 `uni-app/dist/build/mp-weixin-xijiao` 和 `uni-app/dist/build/mp-weixin-dalonggu`，AppID 为 `wx98ecb419c0a6aeb7`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-9. Git 远端尚未推送：本地 `main` ahead `origin/main` 1，最近推送因 GitHub HTTPS 凭据不可用失败。补好 GitHub 凭据或改 SSH remote 后再推送 `df0e695`。
-10. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 `certbot renew --dry-run`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
+8. 图片优化上线顺序：先发布后端 API 并确认 `/app/images` 可写；在当前活跃 API 容器里执行 `cd /app && python scripts/generate_image_variants.py --images-root /app/images` 补齐旧图；再发布 Admin 静态资源；最后上传小程序构建包。
+9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli`，构建产物位于 `uni-app/dist/build/mp-weixin-xijiao` 和 `uni-app/dist/build/mp-weixin-dalonggu`，AppID 为 `wx98ecb419c0a6aeb7`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
+10. Git 远端尚未推送：本地 `main` ahead `origin/main` 1，最近推送因 GitHub HTTPS 凭据不可用失败。补好 GitHub 凭据或改 SSH remote 后再推送 `df0e695`。
+11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 `certbot renew --dry-run`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
 
@@ -80,7 +85,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 微信支付证书目录：`/opt/yyyl/secure/wechat-pay`，不要复制证书内容到文档或聊天。
 - Nginx 站点配置：`/www/server/panel/vhost/nginx/ttt.conf`。
 - SSL 证书路径：`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt`，私钥路径：`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key`（不要打印私钥内容）。Let’s Encrypt 源证书在 `/etc/letsencrypt/live/www.yyylcamp.com/`，自动续期部署 hook 为 `/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh`。
-- 生产图片目录：`/opt/yyyl/server/images`；本次测试图目录：`/opt/yyyl/server/images/test`。
+- 生产图片目录：`/opt/yyyl/server/images`；派生图目录为 `thumb/`、`large/`、`banner/`；本次测试图目录：`/opt/yyyl/server/images/test`。
 - 最近生产备份：
   - v1.8 发布前源码备份：`/opt/yyyl/backups/source-before-v18-20260627222038`。
   - v1.8 Admin 静态目录发布前备份：`/opt/yyyl/backups/admin-html-before-v18-20260627222038.tgz`。
@@ -241,23 +246,41 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 
 ### yyyl
 
-- path: `/Users/wangxiaochen/Projects/yyyl`
+- path: `/Users/nathan/Projects/yyyl`
 - branch: `main`
 - upstream: `origin/main`
-- head: `df0e695 feat: 实现 v1.8 全量上线能力`
-- uncommitted changes: `9`
+- head: `d903cb3 fix: 修复生产二维码和会员卡接口问题`
+- uncommitted changes: `27`
 - status sample:
 
 ```text
+ M AGENTS.md
+ M CLAUDE.md
  M CURRENT.md
+ M README.md
+ M admin/src/components/cms/AssetLibrary.vue
+ M fabfile.py
  M scripts/prod/06-deploy-blue-green.sh
  M scripts/prod/README.md
  M scripts/update-current.sh
- M server/routers/admin.py
- M server/tests/test_member_unified_contract.py
- M uni-app/src/components/weather-card/index.vue
+ M server/services/cms_service.py
+ M uni-app/src/components/cms/CmsBanner.vue
+ M uni-app/src/components/cms/CmsImage.vue
+ M uni-app/src/components/cms/CmsProductList.vue
+ M uni-app/src/components/default-home-page/index.vue
+ M uni-app/src/components/product-card/index.vue
+ M uni-app/src/pages/category/index.vue
+ M uni-app/src/pages/product-detail/index.vue
  M uni-app/src/utils/request.ts
  M uni-app/tests/v18-product-flow.test.mjs
+?? findings.md
+?? output/
+?? progress.md
+?? server/scripts/
+?? server/tests/test_image_variants.py
+?? server/utils/image_variants.py
+?? task_plan.md
+?? tmp/
 ```
 
 ## Operating Rule

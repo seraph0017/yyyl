@@ -14,19 +14,48 @@ const DEFAULT_SERVER_BASE = 'https://www.yyylcamp.com'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL
 const SERVER_BASE = import.meta.env.VITE_SERVER_BASE || DEFAULT_SERVER_BASE
+type ImageVariant = 'thumb' | 'large' | 'banner' | 'original'
+const IMAGE_VARIANT_PREFIX_RE = /^\/images\/(?:thumb|large|banner)\//
+
+function applyImageVariant(path: string, variant: ImageVariant): string {
+  const originalPath = path.replace(IMAGE_VARIANT_PREFIX_RE, '/images/')
+  if (variant === 'original') return originalPath
+  if (!originalPath.startsWith('/images/')) return originalPath
+  const pathWithoutQuery = originalPath.split(/[?#]/)[0]
+  if (!/\.(jpe?g|png|webp)$/i.test(pathWithoutQuery)) {
+    return originalPath
+  }
+  return originalPath.replace(/^\/images\//, `/images/${variant}/`)
+}
+
+function getSameServerImagePath(url: string): string | null {
+  if (!url.startsWith('https://') && !url.startsWith('http://')) return null
+  const httpsBase = SERVER_BASE.replace(/\/$/, '')
+  const httpBase = httpsBase.replace(/^https:\/\//, 'http://')
+  for (const base of [httpsBase, httpBase]) {
+    if (url === base) return '/'
+    if (url.startsWith(`${base}/`)) return url.slice(base.length)
+  }
+  return null
+}
 
 /**
  * 将后端返回的图片路径转换为完整 URL
  * 微信小程序要求图片必须使用 HTTPS 协议
  */
-export function resolveImageUrl(path: string): string {
+export function resolveImageUrl(path: string, variant: ImageVariant = 'original'): string {
   if (!path) return ''
+  const sameServerPath = getSameServerImagePath(path)
+  if (sameServerPath) {
+    return `${SERVER_BASE}${applyImageVariant(sameServerPath, variant)}`
+  }
   if (path.startsWith('https://')) return path
   if (path.startsWith('http://')) {
     // 微信小程序不支持 HTTP 图片，自动升级为 HTTPS
     return path.replace('http://', 'https://')
   }
-  const fullUrl = `${SERVER_BASE}${path.startsWith('/') ? '' : '/'}${path}`
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const fullUrl = `${SERVER_BASE}${applyImageVariant(normalizedPath, variant)}`
   // 开发环境 localhost 用 HTTP，小程序中图片无法加载，返回空让 placeholder 生效
   // #ifdef MP-WEIXIN
   if (fullUrl.startsWith('http://localhost') || fullUrl.startsWith('http://127.0.0.1')) {
@@ -34,6 +63,17 @@ export function resolveImageUrl(path: string): string {
   }
   // #endif
   return fullUrl
+}
+
+/**
+ * 将派生图片 URL 回退到原图 URL。
+ * 用于新增图片尚未生成 thumb/large/banner 时，避免小程序直接显示破图。
+ */
+export function fallbackOriginalImageUrl(url: string): string {
+  if (!url) return ''
+  return url.replace('/images/thumb/', '/images/')
+    .replace('/images/large/', '/images/')
+    .replace('/images/banner/', '/images/')
 }
 
 export interface RequestOptions {

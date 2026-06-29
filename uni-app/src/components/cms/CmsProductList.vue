@@ -99,7 +99,7 @@ const layoutMode = computed(() => props.data.layout || 'grid')
 /** 将后端商品列表项转为前端 IProduct */
 function mapProduct(item: Record<string, unknown>): IProduct {
   const images = (item.images as Array<{ url: string }>) || []
-  const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '') : ''
+  const coverImage = images.length > 0 ? resolveImageUrl(images[0].url || '', 'thumb') : ''
   const tags: string[] = []
   if (item.is_seckill) tags.push('秒杀')
 
@@ -120,7 +120,7 @@ function mapProduct(item: Record<string, unknown>): IProduct {
     category,
     description: (item.description as string) || '',
     cover_image: coverImage,
-    images: images.map((img) => resolveImageUrl(img.url || '')),
+    images: images.map((img) => resolveImageUrl(img.url || '', 'large')),
     base_price: parseFloat(String(item.base_price)) || 0,
     current_price: parseFloat(String(item.base_price)) || 0,
     original_price: parseFloat(String(item.base_price)) || 0,

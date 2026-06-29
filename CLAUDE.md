@@ -66,7 +66,11 @@ npm run build:wx:dalonggu
 npm run type-check
 ```
 
-Build output: `dist/build/mp-weixin/` → import into WeChat DevTools.
+Build output is prepared by `scripts/prepare-mp-weixin.mjs`:
+- 西郊林场：`dist/build/mp-weixin-xijiao`
+- 大聋谷：`dist/build/mp-weixin-dalonggu`
+
+Import the matching directory into WeChat DevTools.
 
 ### Infrastructure
 ```bash
@@ -77,6 +81,47 @@ docker run -d --name yyyl-redis -p 6379:6379 redis:7-alpine
 # Full stack via Docker Compose
 docker-compose up -d --build
 ```
+
+### Production Operations (Fabric + Podman)
+```bash
+# Inspect target config and server prerequisites
+fab info
+fab preflight
+fab check
+
+# Build API image on the production server
+fab build-api --tag=v0.1.0
+
+# Build and push API image locally/CI, then deploy by pulling from registry
+fab local-build-api --tag=v0.1.0
+fab local-push-image --image=api --tag=v0.1.0
+fab registry-release-api --tag=v0.1.0
+
+# Deploy FastAPI API with Podman blue-green containers
+fab deploy --tag=v0.1.0
+
+# Roll back to the other existing blue/green container
+fab rollback
+
+# Operations and troubleshooting
+fab status
+fab podman-ps
+fab logs --name=yyyl-api-blue --tail=200
+fab logs --name=yyyl-api-green --tail=200
+fab health
+fab nginx-test
+```
+
+Production deployment standard:
+- 线上服务运行方式优先使用 Podman，不使用 conda 直接运行 FastAPI。
+- API 蓝绿发布由 `scripts/prod/06-deploy-blue-green.sh` 执行，端口默认 `8001/8002`，容器名默认 `yyyl-api-blue` / `yyyl-api-green`。
+- Nginx 线上配置必须包含 `upstream yyyl_api_backend`，发布脚本只替换该 upstream 内的 `127.0.0.1:<port>`。
+- 当前线上宝塔 Nginx 站点配置路径为 `/www/server/panel/vhost/nginx/ttt.conf`。
+- 如使用镜像仓库，设置 `YYYL_REGISTRY` 和 `YYYL_NAMESPACE` 后优先运行 `fab registry-release-api`；该命令只发布 API，Admin 静态资源和小程序仍需单独发布。
+- 运行时图片目录为 `/opt/yyyl/server/images`，容器内挂载到 `/app/images`。该目录必须对容器内 `appuser` 可写；`scripts/prod/06-deploy-blue-green.sh` 会在发布前做宿主机和容器内写入校验。
+- 线上 Nginx 必须包含 `location ^~ /images/ { alias /opt/yyyl/server/images/; ... }`，用于公开原图和 `thumb/large/banner` 派生图。
+- 图片优化相关发布顺序：先发后端 API → 在当前活跃 API 容器内补齐旧图派生图 → 发 Admin 静态资源 → 上传小程序。
+- 手工通过 SSH/SFTP 放入 `/opt/yyyl/server/images` 的图片，需要在活跃 API 容器中执行：`cd /app && python scripts/generate_image_variants.py --images-root /app/images`。
 
 ## Architecture
 
@@ -124,6 +169,13 @@ docker-compose up -d --build
 - **API docs**: Available at `/docs` (Swagger) and `/redoc` in development mode only (disabled when `DEBUG=false`).
 - **Environment config**: Backend reads from `server/.env` via pydantic-settings. Template at `server/.env.example`.
 - **Static files**: Product images served from `server/images/` mounted at `/images`.
+- **Image variants**: JPG/PNG/WebP originals under `/images/...` should have three derived variants:
+  - `/images/thumb/...` for product cards and Admin asset previews.
+  - `/images/large/...` for product detail and normal image preview.
+  - `/images/banner/...` for home/CMS banners.
+- **CMS upload images**: Admin CMS uploads keep business data pointing at the original `file_url` such as `/images/cms/xxx.jpg`; backend generates variants automatically through `server/utils/image_variants.py`.
+- **Manual image backfill**: Use `server/scripts/generate_image_variants.py` for existing/manual images. The script skips `thumb/large/banner/qrcodes`, only fills missing variants by default, and uses `--force` to rebuild.
+- **Miniapp image URLs**: Miniapp code should call `resolveImageUrl(path, 'thumb' | 'large' | 'banner')` by display context. Do not mutate props or CMS config objects in image error fallbacks; use component-local fallback state.
 
 ## Design Systems
 

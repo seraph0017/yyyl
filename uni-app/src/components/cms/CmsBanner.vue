@@ -14,7 +14,7 @@
           <image
             v-if="!errorImages[idx]"
             class="cms-banner__image"
-            :src="resolveImageUrl(item.url)"
+            :src="bannerImageUrl(item.url, idx)"
             mode="aspectFill"
             :lazy-load="idx > 0"
             @error="onImageError(idx)"
@@ -58,7 +58,7 @@
  * 支持自动轮播、自定义指示器样式、图片点击跳转
  */
 import { ref, computed } from 'vue'
-import { resolveImageUrl } from '@/utils/request'
+import { fallbackOriginalImageUrl, resolveImageUrl } from '@/utils/request'
 import type { CmsBannerProps, CmsComponentStyle, CmsLink } from '@/types/cms'
 
 interface Props {
@@ -73,6 +73,7 @@ const emit = defineEmits<{
 
 const currentIndex = ref(0)
 const errorImages = ref<Record<number, boolean>>({})
+const fallbackImages = ref<Record<number, string>>({})
 
 /** 指示器样式，默认 dot */
 const indicatorStyle = computed(() => props.data.indicator_style || 'dot')
@@ -89,8 +90,21 @@ function onImageTap(link: CmsLink) {
   }
 }
 
+function bannerImageUrl(url: string, idx: number) {
+  return fallbackImages.value[idx] || resolveImageUrl(url, 'banner')
+}
+
 /** 图片加载失败 */
 function onImageError(idx: number) {
+  const item = props.data.images?.[idx]
+  if (item?.url) {
+    const variantUrl = bannerImageUrl(item.url, idx)
+    const fallbackUrl = fallbackOriginalImageUrl(variantUrl)
+    if (fallbackUrl && fallbackUrl !== variantUrl) {
+      fallbackImages.value = { ...fallbackImages.value, [idx]: fallbackUrl }
+      return
+    }
+  }
   errorImages.value = { ...errorImages.value, [idx]: true }
 }
 </script>

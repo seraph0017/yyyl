@@ -11,7 +11,7 @@
           v-if="!errorImages[idx]"
           class="cms-image__img"
           :class="{ 'cms-image__img--multi': data.layout !== 'single' }"
-          :src="resolveImageUrl(item.url)"
+          :src="cmsImageUrl(item.url, idx)"
           :mode="data.layout === 'single' ? 'widthFix' : 'aspectFill'"
           :lazy-load="idx > 0"
           @error="onImageError(idx)"
@@ -31,7 +31,7 @@
  * 支持 single / two-column / three-column / four-grid 四种布局
  */
 import { ref, computed } from 'vue'
-import { resolveImageUrl } from '@/utils/request'
+import { fallbackOriginalImageUrl, resolveImageUrl } from '@/utils/request'
 import type { CmsImageProps, CmsComponentStyle, CmsLink } from '@/types/cms'
 
 interface Props {
@@ -45,9 +45,23 @@ const emit = defineEmits<{
 }>()
 
 const errorImages = ref<Record<number, boolean>>({})
+const fallbackImages = ref<Record<number, string>>({})
+
+function cmsImageUrl(url: string, idx: number) {
+  return fallbackImages.value[idx] || resolveImageUrl(url, 'large')
+}
 
 /** 图片加载失败 */
 function onImageError(idx: number) {
+  const item = props.data.images?.[idx]
+  if (item?.url) {
+    const variantUrl = cmsImageUrl(item.url, idx)
+    const fallbackUrl = fallbackOriginalImageUrl(variantUrl)
+    if (fallbackUrl && fallbackUrl !== variantUrl) {
+      fallbackImages.value = { ...fallbackImages.value, [idx]: fallbackUrl }
+      return
+    }
+  }
   errorImages.value = { ...errorImages.value, [idx]: true }
 }
 
@@ -71,7 +85,7 @@ function onImageTap(item: { url: string; link: CmsLink }, idx: number) {
     emit('link-tap', item.link)
   } else {
     // 长按/点击预览大图
-    const urls = (props.data.images || []).map((img) => resolveImageUrl(img.url))
+    const urls = (props.data.images || []).map((img, imageIdx) => cmsImageUrl(img.url, imageIdx))
     uni.previewImage({
       urls,
       current: idx,

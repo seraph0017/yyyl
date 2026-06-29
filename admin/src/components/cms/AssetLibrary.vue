@@ -37,7 +37,12 @@
       >
         <!-- 图片缩略图 -->
         <template v-if="asset.file_type === 'image'">
-          <img :src="asset.file_url" :alt="asset.file_name" class="asset-thumb" @error="onImageError" />
+          <img
+            :src="assetPreviewUrl(asset)"
+            :alt="asset.file_name"
+            class="asset-thumb"
+            @error="onImageError($event, asset)"
+          />
         </template>
         <!-- 视频缩略图 -->
         <template v-else>
@@ -114,6 +119,7 @@ const total = ref(0)
 const filterFileType = ref(props.fileType || '')
 const selectedIds = ref<Set<number>>(new Set())
 const selectedAssets = ref<CmsAsset[]>([])
+const assetFallbackIds = ref<Set<number>>(new Set())
 
 // 文件类型相关
 const fileTypeLabel = computed(() => {
@@ -128,12 +134,23 @@ const acceptType = computed(() => {
   return 'image/*,video/*'
 })
 
+function assetPreviewUrl(asset: CmsAsset) {
+  if (asset.file_type !== 'image') return asset.file_url
+  const fileUrl = asset.file_url || ''
+  if (assetFallbackIds.value.has(asset.id)) return fileUrl
+  if (!fileUrl.startsWith('/images/')) return fileUrl
+  if (fileUrl.startsWith('/images/thumb/') || fileUrl.startsWith('/images/large/') || fileUrl.startsWith('/images/banner/')) return fileUrl
+  if (!/\.(jpe?g|png|webp)$/i.test(fileUrl)) return fileUrl
+  return fileUrl.replace('/images/', '/images/thumb/')
+}
+
 // 打开弹窗时加载数据
 watch(() => props.visible, (val) => {
   if (val) {
     filterFileType.value = props.fileType || ''
     selectedIds.value = new Set()
     selectedAssets.value = []
+    assetFallbackIds.value = new Set()
     page.value = 1
     fetchAssets()
   }
@@ -172,6 +189,10 @@ function toggleSelect(asset: CmsAsset) {
     selectedIds.value = new Set([asset.id])
     selectedAssets.value = [asset]
   }
+}
+
+function markAssetFallback(asset: CmsAsset) {
+  assetFallbackIds.value = new Set([...assetFallbackIds.value, asset.id])
 }
 
 // 上传前校验
@@ -237,7 +258,12 @@ function handleConfirm() {
 }
 
 // 图片加载失败处理
-function onImageError(e: Event) {
+function onImageError(e: Event, asset: CmsAsset) {
+  if (!assetFallbackIds.value.has(asset.id) && assetPreviewUrl(asset) !== asset.file_url) {
+    markAssetFallback(asset)
+    return
+  }
+
   const img = e.target as HTMLImageElement
   img.style.display = 'none'
   // 显示一个占位背景
