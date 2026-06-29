@@ -139,7 +139,7 @@ fab nginx-test
 ## 微信支付排查
 
 ```bash
-# 查看最近支付错误，注意不要打印 .env 或证书内容
+# 查看近30分钟支付错误，注意不要打印 .env 或证书内容
 podman logs --since 30m yyyl-api-blue 2>&1 | grep -E "微信支付|NO_AUTH|PARAM_ERROR|/api/v1/orders/.*/pay"
 podman logs --since 30m yyyl-api-green 2>&1 | grep -E "微信支付|NO_AUTH|PARAM_ERROR|/api/v1/orders/.*/pay"
 

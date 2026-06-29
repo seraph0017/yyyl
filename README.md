@@ -370,9 +370,7 @@ fab rollback
 export YYYL_REGISTRY=ccr.ccs.tencentyun.com
 export YYYL_NAMESPACE=your-namespace
 
-fab build --tag=v0.1.0
-fab push-image --tag=v0.1.0
-fab deploy --tag=v0.1.0
+fab registry-release-api --tag=v0.1.0
 ```
 
 线上关键约定：
@@ -410,7 +408,7 @@ npm run type-check
 
 ```bash
 cd server
-/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+conda run -n yyyl python -m unittest discover -s tests -p 'test_*.py' -v
 
 cd ../admin
 npm run build

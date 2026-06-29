@@ -3268,7 +3268,7 @@ sequenceDiagram
     Note over Client,DB: === 定时校正（兜底一致性） ===
 
     Note over API: Celery Beat 每10分钟执行
-    API->>DB: SELECT * FROM inventory WHERE date >= today
+    API->>DB: SELECT * FROM inventory WHERE date >= current_date
     API->>Redis: 对比Redis与DB数据
     alt 发现不一致
         API->>Redis: 以DB数据为准覆盖Redis
@@ -3392,11 +3392,11 @@ return remaining  -- 返回剩余库存
 
 | # | 任务名称 | Cron表达式 | 执行逻辑 | 失败处理 | 幂等性保障 |
 |---|---------|-----------|---------|---------|-----------|
-| 5 | `task_annual_card_expire` | `0 0 * * *`（每天0点） | 扫描 `AnnualCard` 中 `end_date < today()` 且 `status='active'`，更新为 `expired` | 重试3次 | `WHERE status='active' AND end_date < today()` |
-| 6 | `task_times_card_expire` | `0 0 * * *`（每天0点） | 扫描 `TimesCard` 中 `end_date < today()` 且 `status='active'`，更新为 `expired` | 同上 | 同上 |
+| 5 | `task_annual_card_expire` | `0 0 * * *`（每天0点） | 扫描 `AnnualCard` 中 `end_date < current_date` 且 `status='active'`，更新为 `expired` | 重试3次 | `WHERE status='active' AND end_date < current_date` |
+| 6 | `task_times_card_expire` | `0 0 * * *`（每天0点） | 扫描 `TimesCard` 中 `end_date < current_date` 且 `status='active'`，更新为 `expired` | 同上 | 同上 |
 | 7 | `task_annual_card_expire_remind` | `0 9 * * *`（每天9点） | 扫描年卡 `end_date` 在未来7天和1天内的记录，发送微信订阅消息提醒续费 | 发送失败记录日志不重试 | `Notification` 表去重 `(user_id, type, related_id)` |
 | 8 | `task_times_card_expire_remind` | `0 9 * * *`（每天9点） | 扫描次数卡 `end_date` 在未来7天和1天内的记录，发送微信订阅消息提醒使用 | 同上 | 同上 |
-| 9 | `task_points_expire` | `0 1 * * *`（每天1点） | 扫描 `PointsLog` 中 `expires_at < today()` 且未标记过期的记录，扣减 `points_balance`，记录变动日志 | 逐条处理 | 基于 `PointsLog.is_expired` 标记 |
+| 9 | `task_points_expire` | `0 1 * * *`（每天1点） | 扫描 `PointsLog` 中 `expires_at < current_date` 且未标记过期的记录，扣减 `points_balance`，记录变动日志 | 逐条处理 | 基于 `PointsLog.is_expired` 标记 |
 
 #### 7.2.4 财务类
 
@@ -3853,8 +3853,8 @@ class NotificationService:
 | `template_type` | `VARCHAR(50)` | 模板类型（`order_paid`, `trip_remind`等） |
 | `wx_template_id` | `VARCHAR(64)` | 微信模板ID |
 | `remaining_count` | `INTEGER` | 剩余可推送次数（订阅+1，推送-1） |
-| `last_subscribed_at` | `TIMESTAMPTZ` | 最近一次订阅时间 |
-| `last_sent_at` | `TIMESTAMPTZ` | 最近一次推送时间 |
+| `last_subscribed_at` | `TIMESTAMPTZ` | 上次订阅时间 |
+| `last_sent_at` | `TIMESTAMPTZ` | 上次推送时间 |
 
 #### 订阅引导策略
 

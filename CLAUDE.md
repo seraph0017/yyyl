@@ -10,6 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `CURRENT.md` is the canonical live handoff snapshot for this repository. Read it first when entering the project, then check `git status --short`.
 - Keep `CURRENT.md` operational but not overly terse. It should preserve current focus, next steps, recent fixes, production deployment state, important paths, verification commands, and dirty-worktree warnings.
+- This repository may be touched by more than one developer. When writing docs or shell examples, prefer repo-relative paths and environment names over hardcoded personal home directories or usernames.
 - Do not collapse `CURRENT.md` to only branch/status output unless the user explicitly asks for a short status file.
 - Do not store secrets, tokens, passwords, private keys, certificate contents, DSNs with credentials, or admin credentials in `CURRENT.md`.
 - A Claude Code project hook is configured in `.claude/settings.local.json` to run `scripts/update-current.sh` after tool use and at turn stop.
@@ -136,25 +137,25 @@ Production deployment standard:
 - Adding a new campsite: add to `sites.ts`, create `.env.{code}`, add build scripts to `package.json`, allow new site_id in `middleware/site.py`.
 
 ### Backend Layers (server/)
-- **models/** — SQLAlchemy models (56+ tables). All inherit from `models/base.py` which provides `id`, `created_at`, `updated_at`, `is_deleted` (soft delete).
+- **models/** — SQLAlchemy models (75 tables). All inherit from `models/base.py` which provides `id`, `created_at`, `updated_at`, `is_deleted` (soft delete).
 - **schemas/** — Pydantic v2 request/response models.
-- **routers/** — 19 API route modules, all prefixed `/api/v1/`. Registered in `main.py`.
-- **services/** — Business logic layer (14 services).
-- **tasks/** — Celery async tasks (25 scheduled tasks). Config in `celery_config.py`, app instance in `celery_app.py`.
+- **routers/** — 24 API route modules, all prefixed `/api/v1/`. Registered in `main.py`.
+- **services/** — Business logic layer (25 services).
+- **tasks/** — Celery async tasks (10 scheduled tasks). Config in `celery_config.py`, app instance in `celery_app.py`.
 - **middleware/** — `auth.py` (JWT auth), `site.py` (campsite isolation).
 - **config.py** — pydantic-settings singleton loading from `.env`.
 - **database.py** — Async SQLAlchemy engine + session factory + `get_db()` dependency.
 
 ### Admin Dashboard Layers (admin/src/)
-- **api/** — 15 API modules (axios-based).
-- **views/** — 24 page views.
+- **api/** — 20 API modules (axios-based).
+- **views/** — 36 page views.
 - **router/** — Vue Router config with permission guards.
 - **stores/** — Pinia state management.
 - **styles/** — SCSS theme system with CSS variables (`--color-primary`, `--color-accent`, etc.). Element Plus theme override via `styles/element.scss`.
 - Auto-import configured: Vue/VueRouter/Pinia APIs and Element Plus components are auto-imported (unplugin).
 
 ### uni-app Layers (uni-app/src/)
-- **pages/** — 17 main pages (Vue3 SFC).
+- **pages/** — 20 main pages (Vue3 SFC).
 - **pages-sub/** — Subpackage pages (campsite map, games).
 - **components/** — Shared components.
 - **config/** — Campsite brand config (`sites.ts`).

@@ -12,6 +12,13 @@ NOW="$(date '+%Y-%m-%d %H:%M:%S %Z')"
 repo_block() {
   local label="$1"
   local dir="$2"
+  local rel_path="$dir"
+
+  if [[ "$dir" == "$ROOT" ]]; then
+    rel_path="."
+  elif [[ "$dir" == "$ROOT/"* ]]; then
+    rel_path="${dir#"$ROOT/"}"
+  fi
 
   if [[ ! -d "$dir/.git" ]]; then
     printf '### %s\n\n- repo: `%s`\n- status: not a git repository\n\n' "$label" "$dir"
@@ -25,7 +32,7 @@ repo_block() {
   status_count="$(git -C "$dir" status --short 2>/dev/null | wc -l | tr -d ' ')"
 
   printf '### %s\n\n' "$label"
-  printf -- '- path: `%s`\n' "$dir"
+  printf -- '- path: `%s`\n' "$rel_path"
   printf -- '- branch: `%s`\n' "${branch:-detached}"
   if [[ -n "$upstream" ]]; then
     printf -- '- upstream: `%s`\n' "$upstream"
@@ -53,7 +60,7 @@ Last updated: ${NOW}
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
-Keep concrete current state here: active focus, recent fixes, deployed versions,
+Keep concrete current state here: active focus, notable fixes, deployed versions,
 important paths, verification commands, dirty-worktree warnings, and next actions.
 Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 -->
@@ -89,7 +96,6 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-06-28 已将小程序请求层默认兜底改为生产域名：即使缺少 \`.env.{site}\` 或使用通用 \`mp-weixin\` 构建，\`uni-app/src/utils/request.ts\` 也会默认请求 \`https://www.yyylcamp.com/api/v1\`，避免再次出现 \`localhost:8000\`。
 - 生产 SSL 证书已更换为 Let’s Encrypt ECDSA 证书，域名 \`www.yyylcamp.com\`，有效期 \`2026-06-27 13:55:06 UTC\` 至 \`2026-09-25 13:55:05 UTC\`；当前 Nginx 证书路径仍为 \`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt\` 与 \`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key\`。已配置 certbot webroot 和部署 hook \`/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh\`，并启用 \`certbot-renew.timer\`。
 - SSL 续期注意：\`certbot certonly --webroot --dry-run\` 和正式签发已成功，公网 \`http://www.yyylcamp.com/.well-known/acme-challenge/...\` 已验证 200；但一次 \`certbot renew --dry-run\` 在 Let’s Encrypt 二次校验阶段出现超时/挂起，当前证书不受影响。下次续期前建议复跑 \`certbot renew --dry-run\`，若仍失败，优先检查腾讯云安全组/线路对公网 80 的稳定可达性。
-- 本地 \`main\` 已提交 \`df0e695\` 且领先 \`origin/main\` 1 个提交；\`git push origin main\` 因 GitHub HTTPS 凭据不可用失败（\`could not read Username\`），远端尚未更新。
 - v1.8 已补并复验多个发布阻断/复审问题：
   - \`/api/v1/auth/phone-login\` 真实调用微信 \`wxa/business/getuserphonenumber\` 获取手机号，写入 \`User.phone\` 并返回带脱敏手机号的登录态。
   - 高危操作二次确认统一 bcrypt 校验操作密码，确认 token 绑定 admin/site/action/request_hash；高风险库存池和企业微信写接口会按当前请求 body 复算 SHA-256 摘要，校验 \`X-Site-Id\` 目标站点。
@@ -115,15 +121,15 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 ## Practical Next Steps
 
 1. 用户继续真实下单/支付测试时，先看线上容器日志：\`podman logs --tail 300 yyyl-api-blue\` 或 \`yyyl-api-green\`。
-2. 如出现提交订单失败，优先检查 \`/api/v1/orders\` 栈追踪；最近已修过创建成功后返回订单详情时的 async 懒加载问题。
+2. 如出现提交订单失败，优先检查 \`/api/v1/orders\` 栈追踪；2026-06-29 已修复创建成功后返回订单详情时的 async 懒加载问题。
 3. 如出现支付请求失败，检查 \`services/wechat_pay_service.py\` 抛出的微信支付 API 返回码、商户证书序列号、公钥 ID、APIv3 密钥和用户 openid。
-4. 后续常规发布最好修复服务器 Docker Hub 拉取 \`python:3.11-slim\` 超时问题；最近一次上线采用基于既有镜像的离线派生方式。
+4. 后续常规发布最好修复服务器 Docker Hub 拉取 \`python:3.11-slim\` 超时问题；2026-06-29 的图片优化发布采用基于既有镜像的离线派生方式。
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
 6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
 7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
 8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 \`/opt/yyyl/server/images/\`，仍需在当前活跃 API 容器执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐派生图。
 9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，最新构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-10. GitHub \`origin/main\` 已推送到 \`4b92d69 feat: 优化图片派生图加载链路\`；生产 API 当前运行该提交对应业务代码。
+10. GitHub \`origin/main\` 当前同步到 \`ad0a959 docs: 记录图片优化生产发布\`；如需回看图片优化业务变更，相关提交仍是 \`4b92d69 feat: 优化图片派生图加载链路\`。
 11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 \`certbot renew --dry-run\`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
@@ -136,7 +142,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - Nginx 站点配置：\`/www/server/panel/vhost/nginx/ttt.conf\`。
 - SSL 证书路径：\`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com_bundle.crt\`，私钥路径：\`/etc/nginx/ssl/www.yyylcamp.com/www.yyylcamp.com.key\`（不要打印私钥内容）。Let’s Encrypt 源证书在 \`/etc/letsencrypt/live/www.yyylcamp.com/\`，自动续期部署 hook 为 \`/etc/letsencrypt/renewal-hooks/deploy/yyyl-nginx-cert.sh\`。
 - 生产图片目录：\`/opt/yyyl/server/images\`；派生图目录为 \`thumb/\`、\`large/\`、\`banner/\`；本次测试图目录：\`/opt/yyyl/server/images/test\`。
-- 最近生产备份：
+- 生产备份：
   - 图片优化发布前源码备份：\`/opt/yyyl/backups/source-before-image-variants-20260629160504.tgz\`。
   - 图片优化 Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-image-variants-20260629161130.tgz\`。
   - v1.8 发布前源码备份：\`/opt/yyyl/backups/source-before-v18-20260627222038\`。
@@ -148,7 +154,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Nginx 图片映射前配置备份：\`/opt/yyyl/backups/ttt.conf.images_fix_20260618_144345.bak\`。
   - Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-20260620135346.tgz\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
-- 最近生产镜像：
+- 生产镜像：
   - \`yyyl-api:image-variants-4b92d69\`：图片派生图生产镜像，基于 \`localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628\` 离线派生，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`。
   - \`yyyl-api:v1.8-hotfix-qrcode-membership-20260628\`：二维码和会员卡接口热修镜像，发布图片优化前活跃于 \`yyyl-api-blue\`，当前已停止保留用于回滚。
   - \`yyyl-api:v1.8-df0e695\`：v1.8 全量上线镜像，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，数据库版本 \`1a2b3c4d5e6f\`。
@@ -193,7 +199,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 Admin 登录错误提示已修正为读取 FastAPI \`detail.message\`，相关文件：\`admin/src/utils/http-error.js\`、\`admin/src/utils/request.ts\`、\`admin/src/components/landing/LoginDialog.vue\`。
 - v1.8 微信手机号授权登录已补齐真实服务：\`server/services/auth_service.py::phone_login()\`、\`_get_phone_number()\`、\`_get_wechat_access_token()\`；路由 \`server/routers/auth.py::phone_login()\` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：\`server/routers/admin.py::verify_operation_password()\` 使用 bcrypt \`verify_password()\`，返回短 TTL \`confirm_token\`；\`verify_confirm_code()\` 不再接受 hash 前缀。
-- 本地和远端 Git 最近提交：
+- 本地和远端 Git 提交：
+  - \`ad0a959 docs: 记录图片优化生产发布\`
   - \`4b92d69 feat: 优化图片派生图加载链路\`
   - \`c29a7b3 docs: 优化项目 README 展示\`
   - \`d903cb3 fix: 修复生产二维码和会员卡接口问题\`
@@ -204,30 +211,30 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 
 \`\`\`bash
 # 后端微信支付 / 订单相关回归
-cd /Users/nathan/Projects/yyyl/server
-/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest \\
+cd server
+conda run -n yyyl python -m unittest \\
   tests/test_order_routes.py \\
   tests/test_wechat_pay_service.py \\
   tests/test_payment_routes.py \\
   tests/test_order_schema.py -v
 
 # FastAPI 路由注册检查
-cd /Users/nathan/Projects/yyyl/server
-/Users/nathan/miniconda3/envs/yyyl/bin/python -c "from main import app; print([r.path for r in app.routes if 'payments/wechat' in r.path])"
+cd server
+conda run -n yyyl python -c "from main import app; print([r.path for r in app.routes if 'payments/wechat' in r.path])"
 
 # 彩云天气服务解析和内存缓存
-cd /Users/nathan/Projects/yyyl/server
-/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest tests/test_weather_service.py -v
+cd server
+conda run -n yyyl python -m unittest tests/test_weather_service.py -v
 
 # 小程序类型检查和构建
-cd /Users/nathan/Projects/yyyl/uni-app
+cd uni-app
 npm run type-check
 npm run build:wx:xijiao
 npm run build:wx:dalonggu
 
 # v1.7 后端回归
-cd /Users/nathan/Projects/yyyl/server
-/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest \\
+cd server
+conda run -n yyyl python -m unittest \\
   tests/test_qrcode_service.py \\
   tests/test_order_filters.py \\
   tests/test_order_export_service.py \\
@@ -238,35 +245,35 @@ cd /Users/nathan/Projects/yyyl/server
   tests/test_order_routes.py -v
 
 # v1.7 Admin 构建
-cd /Users/nathan/Projects/yyyl/admin
+cd admin
 npm run build
 
 # v1.8 完整后端回归
-cd /Users/wangxiaochen/Projects/yyyl/server
-PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+cd server
+PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest discover -s tests -p 'test_*.py' -v
 
 # v1.8 手机号授权阻断项回归
-cd /Users/wangxiaochen/Projects/yyyl/server
-PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_auth_service.py tests/test_v18_contracts.py -v
+cd server
+PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_auth_service.py tests/test_v18_contracts.py -v
 
 # v1.8 高危确认阻断项回归
-cd /Users/wangxiaochen/Projects/yyyl/server
-PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_admin_confirm_routes.py -v
+cd server
+PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_admin_confirm_routes.py -v
 
 # v1.8 Admin 合同测试与构建
-cd /Users/wangxiaochen/Projects/yyyl/admin
+cd admin
 node --test tests/v18-admin-contract.test.mjs
 npm run build
 
 # v1.8 小程序合同测试、类型检查与双营地构建
-cd /Users/wangxiaochen/Projects/yyyl/uni-app
+cd uni-app
 node --test tests/v18-product-flow.test.mjs
 npm run type-check
 npm run build:wx:xijiao
 npm run build:wx:dalonggu
 
 # v1.8 diff/HTML 基础检查
-cd /Users/wangxiaochen/Projects/yyyl
+cd .
 git diff --check
 python3 - <<'PY'
 from html.parser import HTMLParser
@@ -307,7 +314,7 @@ EOF
 ## Operating Rule
 
 - This file is the handoff snapshot for the repo.
-- Keep this file long enough to be useful after context loss. Include concrete recent fixes, deployment state, important paths, verification results, and dirty-worktree warnings.
+- Keep this file long enough to be useful after context loss. Include concrete notable fixes, deployment state, important paths, verification results, and dirty-worktree warnings.
 - Do not collapse it to only branch/status output unless the user explicitly asks for a short status file.
 - Claude Code hook: `.claude/settings.local.json` runs `scripts/update-current.sh` after tool use / stop events.
 - Codex rule: before ending a user-request turn in this repo, run `scripts/update-current.sh` if project state changed.

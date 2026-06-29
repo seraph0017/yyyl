@@ -244,37 +244,37 @@
     <tbody>
       <tr>
         <td>后端完整单测</td>
-        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest discover -s tests -p 'test_*.py' -v</code></td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest discover -s tests -p 'test_*.py' -v</code></td>
         <td><span class="ok">231 tests OK</span>；覆盖 v1.7/v1.8 合同、订单、支付、退款、票券、天气、微信支付、智能客服知识库、统一会员卡与年卡购买闭环、临时订单/现场收款、退款队列权限、购物车免责声明闭环等本地测试。仅有测试环境默认 JWT/AES key warning。</td>
       </tr>
       <tr>
         <td>年卡/退款并发幂等 focused 回归</td>
-        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_annual_card_purchase.py tests/test_member_unified_contract.py tests/test_refund_service.py tests/test_v18_contracts.py -v</code></td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_annual_card_purchase.py tests/test_member_unified_contract.py tests/test_refund_service.py tests/test_v18_contracts.py -v</code></td>
         <td><span class="ok">84 tests OK</span>；覆盖年卡购买订单、待支付订单唯一竞态、支付后激活 savepoint 幂等、booking-check 站点透传、退款 SUCCESS 重放、退款财务流水唯一护栏和 v1.8 合同。</td>
       </tr>
       <tr>
         <td>手机号授权单测</td>
-        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_auth_service.py -v</code></td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_auth_service.py -v</code></td>
         <td><span class="ok">2 tests OK</span>；覆盖微信手机号接口调用、手机号落库与异常响应；已包含于 231 个后端全量测试。</td>
       </tr>
       <tr>
         <td>员工核销安全回归</td>
-        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_ticket_service.py tests/test_auth_middleware.py -v</code></td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_ticket_service.py tests/test_auth_middleware.py -v</code></td>
         <td><span class="ok">73 tests OK</span>；覆盖扫码订单/票券状态拒绝、年卡验证码提交前复核订单状态、状态轮询 staff/site/source owner 校验、admin token 数据库角色复核、普通用户拒绝访问以及 v1.8 票券合同。</td>
       </tr>
       <tr>
         <td>v1.8 后端合同与智能客服测试</td>
-        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_customer_service_knowledge.py tests/test_v18_contracts.py -v</code></td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_customer_service_knowledge.py tests/test_v18_contracts.py -v</code></td>
         <td><span class="ok">60 tests OK</span>；覆盖共享库存、完整库存日历、企业微信、地图浏览、订单报价、手机号授权、票券核销、购物车报价、智能客服知识库、反馈 token、上传限流和客服配置权限；已包含于后端全量测试。</td>
       </tr>
       <tr>
         <td>高危确认单测</td>
-        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m unittest tests/test_admin_confirm_routes.py -v</code></td>
+        <td><code>cd server &amp;&amp; PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest tests/test_admin_confirm_routes.py -v</code></td>
         <td><span class="ok">8 tests OK</span>；覆盖 bcrypt 操作密码、super_admin 限制、显式 <code>X-Site-Id</code>、token 绑定 admin/site/action/request_hash、请求内容 mismatch、空 request_hash 拒绝、hash 前缀不能通过旧确认码入口。</td>
       </tr>
       <tr>
         <td>后端编译</td>
-        <td><code>PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache /Users/wangxiaochen/miniconda3/envs/yyyl/bin/python -m py_compile ...</code></td>
+        <td><code>PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m py_compile ...</code></td>
         <td><span class="ok">通过</span>；覆盖后端模型、schema、router、service、middleware、task、test 的 Python 编译检查。</td>
       </tr>
       <tr>

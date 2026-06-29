@@ -30,7 +30,7 @@ upgrade/downgrade。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb1"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_model_imports.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_model_imports.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>依赖</strong>：无。</p>
 <h4 id="task-2定义后端-schema-与路由空壳-已完成">Task 2：定义后端 schema
 与路由空壳 ✅ 已完成</h4>
@@ -48,7 +48,7 @@ checked="" />不影响现有订单/支付路由。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-c</span> <span class="st">&quot;from main import app; print(len(app.routes))&quot;</span></span></code></pre></div>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-c</span> <span class="st">&quot;from main import app; print(len(app.routes))&quot;</span></span></code></pre></div>
 <p><strong>依赖</strong>：Task 1。</p>
 <h3 id="checkpoint-1后端契约">Checkpoint 1：后端契约</h3>
 <ul class="task-list">
@@ -78,7 +78,7 @@ checked="" />停用二维码无法跳转。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_qrcode_service.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_qrcode_service.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>实现记录</strong>：</p>
 <ul>
 <li>新增
@@ -188,7 +188,7 @@ checked="" />关键词支持订单号、用户昵称、手机号、商品名。<
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb6"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_order_filters.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_order_filters.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>实现记录</strong>：</p>
 <ul>
 <li>新增
@@ -217,7 +217,7 @@ row_count。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb7"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_order_export_service.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_order_export_service.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>实现记录</strong>：</p>
 <ul>
 <li>新增
@@ -291,7 +291,7 @@ checked="" />年卡/次数卡/积分兑换不进入 pending。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb9"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_payment_routes.py tests/test_settlement_service.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_payment_routes.py tests/test_settlement_service.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>实现记录</strong>：</p>
 <ul>
 <li>新增
@@ -323,7 +323,7 @@ checked="" />重复完成/重复补偿不重复结算。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb10"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_settlement_service.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_settlement_service.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>依赖</strong>：Task 9。</p>
 <h4 id="task-11admin-财务结算展示-已完成">Task 11：Admin 财务结算展示 ✅
 已完成</h4>
@@ -370,7 +370,7 @@ checked="" />退款创建记录完整。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb12"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_refund_service.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_refund_service.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>依赖</strong>：Task 1、Task 9。</p>
 <h4 id="task-13微信退款回调与补偿-已完成">Task 13：微信退款回调与补偿 ✅
 已完成</h4>
@@ -389,7 +389,7 @@ RefundRecord。</label></li>
 <p><strong>验证</strong>：</p>
 <div class="sourceCode" id="cb13"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest tests/test_refund_service.py tests/test_payment_routes.py <span class="at">-v</span></span></code></pre></div>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest tests/test_refund_service.py tests/test_payment_routes.py <span class="at">-v</span></span></code></pre></div>
 <p><strong>依赖</strong>：Task 10、Task 12。</p>
 <h4 id="task-14admin-统一退款弹窗与退款历史-已完成">Task 14：Admin
 统一退款弹窗与退款历史 ✅ 已完成</h4>
@@ -420,7 +420,7 @@ checked="" />微信退款、订单状态、库存、电子票、资金账户一�
 <h2 id="最终验收">3. 最终验收</h2>
 <div class="sourceCode" id="cb15"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> server</span>
-<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">/Users/nathan/miniconda3/envs/yyyl/bin/python</span> <span class="at">-m</span> unittest <span class="dt">\</span></span>
+<span id="cb15-2"><a href="#cb15-2" aria-hidden="true" tabindex="-1"></a><span class="ex">conda run -n yyyl python</span> <span class="at">-m</span> unittest <span class="dt">\</span></span>
 <span id="cb15-3"><a href="#cb15-3" aria-hidden="true" tabindex="-1"></a>  tests/test_qrcode_service.py <span class="dt">\</span></span>
 <span id="cb15-4"><a href="#cb15-4" aria-hidden="true" tabindex="-1"></a>  tests/test_order_filters.py <span class="dt">\</span></span>
 <span id="cb15-5"><a href="#cb15-5" aria-hidden="true" tabindex="-1"></a>  tests/test_order_export_service.py <span class="dt">\</span></span>
