@@ -1,33 +1,36 @@
 # 一月一露
 
-> 多营地户外露营综合运营平台：uni-app 小程序 + Vue3 管理后台 + FastAPI 后端
+> 多营地户外露营综合运营平台
+> C 端小程序 + B 端管理后台 + FastAPI 后端 + Podman 蓝绿发布
 
-一月一露（yyyl）面向户外露营品牌的数字化经营场景，覆盖营位预订、装备租赁、活动报名、商品购买、会员权益、电子票、验票、退款、财务和运营报表。项目支持多营地独立运营，同一套代码可按营地配置构建不同小程序，并通过后端 `site_id` 做全链路数据隔离。
+一月一露（yyyl）服务于露营地的线上经营和现场运营，覆盖营位预订、装备租赁、活动报名、小商店、会员权益、微信支付、电子票核销、退款审批、财务结算、内容运营和多营地管理。
 
-## 项目状态
+项目支持同一套代码运行多个营地：小程序按营地配置构建，后端通过 `X-Site-Id` 做全链路数据隔离。
 
-| 项目 | 当前状态 |
-|------|----------|
+## 当前状态
+
+| 项目 | 状态 |
+|------|------|
 | 生产域名 | `https://www.yyylcamp.com` |
-| 线上 API | Podman 蓝绿容器运行，Nginx 反向代理 |
-| 微信支付 | 代码链路已接入真实微信支付；当前商户侧收款能力受限，真实支付返回 `NO_AUTH` |
-| 测试价格 | 商品、SKU、日期定价均已临时调整为 `0.01` 元，便于支付链路测试 |
-| 多营地 | 西郊林场 `site_id=1`、大聋谷 `site_id=2` |
-| 项目文档 | 见 [docs/project_overview.md](docs/project_overview.md) 与 [docs/architecture.md](docs/architecture.md) |
+| 线上 API | Podman 蓝绿容器，Nginx 反向代理 |
+| 当前基线 | v1.8 已完成本地开发、构建和生产发布 |
+| 多营地 | 西郊林场 `site_id=1`，大聋谷 `site_id=2` |
+| 微信支付 | 真实 JSAPI 支付链路已接入；当前商户侧收款能力受限，真实支付可能返回 `NO_AUTH` |
+| 图片资源 | 后端自动生成 `thumb` / `large` / `banner` 派生图，小程序和 Admin 按场景加载缩略图 |
+| 小程序构建产物 | `uni-app/dist/build/mp-weixin-xijiao`、`uni-app/dist/build/mp-weixin-dalonggu` |
 
-## 快速导航
+## 能力版图
 
-- [系统架构](#系统架构)
-- [目录结构](#目录结构)
-- [本地启动](#本地启动)
-- [常用命令](#常用命令)
-- [环境变量](#环境变量)
-- [业务模块](#业务模块)
-- [设计系统](#设计系统)
-- [部署说明](#部署说明)
-- [项目文档](#项目文档)
+| C 端小程序 | B 端管理后台 | 后端与运维 |
+|------------|--------------|------------|
+| 首页、分类、商品详情 | 商品、SKU、库存、价格日历 | FastAPI async API |
+| 营位预订、活动报名 | 订单查询、退款审批、导出 | PostgreSQL 事务数据 |
+| 购物车、订单确认、微信支付 | 会员、年卡、次数卡、积分 | Redis 缓存与队列 |
+| 电子票、扫码核销、员工端 | 财务流水、结算、报表 | Celery 定时任务 |
+| 智能客服、FAQ、内容页 | CMS 页面、素材库、Banner | Podman 蓝绿发布 |
+| 多营地品牌配置 | 企业微信机器人配置 | Nginx 静态资源与反代 |
 
-## 系统架构
+## 技术架构
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -35,13 +38,13 @@
 │ Vue3 + TypeScript + Pinia + SCSS                              │
 │ VITE_SITE_CODE = xijiao / dalonggu                            │
 └──────────────────────────────┬───────────────────────────────┘
-                               │
+                               │ HTTPS
+                               │ X-Site-Id
 ┌──────────────────────────────▼───────────────────────────────┐
 │ B 端：Vue3 管理后台                                             │
-│ Element Plus + Pinia + ECharts + Vite                         │
+│ Vite + Element Plus + Pinia + ECharts                         │
 └──────────────────────────────┬───────────────────────────────┘
-                               │ HTTP / WebSocket
-                               │ X-Site-Id 营地隔离
+                               │
 ┌──────────────────────────────▼───────────────────────────────┐
 │ FastAPI 后端                                                   │
 │ Routers + Services + Schemas + SQLAlchemy Async                │
@@ -54,49 +57,48 @@
                                               │
                                       ┌───────▼────────┐
                                       │ Celery Worker  │
-                                      │ 定时任务 / 异步 │
+                                      │ 异步任务 / 定时 │
                                       └────────────────┘
 ```
 
-### 多营地隔离
-
-| 营地 | site_id | 构建代号 | 说明 |
-|------|---------|----------|------|
-| 一月一露·西郊林场 | `1` | `xijiao` | 当前线上审核与测试主站点 |
-| 一月一露·大聋谷 | `2` | `dalonggu` | 同代码库独立品牌配置 |
-
-- 小程序：通过 `VITE_SITE_CODE` 在构建时选择营地品牌、主题色、文案和 API 配置。
-- 后端：通过 `X-Site-Id` 请求头解析当前营地，所有核心查询按 `site_id` 过滤。
-- 新增营地：更新 `uni-app/src/config/sites.ts`、新增 `.env.{code}`、补构建脚本，并在后端中间件允许新的 `site_id`。
+| 层级 | 技术栈 | 说明 |
+|------|--------|------|
+| 小程序 | uni-app、Vue3、TypeScript、Pinia、SCSS | 同代码库按营地构建 |
+| 管理后台 | Vue3、Vite、Element Plus、Pinia、ECharts | 运营、财务、内容和系统管理 |
+| 后端 API | FastAPI、SQLAlchemy 2.0 async、Pydantic v2 | REST API、权限、多营地隔离 |
+| 数据层 | PostgreSQL、Redis | 订单、库存、支付、缓存和任务队列 |
+| 异步任务 | Celery | 订单超时、统计、通知、结算等 |
+| 部署 | Podman、Nginx、Fabric | 生产 API 蓝绿发布，静态资源独立发布 |
 
 ## 目录结构
 
 ```text
 yyyl/
-├── uni-app/                 # C 端小程序 / H5 / 员工验票端
+├── uni-app/                 # C 端小程序 / H5 / 员工端
 │   ├── src/pages/           # 首页、分类、购物车、订单、支付、电子票等
-│   ├── src/pages-sub/       # 分包：营地地图、互动游戏等
+│   ├── src/pages-sub/       # 分包页面：营地地图、互动功能等
 │   ├── src/components/      # 业务组件与通用组件
 │   ├── src/config/          # 多营地品牌配置
-│   ├── src/stores/          # Pinia 状态
-│   └── src/utils/           # 请求、认证、存储等工具
+│   ├── src/store/           # Pinia 状态
+│   └── src/utils/           # 请求、认证、图片、业务规则等工具
 │
 ├── admin/                   # B 端管理后台
 │   ├── src/api/             # Axios API 模块
-│   ├── src/views/           # 商品、订单、会员、财务、报表、系统设置等页面
+│   ├── src/views/           # 商品、订单、会员、财务、CMS、系统设置等页面
 │   ├── src/router/          # 路由与权限守卫
 │   ├── src/stores/          # Pinia 状态
 │   └── src/styles/          # SCSS 主题与 Element Plus 覆盖
 │
 ├── server/                  # FastAPI 后端
 │   ├── models/              # SQLAlchemy 模型
-│   ├── schemas/             # Pydantic v2 请求 / 响应模型
+│   ├── schemas/             # Pydantic 请求 / 响应模型
 │   ├── routers/             # API 路由
 │   ├── services/            # 业务服务层
 │   ├── tasks/               # Celery 任务
 │   ├── middleware/          # 认证、多营地隔离等中间件
 │   ├── alembic/             # 数据库迁移
-│   └── images/              # 商品与 Banner 静态图片
+│   ├── images/              # 商品、Banner、CMS 图片
+│   └── scripts/             # 后端维护脚本
 │
 ├── scripts/                 # 运维、发布、状态更新脚本
 ├── scripts/prod/            # 生产 Podman 蓝绿发布脚本
@@ -108,26 +110,26 @@ yyyl/
 └── docker-compose.yml       # 本地或集成环境编排
 ```
 
-## 本地启动
+## 快速启动
 
 ### 环境要求
 
 | 工具 | 建议版本 | 用途 |
 |------|----------|------|
-| Node.js | 18+ | 小程序与管理后台构建 |
+| Node.js | 18+ | 小程序和管理后台构建 |
 | npm | 9+ | Node 包管理 |
 | Python | 3.11 | 后端运行时 |
 | PostgreSQL | 15+ | 主数据库 |
 | Redis | 7+ | 缓存、队列、会话 |
-| 微信开发者工具 | 最新稳定版 | 小程序预览和调试 |
+| 微信开发者工具 | 最新稳定版 | 小程序预览、上传和调试 |
 
-本机后端开发推荐使用已有 conda 环境：
+后端开发默认使用本机 conda 环境：
 
 ```bash
 conda activate yyyl
 ```
 
-### 1. 启动 PostgreSQL 和 Redis
+### 1. 启动基础服务
 
 ```bash
 docker run -d --name yyyl-postgres \
@@ -139,15 +141,6 @@ docker run -d --name yyyl-postgres \
 docker run -d --name yyyl-redis \
   -p 6379:6379 \
   redis:7-alpine
-```
-
-也可以使用本机服务：
-
-```bash
-brew install postgresql@15 redis
-brew services start postgresql@15
-brew services start redis
-createdb yyyl
 ```
 
 ### 2. 启动后端
@@ -163,15 +156,13 @@ python seed_products.py
 uvicorn main:app --reload --port 8000
 ```
 
-启动后：
-
 | 地址 | 说明 |
 |------|------|
+| `http://localhost:8000/health` | 健康检查 |
 | `http://localhost:8000/docs` | Swagger API 文档 |
 | `http://localhost:8000/redoc` | ReDoc API 文档 |
-| `http://localhost:8000/health` | 健康检查 |
 
-本地默认管理员：`admin` / `admin123456`。生产环境必须修改默认账号和密钥。
+本地默认管理员为 `admin` / `admin123456`。生产环境必须更换默认账号、JWT 密钥、AES 密钥和所有第三方密钥。
 
 ### 3. 启动管理后台
 
@@ -181,8 +172,7 @@ npm install
 npm run dev
 ```
 
-- 本地地址：`http://localhost:3000`
-- `/api` 默认代理到 `http://localhost:8000`
+管理后台本地地址：`http://localhost:3000`。开发环境下 `/api` 默认代理到 `http://localhost:8000`。
 
 ### 4. 启动小程序
 
@@ -196,59 +186,77 @@ npm run dev:wx:xijiao
 # 大聋谷
 npm run dev:wx:dalonggu
 
-# H5
+# H5 调试
 npm run dev:h5:xijiao
 ```
 
-微信小程序构建产物在 `uni-app/dist/dev/mp-weixin/` 或 `uni-app/dist/build/mp-weixin/`，导入微信开发者工具即可。
-
-## 常用命令
-
-### 后端
-
-```bash
-cd server
-conda activate yyyl
-
-uvicorn main:app --reload --port 8000
-alembic revision --autogenerate -m "描述信息"
-alembic upgrade head
-alembic downgrade -1
-celery -A celery_app worker --loglevel=info
-celery -A celery_app beat --loglevel=info
-```
-
-### 管理后台
-
-```bash
-cd admin
-npm run dev
-npm run build
-npm run preview
-```
-
-### 小程序
+生产构建：
 
 ```bash
 cd uni-app
-npm run dev:wx:xijiao
-npm run dev:wx:dalonggu
 npm run build:wx:xijiao
 npm run build:wx:dalonggu
-npm run type-check
 ```
 
-### 回归验证
+构建后导入微信开发者工具：
+
+| 营地 | 构建目录 |
+|------|----------|
+| 西郊林场 | `uni-app/dist/build/mp-weixin-xijiao` |
+| 大聋谷 | `uni-app/dist/build/mp-weixin-dalonggu` |
+
+## 常用命令
+
+| 场景 | 命令 |
+|------|------|
+| 后端开发服务 | `cd server && uvicorn main:app --reload --port 8000` |
+| 生成迁移 | `cd server && alembic revision --autogenerate -m "描述信息"` |
+| 执行迁移 | `cd server && alembic upgrade head` |
+| Celery Worker | `cd server && celery -A celery_app worker --loglevel=info` |
+| Celery Beat | `cd server && celery -A celery_app beat --loglevel=info` |
+| 管理后台开发 | `cd admin && npm run dev` |
+| 管理后台构建 | `cd admin && npm run build` |
+| 小程序类型检查 | `cd uni-app && npm run type-check` |
+| 西郊小程序构建 | `cd uni-app && npm run build:wx:xijiao` |
+| 大聋谷小程序构建 | `cd uni-app && npm run build:wx:dalonggu` |
+
+## 多营地机制
+
+| 营地 | site_id | 构建代号 | 说明 |
+|------|---------|----------|------|
+| 一月一露·西郊林场 | `1` | `xijiao` | 当前线上审核与测试主站点 |
+| 一月一露·大聋谷 | `2` | `dalonggu` | 同代码库独立品牌配置 |
+
+多营地规则：
+
+- 小程序通过 `VITE_SITE_CODE` 在构建时选择营地品牌、主题、文案和接口配置。
+- 后端从 `X-Site-Id` 请求头解析当前营地，核心业务查询必须按 `site_id` 过滤。
+- 新增营地时，需要补充 `uni-app/src/config/sites.ts`、`.env.{site_code}`、构建脚本和后端站点白名单。
+
+## 图片资源
+
+项目静态图片由后端挂载到 `/images`，生产目录为 `/opt/yyyl/server/images`。为降低小程序首屏和列表加载压力，后端会为 JPG / PNG / WebP 自动生成派生图。
+
+| 规格 | 路径 | 用途 |
+|------|------|------|
+| 原图 | `/images/...` | 上传源文件、详情兜底 |
+| 缩略图 | `/images/thumb/...` | 商品卡片、素材库预览 |
+| 大图 | `/images/large/...` | 商品详情轮播 |
+| Banner | `/images/banner/...` | 首页和 CMS 横幅 |
+
+旧图片补齐派生图：
 
 ```bash
-cd server
-/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest \
-  tests/test_order_routes.py \
-  tests/test_wechat_pay_service.py \
-  tests/test_payment_routes.py \
-  tests/test_order_schema.py \
-  tests/test_order_service.py -v
+ACTIVE_API=$(podman ps --format '{{.Names}}' | grep -E '^yyyl-api-(blue|green)$' | head -1)
+podman exec "$ACTIVE_API" sh -lc 'cd /app && python scripts/generate_image_variants.py --images-root /app/images'
 ```
+
+发布图片相关改动时，建议顺序为：
+
+1. 发布后端 API，确认容器内 `/app/images` 可写。
+2. 在活跃 API 容器内执行旧图补齐脚本。
+3. 发布 Admin 静态资源。
+4. 重新构建并上传小程序。
 
 ## 环境变量
 
@@ -265,109 +273,85 @@ JWT_SECRET_KEY=change-me
 AES_ENCRYPTION_KEY=change-me-32-byte-key
 
 WECHAT_APPS=[{"site_id":1,"app_id":"your_xijiao_appid","app_secret":"your_xijiao_secret"},{"site_id":2,"app_id":"your_dalonggu_appid","app_secret":"your_dalonggu_secret"}]
-
 WECHAT_MCH_ID=your_mch_id
 WECHAT_API_V3_KEY=your_32_byte_api_v3_key
-WECHAT_MCH_SERIAL_NO=your_merchant_api_cert_serial_no
-WECHAT_CERT_PATH=/path/to/apiclient_cert.pem
-WECHAT_KEY_PATH=/path/to/apiclient_key.pem
-WECHAT_PLATFORM_PUBLIC_KEY_PATH=/path/to/pub_key.pem
-WECHAT_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_xxx
 WECHAT_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/notify
 WECHAT_REFUND_NOTIFY_URL=https://www.yyylcamp.com/api/v1/payments/wechat/refund-notify
 
 CAIYUN_API_TOKEN=your_caiyun_api_token
-CAIYUN_BASE_URL=https://wrapper.cyapi.cn
-CAIYUN_TIMEOUT_SECONDS=10
-
 CORS_ORIGINS=["http://localhost:3000","http://localhost:8080"]
 ```
 
-注意：
+安全约定：
 
-- 不要提交真实密钥、证书、APIv3 Key、私钥或带凭据的 DSN。
-- 生产环境 `DEBUG=false`，且 JWT/AES 密钥不能使用默认值。
-- 微信支付证书生产路径为 `/opt/yyyl/secure/wechat-pay`，由 Podman 容器只读挂载。
+- 不提交真实密钥、证书、私钥、API Token 或带凭据的 DSN。
+- 生产环境必须设置 `DEBUG=false`。
+- 微信支付证书放在生产服务器安全目录中，由容器只读挂载。
+- `.env`、证书文件、后台管理员密码不写入 README、PRD、CURRENT 或聊天记录。
 
 ## 业务模块
 
 ### 小程序端
 
-| 页面 | 路径 | 说明 |
-|------|------|------|
-| 首页 | `pages/index` | Banner、推荐商品、分类入口 |
-| 分类 | `pages/category` | 商品分类、搜索、筛选 |
-| 商品详情 | `pages/product-detail` | 图文、SKU、日期、库存 |
-| 订单确认 | `pages/order-confirm` | 出行人、价格、提交订单 |
-| 支付 | `pages/payment` | 后端下单获取微信支付参数，调用 `uni.requestPayment()` |
-| 订单 | `pages/order` / `pages/order-detail` | 订单列表、详情、退款 |
-| 电子票 | `pages/ticket` | 二维码票券、验票状态 |
-| 会员 | `pages/member` | 年卡、次数卡、积分 |
-| 我的 | `pages/mine` | 个人中心、地址、身份信息 |
-| 员工验票 | `pages/staff` | 员工扫码核销 |
+| 模块 | 说明 |
+|------|------|
+| 首页 | Banner、天气、推荐商品、分类入口、CMS 配置内容 |
+| 分类与商品 | 商品分类、搜索、筛选、SKU、价格、库存、图片变体 |
+| 预订与购物车 | 营位日期选择、购物车报价、免责声明确认 |
+| 订单与支付 | 订单确认、微信支付参数获取、支付结果处理 |
+| 电子票与核销 | 电子票二维码、员工扫码核销、票券状态 |
+| 会员权益 | 年卡、次数卡、积分、会员订单 |
+| 智能客服 | FAQ、知识库问答、人工兜底和反馈 |
 
 ### 管理后台
 
 | 模块 | 说明 |
 |------|------|
-| Dashboard | 销售、订单、会员、财务、趋势图 |
-| 商品与营位 | 商品、SKU、库存、日期定价、营地日历 |
-| 订单与退款 | 订单查询、详情、退款审批 |
-| 会员与权益 | 会员、年卡、次数卡、积分 |
-| 财务与报表 | 交易流水、提现、销售报表、导出 |
-| 内容运营 | FAQ、页面配置、公告、消息模板 |
-| 营地玩法 | 搭配套餐、营地地图、游戏、秒杀监控 |
-| 内部管理 | 员工、权限、报销、绩效、操作日志、系统设置 |
+| 工作台 | 销售、订单、会员、财务概览 |
+| 商品与库存 | 商品、SKU、共享库存池、日期定价、上下架 |
+| 订单与退款 | 订单查询、详情、导出、退款审批队列 |
+| 会员与权益 | 用户、年卡、次数卡、积分 |
+| 财务与报表 | 交易流水、结算、销售报表、导出 |
+| 内容运营 | CMS 页面、素材库、Banner、公告、FAQ |
+| 营地玩法 | 秒杀、搭配售卖、营地地图、活动配置 |
+| 系统管理 | 员工、权限、高危操作确认、操作日志 |
 
 ### 后端 API
 
-| 模块 | 前缀 | 说明 |
-|------|------|------|
-| Auth | `/api/v1/auth` | 登录、Token、微信身份 |
-| Products | `/api/v1/products` | 商品、SKU、价格、库存 |
-| Orders | `/api/v1/orders` | 下单、支付、退款、订单详情 |
-| Payments | `/api/v1/payments` | 微信支付通知、退款通知 |
-| Cart | `/api/v1/cart` | 购物车、结算 |
-| Tickets | `/api/v1/tickets` | 电子票、扫码验票 |
-| Members | `/api/v1/members` | 会员、权益、积分 |
-| Admin | `/api/v1/admin` | 管理后台聚合接口 |
-| Reports | `/api/v1/admin/reports` | 销售、用户、商品报表 |
-| Content | `/api/v1/content` | FAQ、页面配置、免责声明 |
+| 模块 | 前缀 |
+|------|------|
+| Auth | `/api/v1/auth` |
+| Products | `/api/v1/products` |
+| Orders | `/api/v1/orders` |
+| Payments | `/api/v1/payments` |
+| Cart | `/api/v1/cart` |
+| Tickets | `/api/v1/tickets` |
+| Members | `/api/v1/members` |
+| Admin | `/api/v1/admin` |
+| Reports | `/api/v1/admin/reports` |
+| Content | `/api/v1/content` |
+| Weather | `/api/v1/weather` |
 
 ## 设计系统
 
-### 小程序：野奢 Organic Luxury Outdoor
+| 端 | 设计方向 |
+|----|----------|
+| 小程序 | “野奢 Organic Luxury Outdoor”：深苔绿、暖铜金、暖沙背景，强调自然材质、露营氛围和低摩擦下单链路 |
+| 管理后台 | “深邃极光 Northern Lights Dashboard”：暗森林侧边栏、极光渐变、玻璃拟态卡片、工作台式信息密度 |
 
-| 元素 | 设计方向 |
-|------|----------|
-| 色彩 | 深苔绿 `#2d4a3e`、暖铜金 `#c8a872`、暖沙背景 `#faf6f0` |
-| 视觉 | 侘寂美学、户外奢华、自然材质感 |
-| 组件 | 磨砂导航、渐变标题线、日期范围选择、底部弹层表单 |
-| 体验 | 商品浏览、营位选择、出行人填写、支付和电子票链路尽量短 |
+核心色彩：
 
-### 管理后台：深邃极光 Northern Lights Dashboard
+| 用途 | 色值 |
+|------|------|
+| 深苔绿 | `#2d4a3e` |
+| 暖铜金 | `#c8a872` |
+| 暖沙背景 | `#faf6f0` |
+| 后台森林绿 | `#3d8b5e` |
+| 后台深色侧边栏 | `#141e1a` |
 
-| 元素 | 设计方向 |
-|------|----------|
-| 色彩 | 森林绿 `#3d8b5e`、铜金 `#c8a872`、暗森林侧边栏 `#141e1a` |
-| 视觉 | 极光渐变、玻璃拟态卡片、工作台式信息密度 |
-| 操作 | 32px 圆形图标按钮，按编辑、查看、库存、上下架、审批、删除区分颜色 |
-| 主题 | CSS 变量集中管理，Element Plus 主题覆盖在 `admin/src/styles/` |
+## 生产发布
 
-## 部署说明
-
-### 本地集成
-
-```bash
-docker-compose up -d --build
-docker-compose ps
-docker-compose logs -f api
-docker-compose down
-```
-
-### 生产 Podman 蓝绿部署
-
-生产 API 优先使用 Podman 蓝绿容器，不使用 conda 直接运行 FastAPI。详细命令见 [scripts/prod/README.md](scripts/prod/README.md)。
+生产 API 标准流程使用 Podman 蓝绿发布，不使用 conda 直接运行 FastAPI。
 
 ```bash
 pip install -r scripts/ops/requirements.txt
@@ -380,43 +364,64 @@ fab health
 fab rollback
 ```
 
-当前线上关键点：
+如使用镜像仓库：
 
-- Nginx 站点配置：`/www/server/panel/vhost/nginx/ttt.conf`
-- 蓝绿容器：`yyyl-api-blue` / `yyyl-api-green`
-- 默认端口：`8001` / `8002`
-- 微信支付证书目录：`/opt/yyyl/secure/wechat-pay`
-- 数据层过渡状态：PostgreSQL/Redis 仍在 Docker 网络内，Podman API 容器通过 host 网络和 `--add-host` 解析访问。
+```bash
+export YYYL_REGISTRY=ccr.ccs.tencentyun.com
+export YYYL_NAMESPACE=your-namespace
 
-### 微信审核测试数据
+fab build --tag=v0.1.0
+fab push-image --tag=v0.1.0
+fab deploy --tag=v0.1.0
+```
 
-线上最小审核数据使用 `site_id=1`，用于审核人员浏览首页、商品列表、商品详情并创建待支付订单。
+线上关键约定：
+
+| 项目 | 说明 |
+|------|------|
+| Nginx 配置 | 必须包含 `upstream yyyl_api_backend`，发布脚本只替换 upstream 内端口 |
+| API 容器 | `yyyl-api-blue` / `yyyl-api-green` |
+| API 端口 | `8001` / `8002` |
+| 静态图片 | Nginx 映射 `/images/` 到生产图片目录 |
+| 微信支付证书 | 容器只读挂载，证书内容不得写入仓库 |
+| 数据层过渡状态 | PostgreSQL / Redis 仍在 Docker 网络内，Podman API 可使用 host 网络和 `--add-host` 访问 |
+
+详细运维手册见 [scripts/prod/README.md](scripts/prod/README.md)。
+
+## 验证清单
+
+文档或小改动至少运行：
+
+```bash
+git diff --check
+```
+
+图片优化相关回归：
+
+```bash
+PYTHONPATH=server python -m unittest server.tests.test_image_variants -v
+
+cd uni-app
+node --test tests/v18-product-flow.test.mjs
+npm run type-check
+```
+
+上线前推荐完整检查：
 
 ```bash
 cd server
-python seed_admin.py
-python seed_xijiao_demo_data.py
+/Users/nathan/miniconda3/envs/yyyl/bin/python -m unittest discover -s tests -p 'test_*.py' -v
+
+cd ../admin
+npm run build
+
+cd ../uni-app
+npm run type-check
+npm run build:wx:xijiao
+npm run build:wx:dalonggu
 ```
 
-执行后会补齐商品、SKU、定价规则、未来库存、首页 Banner/公告和优惠规则。详情见 [docs/wechat_review_seed_data.md](docs/wechat_review_seed_data.md)。
-
-### TKE / Kubernetes
-
-仓库保留腾讯云 TKE 部署清单，适合后续迁移到云托管数据层与弹性扩容：
-
-```bash
-kubectl apply -f k8s/namespace.yaml
-kubectl apply -f k8s/configmap.yaml
-kubectl apply -f k8s/secret.yaml
-kubectl apply -f k8s/api-deployment.yaml
-kubectl apply -f k8s/api-hpa.yaml
-kubectl apply -f k8s/worker-deployment.yaml
-kubectl apply -f k8s/beat-deployment.yaml
-kubectl apply -f k8s/admin-deployment.yaml
-kubectl apply -f k8s/ingress.yaml
-```
-
-## 项目文档
+## 文档索引
 
 | 文档 | 路径 | 说明 |
 |------|------|------|
@@ -425,8 +430,9 @@ kubectl apply -f k8s/ingress.yaml
 | 生产运维 | [scripts/prod/README.md](scripts/prod/README.md) | Podman 蓝绿发布、健康检查、故障处理 |
 | 测试报告 | [docs/test_report.md](docs/test_report.md) | 测试与合规总结 |
 | 测试用例 | [docs/test_cases.md](docs/test_cases.md) | 端到端测试用例 |
+| 微信审核数据 | [docs/wechat_review_seed_data.md](docs/wechat_review_seed_data.md) | 审核演示数据准备 |
 | PRD 基线 | [prd/yyyl_prd.md](prd/yyyl_prd.md) | 产品需求基线 |
-| PRD 增量 | [prd/yyyl_prd_v1.5_increment.md](prd/yyyl_prd_v1.5_increment.md) | 搭配售卖、秒杀、地图、内部管理等 |
+| v1.8 上线审查 | [docs/v1.8_production_review.html](docs/v1.8_production_review.html) | 当前生产版本审查报告 |
 
 ## License
 
