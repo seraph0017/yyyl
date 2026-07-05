@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>一月一露 v1.8 功能实现与上线确认报告</title>
+  <style>
+    :root {
+      --forest: #2d4a3e;
+      --copper: #a77a38;
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: #d8e0e8;
+      --soft: #f7faf8;
+      --ok: #21734e;
+      --warn: #9f5f12;
+      --pending: #36506c;
+      --danger: #a43f3f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 44px 32px 80px;
+      color: var(--ink);
+      background: #fff;
+      font: 15px/1.72 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+    }
+    h1, h2, h3 { color: #17211c; line-height: 1.3; }
+    h1 { margin: 0 0 14px; font-size: 32px; }
+    h2 { margin: 36px 0 14px; padding-top: 10px; border-top: 2px solid var(--forest); font-size: 23px; }
+    h3 { margin: 22px 0 10px; font-size: 18px; }
+    p { margin: 8px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0 22px; table-layout: fixed; }
+    th, td { border: 1px solid var(--line); padding: 9px 10px; vertical-align: top; word-break: break-word; }
+    th { background: #eef4f1; color: #18352a; text-align: left; }
+    code { padding: 1px 5px; border-radius: 4px; background: #eef4f1; font-family: Menlo, Consolas, monospace; font-size: 0.92em; }
+    ul { padding-left: 22px; }
+    .meta { padding: 16px 18px; border: 1px solid var(--line); border-left: 5px solid var(--forest); background: var(--soft); }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 16px 0 22px; }
+    .metric { padding: 14px; border: 1px solid var(--line); background: #fbfcfd; }
+    .metric strong { display: block; margin-bottom: 4px; color: #17211c; font-size: 18px; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 12px; white-space: nowrap; }
+    .badge-ok { color: var(--ok); background: #e7f4ed; }
+    .badge-warn { color: var(--warn); background: #fff4df; }
+    .badge-pending { color: var(--pending); background: #edf4fb; }
+    .badge-danger { color: var(--danger); background: #faeeee; }
+    .callout { margin: 16px 0; padding: 12px 14px; border: 1px solid var(--line); background: #fbfcfd; }
+    .summary { font-size: 16px; }
+    .muted { color: var(--muted); }
+    @media (max-width: 760px) {
+      body { padding: 28px 18px 56px; }
+      .grid { grid-template-columns: 1fr; }
+      table { table-layout: auto; }
+    }
+  </style>
+</head>
+<body>
+  <h1>一月一露 v1.8 功能实现与上线确认报告</h1>
+  <div class="meta">
+    <p><strong>报告时间</strong>：2026-07-01 09:02 CST</p>
+    <p><strong>生产域名</strong>：<code>https://www.yyylcamp.com</code></p>
+    <p><strong>报告目的</strong>：确认用户前面贴过并要求补齐的 v1.8 功能是否已经实现、是否已经发布到生产，以及哪些事项仍需要微信平台或真实业务侧确认。</p>
+    <p><strong>结论口径</strong>：后端 API 和 Admin 管理后台按“已部署到生产并验证”判断；小程序按“代码已实现、产物已构建、但上传/审核/正式发布需微信开发者工具或微信公众平台确认”判断。</p>
+  </div>
+
+  <h2>1. 总结论</h2>
+  <p class="summary"><strong>API 和 Admin：已上线到生产。</strong> 2026-07-01 已发布到 <code>www.yyylcamp.com</code>，当前生产 API 容器健康，数据库迁移为最新 head，Admin 首页和新 JS 静态资源均可访问。</p>
+  <p class="summary"><strong>小程序：功能代码已实现并通过构建，但不能仅凭本机 shell 判定已经在微信平台正式发布。</strong> 最新西郊林场/大聋谷构建产物已生成，接口默认指向生产域名；是否已经上传、提交审核、发布线上版本，需要以微信开发者工具或微信公众平台为准。</p>
+  <p class="summary"><strong>微信助手/企业微信群助手：按用户前序口径暂缓，不作为本轮“是否上了”的阻断项。</strong> 企业微信群机器人基础能力和知识库复用链路已有实现与复验记录；“微信助手不急”的部分没有继续强行推进。</p>
+
+  <div class="grid">
+    <div class="metric"><strong>API</strong><span class="badge badge-ok">生产已上线</span><p class="muted">健康检查 200，商品接口 200。</p></div>
+    <div class="metric"><strong>Admin</strong><span class="badge badge-ok">生产已上线</span><p class="muted">首页 200，新入口 JS 200。</p></div>
+    <div class="metric"><strong>小程序</strong><span class="badge badge-pending">代码/构建已完成</span><p class="muted">微信平台发布状态待外部确认。</p></div>
+    <div class="metric"><strong>暂缓项</strong><span class="badge badge-warn">不纳入阻断</span><p class="muted">微信助手按用户要求暂缓。</p></div>
+  </div>
+
+  <h2>2. 三端上线状态</h2>
+  <table>
+    <thead>
+      <tr><th>端</th><th>当前状态</th><th>证据</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>后端 API</td>
+        <td><span class="badge badge-ok">已上线生产</span></td>
+        <td>
+          生产镜像 <code>yyyl-api:api-admin-20260701-0240-openpyxl</code>；活跃容器 <code>yyyl-api-blue</code>；Nginx upstream <code>127.0.0.1:8001</code>；Alembic <code>2b3c4d5e6f70 (head)</code>。
+        </td>
+        <td>本次上线补入 <code>openpyxl</code>，避免订单导出服务启动导入失败。</td>
+      </tr>
+      <tr>
+        <td>Admin 管理后台</td>
+        <td><span class="badge badge-ok">已上线生产</span></td>
+        <td>
+          静态目录 <code>/www/server/nginx/html/</code>；线上入口 JS <code>/assets/index-D8kfTnWB.js</code>；首页和 JS 均返回 200。
+        </td>
+        <td>本地发布前合同测试和生产构建均已通过。</td>
+      </tr>
+      <tr>
+        <td>小程序</td>
+        <td><span class="badge badge-pending">代码已实现，构建已通过</span></td>
+        <td>
+          构建产物目录：<code>uni-app/dist/build/mp-weixin-xijiao</code>、<code>uni-app/dist/build/mp-weixin-dalonggu</code>；AppID 记录为 <code>wx98ecb419c0a6aeb7</code>；请求默认兜底生产域名。
+        </td>
+        <td>微信开发者工具上传、提交审核和正式发布状态不在本机文件系统内，需微信平台确认。用户反馈首页空白后又确认“好了”，本轮未做额外代码变更。</td>
+      </tr>
+      <tr>
+        <td>图片与静态资源</td>
+        <td><span class="badge badge-ok">已上线生产</span></td>
+        <td>
+          Nginx 已映射 <code>/images/</code>；派生图链路已发布；首页 banner 接口 200；商品图片接口返回正常。
+        </td>
+        <td>手工放图后仍需在活跃 API 容器内补跑派生图生成脚本。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>3. 功能清单确认</h2>
+  <table>
+    <thead>
+      <tr><th>功能</th><th>状态</th><th>落地范围</th><th>备注</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>共享库存池与跨商品/SKU 绑定</td>
+        <td><span class="badge badge-ok">已实现并随 API/Admin 上线</span></td>
+        <td>后端模型、服务、Admin 页面、订单/退款/购物车库存链路。</td>
+        <td>最终复审已补齐购物车 add/update/checkout 命中共享库存池时不再被静态 <code>SKU.stock</code> 误拦截。</td>
+      </tr>
+      <tr>
+        <td>统一商品管理与聚合筛选</td>
+        <td><span class="badge badge-ok">已实现并随 Admin/API 上线</span></td>
+        <td>Admin 商品列表、商品编辑器、后端 <code>types</code> 数组筛选、类型切换清理旧扩展。</td>
+        <td>营位、活动、租赁、商品聚合入口已映射完整 concrete product types。</td>
+      </tr>
+      <tr>
+        <td>营位日历库存与批量库存</td>
+        <td><span class="badge badge-ok">已实现并随 Admin/API 上线</span></td>
+        <td>Admin 库存日历、批量调整、后端库存日历服务。</td>
+        <td>共享池目标只读，普通批量写入会被拒绝。</td>
+      </tr>
+      <tr>
+        <td>商品富文本编辑与统一 XSS 净化</td>
+        <td><span class="badge badge-ok">已实现并随 Admin 上线</span></td>
+        <td><code>sanitizeRichText()</code>、商品编辑器、CMS 富文本属性、Landing 富文本渲染。</td>
+        <td>Admin 复审已确认富文本链路统一走净化函数。</td>
+      </tr>
+      <tr>
+        <td>手机号授权登录</td>
+        <td><span class="badge badge-ok">后端已上线，小程序代码已构建</span></td>
+        <td><code>/api/v1/auth/phone-login</code> 调微信 <code>wxa/business/getuserphonenumber</code>；小程序我的页登录/补授权。</td>
+        <td>真实手机号授权需在微信小程序真机环境验证。</td>
+      </tr>
+      <tr>
+        <td>订单列表/详情展示增强</td>
+        <td><span class="badge badge-ok">后端已上线，小程序代码已构建</span></td>
+        <td>用户手机号/脱敏手机号、支付时间、订单备注、SKU 规格、日期、场次、人晚/人单、商品图。</td>
+        <td>最终复审已补齐订单列表手机号、支付时间和备注。</td>
+      </tr>
+      <tr>
+        <td>订单报价、购物车结算、免责声明闭环</td>
+        <td><span class="badge badge-ok">API 已上线，小程序代码已构建</span></td>
+        <td><code>/orders/quote</code>、<code>/cart/quote</code>、<code>/cart/checkout</code>、订单确认页、购物车结算确认。</td>
+        <td>后端最终仍由 <code>order_service.create_order</code> 校验免责声明要求。</td>
+      </tr>
+      <tr>
+        <td>退款审批队列与退款库存幂等</td>
+        <td><span class="badge badge-ok">已实现并随 API/Admin 上线</span></td>
+        <td>退款队列、审批/拒绝权限、库存释放幂等、微信退款 SUCCESS 重放保护。</td>
+        <td>跨站点和 staff 越权问题已在复审中关闭。</td>
+      </tr>
+      <tr>
+        <td>现场临时订单与现场收款</td>
+        <td><span class="badge badge-ok">API/Admin 已上线，小程序代码已构建</span></td>
+        <td>后台/员工端临时单、顾客扫码认领、付款码支付、codepay 查询补偿。</td>
+        <td>真实付款码链路需现场设备和微信支付权限配合验证。</td>
+      </tr>
+      <tr>
+        <td>智能客服与知识库</td>
+        <td><span class="badge badge-ok">API/Admin 已上线，小程序代码已构建</span></td>
+        <td>Admin 知识库管理、上传、问答测试、日志；小程序文本问答、来源引用、人工兜底、反馈 token。</td>
+        <td>企业微信群机器人知识库问答复用同一知识库。</td>
+      </tr>
+      <tr>
+        <td>企业微信群机器人基础能力</td>
+        <td><span class="badge badge-ok">基础能力已实现并随 API/Admin 上线</span></td>
+        <td>机器人配置、webhook/secret 加密存储、测试发送、日志查询、脱敏。</td>
+        <td>用户明确说“微信助手不急”，所以微信助手/群助手继续增强不作为本轮阻断。</td>
+      </tr>
+      <tr>
+        <td>图片派生图加载链路</td>
+        <td><span class="badge badge-ok">已上线生产</span></td>
+        <td>后端生成 <code>thumb/large/banner</code>，Admin 素材预览，小程序按场景选择派生图并回退原图。</td>
+        <td>生产旧图已补齐派生图，公网样例访问此前已验证 200。</td>
+      </tr>
+      <tr>
+        <td>天气卡、小时级天气、日期天气</td>
+        <td><span class="badge badge-ok">API 已上线，小程序代码已构建</span></td>
+        <td>彩云天气服务、首页天气卡、商品详情预定日期/日历天气。</td>
+        <td>2026-07-01 线上 <code>/api/v1/weather/current</code> 返回 200，地点为一月一露·西郊林场。</td>
+      </tr>
+      <tr>
+        <td>微信真实支付</td>
+        <td><span class="badge badge-warn">代码已上线，商户侧有限制</span></td>
+        <td>后端微信 JSAPI 下单、支付/退款通知、小程序 <code>uni.requestPayment()</code>。</td>
+        <td>当前商户号真实收款受微信商户侧限制，真实支付会返回 <code>NO_AUTH</code>，这不是代码部署缺失。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. 生产验证记录</h2>
+  <table>
+    <thead>
+      <tr><th>验证项</th><th>命令/目标</th><th>结果</th><th>时间</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>生产健康检查</td>
+        <td><code>GET https://www.yyylcamp.com/health</code></td>
+        <td><span class="badge badge-ok">200</span> 返回 <code>{"status":"ok","env":"production"}</code></td>
+        <td>2026-07-01 09:01 CST</td>
+      </tr>
+      <tr>
+        <td>商品公开接口</td>
+        <td><code>GET /api/v1/products?page_size=1&amp;status=on_sale</code></td>
+        <td><span class="badge badge-ok">200</span> 返回在售商品，总数 <code>18</code></td>
+        <td>2026-07-01 09:01 CST</td>
+      </tr>
+      <tr>
+        <td>Admin 首页</td>
+        <td><code>GET https://www.yyylcamp.com/</code></td>
+        <td><span class="badge badge-ok">200</span> 页面标题为“一月一露 - 露营地管理后台”</td>
+        <td>2026-07-01 09:01 CST</td>
+      </tr>
+      <tr>
+        <td>Admin 新静态资源</td>
+        <td><code>GET /assets/index-D8kfTnWB.js</code></td>
+        <td><span class="badge badge-ok">200</span> 文件大小约 <code>1,247,700</code> bytes</td>
+        <td>2026-07-01 09:02 CST</td>
+      </tr>
+      <tr>
+        <td>首页 banner 接口</td>
+        <td><code>GET /api/v1/pages/home_banner</code></td>
+        <td><span class="badge badge-ok">200</span> 返回 3 条 banner</td>
+        <td>2026-07-01 09:02 CST</td>
+      </tr>
+      <tr>
+        <td>天气接口</td>
+        <td><code>GET /api/v1/weather/current</code></td>
+        <td><span class="badge badge-ok">200</span> 返回 <code>location_name=一月一露·西郊林场</code></td>
+        <td>2026-07-01 09:02 CST</td>
+      </tr>
+      <tr>
+        <td>生产容器</td>
+        <td><code>podman ps</code></td>
+        <td><span class="badge badge-ok">healthy</span> <code>yyyl-api-blue localhost/yyyl-api:api-admin-20260701-0240-openpyxl</code></td>
+        <td>2026-07-01 09:02 CST</td>
+      </tr>
+      <tr>
+        <td>数据库迁移</td>
+        <td><code>podman exec yyyl-api-blue alembic current</code></td>
+        <td><span class="badge badge-ok">head</span> <code>2b3c4d5e6f70 (head)</code></td>
+        <td>2026-07-01 09:02 CST</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. 发布记录</h2>
+  <table>
+    <thead>
+      <tr><th>项目</th><th>当前值</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>生产 API 镜像</td><td><code>yyyl-api:api-admin-20260701-0240-openpyxl</code></td></tr>
+      <tr><td>活跃 API 容器</td><td><code>yyyl-api-blue</code></td></tr>
+      <tr><td>Nginx upstream</td><td><code>yyyl_api_backend -> 127.0.0.1:8001</code></td></tr>
+      <tr><td>生产数据库迁移</td><td><code>2b3c4d5e6f70 (head)</code></td></tr>
+      <tr><td>Admin 静态目录</td><td><code>/www/server/nginx/html/</code></td></tr>
+      <tr><td>Admin 入口 JS</td><td><code>/assets/index-D8kfTnWB.js</code></td></tr>
+      <tr><td>源码发布前备份</td><td><code>/opt/yyyl/backups/source-before-api-admin-20260701-20260701024040.tgz</code></td></tr>
+      <tr><td>Admin 静态目录发布前备份</td><td><code>/opt/yyyl/backups/admin-html-before-api-admin-20260701-20260701024040.tgz</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2>6. 本地验证基线</h2>
+  <table>
+    <thead>
+      <tr><th>范围</th><th>最近通过记录</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>后端</td>
+        <td>2026-06-30 focused 回归 149 tests OK；2026-07-01 发布前再次记录后端 focused 回归 149 tests OK；生产镜像内验证 <code>from main import app</code> 可加载 301 条路由。</td>
+      </tr>
+      <tr>
+        <td>Admin</td>
+        <td>2026-07-01 发布前 <code>node --test tests/v18-admin-contract.test.mjs</code> 14/14 OK，<code>npm run build</code> OK。</td>
+      </tr>
+      <tr>
+        <td>小程序</td>
+        <td>2026-06-30 <code>node --test tests/v18-product-flow.test.mjs</code> 41/41 OK，<code>npm run type-check</code> OK，<code>build:wx:xijiao</code> 和 <code>build:wx:dalonggu</code> OK；用户反馈首页空白后又执行过 type-check、西郊微信构建和 H5 构建，均 OK。</td>
+      </tr>
+      <tr>
+        <td>代码差异基础检查</td>
+        <td>发布前 <code>git diff --check</code> OK；本报告生成后会再次做 HTML 解析和 diff 空白检查。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>7. 未完全由本报告证明的事项</h2>
+  <table>
+    <thead>
+      <tr><th>事项</th><th>状态</th><th>原因/下一步</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>小程序微信平台正式发布</td>
+        <td><span class="badge badge-pending">待平台确认</span></td>
+        <td>本机能确认代码、环境变量兜底和构建产物，不能直接证明微信开发者工具已上传、审核已通过或线上版本已发布。</td>
+      </tr>
+      <tr>
+        <td>真实微信支付收款</td>
+        <td><span class="badge badge-warn">受商户限制</span></td>
+        <td>代码链路已接入生产，但当前商户号真实收款返回 <code>NO_AUTH</code>，需要微信商户平台解除或确认权限。</td>
+      </tr>
+      <tr>
+        <td>现场付款码、员工设备、真机扫码</td>
+        <td><span class="badge badge-pending">待业务 smoke</span></td>
+        <td>这类链路需要真实员工设备、微信环境、支付权限和现场数据配合，不适合只用本机命令判定。</td>
+      </tr>
+      <tr>
+        <td>微信助手后续增强</td>
+        <td><span class="badge badge-warn">已暂缓</span></td>
+        <td>用户已明确“微信助手不急”，当前不作为本轮上线阻断。</td>
+      </tr>
+      <tr>
+        <td>Docker Hub 拉取基础镜像</td>
+        <td><span class="badge badge-warn">存在运维风险</span></td>
+        <td>生产机拉取 <code>python:3.11-slim</code> 超时，本次用已有镜像离线派生发布。后续常规发布建议修复服务器网络或改用稳定镜像仓库。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>8. 最终判断</h2>
+  <div class="callout">
+    <p><strong>按“API + Admin 上生产”的口径：用户贴过并要求补齐的核心功能已经上线。</strong></p>
+    <p><strong>按“三端都已正式对用户发布”的口径：小程序还需要微信开发者工具/微信公众平台确认上传、审核和发布状态。</strong></p>
+    <p><strong>建议验收顺序</strong>：先在 Admin 验证统一商品管理、库存日历、退款队列、现场收款、知识库；再用微信真机验证小程序首页、商品详情、订单确认、订单列表/详情、手机号授权、客服；最后在微信商户权限恢复后验证真实支付闭环。</p>
+  </div>
+</body>
+</html>

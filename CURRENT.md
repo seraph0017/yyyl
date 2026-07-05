@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-07-06 00:41:26 CST
+Last updated: 2026-07-06 07:43:00 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -70,7 +70,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-07-01 已按用户要求生成 v1.8 功能实现与上线确认 HTML 报告：`docs/v1.8_feature_deployment_report_20260701.html`。报告结论：API/Admin 已上线生产并验证；小程序代码和构建已完成，但微信平台上传/审核/正式发布状态需微信开发者工具或公众平台确认；微信助手按用户要求暂缓，不作为本轮阻断。
 - 2026-07-06 已按 `~/Downloads/新小程序需求及bug总结 (1).docx` 完成本轮新小程序需求与 bug 修复：后端支持 SKU 编码自动生成、普通文本规格归一、商品创建后重载详情避免 `MissingGreenlet`、云文件导出/二维码源文件归档、透明底二维码下载、订单详情旧字段 500 修复、CMS/qrcode B 端跨营地 guard；Admin 补云文件页、二维码生成即预览/下载、商品封面/富文本图片上传、SKU 普通规格和本商品共享库存、图片热区链接、图文卡片字体族/字重、营地地图上传与圈选、隐藏独立营位/共享库存菜单；小程序补 CMS Image/Notice/Nav/Divider/ImageText 协议兼容、手动商品 ids、富文本相对图片 URL 解析、共享库存可售判断和 miniprogram target JSON 解析。
 - 2026-07-06 本轮三端只读复审已达标：Admin APPROVED 8.8/10，小程序 APPROVED 8.7/10，后端初审 8.0/10 后修复 CMS/qrcode 跨站 guard 和显式库存池绑定回归，复审 APPROVED 8.7/10；三端最终无 Critical/High。后端复审提出的 CMS 编辑锁归属校验、素材强制删除 role 判断、库存池注释也已补测修复。
-- 2026-07-06 本轮最终验证通过：后端 `py_compile routers/cms.py routers/products.py routers/qrcodes.py schemas/product.py models/cms.py services/cms_service.py services/product_service.py services/qrcode_service.py services/inventory_pool_service.py` OK；`python -m unittest tests/test_v18_contracts.py -v` 84 tests OK；Admin `node --test tests/v18-admin-contract.test.mjs` 15/15 OK 且 `npm run build` OK（仅 Vite 大 chunk 警告）；小程序 `node --test tests/v18-product-flow.test.mjs` 45/45 OK 且 `npm run type-check` OK；`git diff --check` OK；已运行 `scripts/update-current.sh`。本轮未执行生产发布。
+- 2026-07-06 本轮最终验证通过：后端 `py_compile routers/cms.py routers/products.py routers/qrcodes.py schemas/product.py models/cms.py services/cms_service.py services/product_service.py services/qrcode_service.py services/inventory_pool_service.py` OK；`python -m unittest tests/test_v18_contracts.py -v` 84 tests OK；Admin `node --test tests/v18-admin-contract.test.mjs` 15/15 OK 且 `npm run build` OK（仅 Vite 大 chunk 警告）；小程序 `node --test tests/v18-product-flow.test.mjs` 45/45 OK 且 `npm run type-check` OK；`git diff --check` OK；已运行 `scripts/update-current.sh`。
+- 2026-07-06 已按用户要求将本轮后端和 Admin 上线到 `www.yyylcamp.com`：本地提交 `715576f feat: 修复新小程序需求并准备后端Admin上线` 已推送 `origin/main` 并同步到生产 `/opt/yyyl/REVISION`；因生产机 Docker Hub 拉取 `python:3.11-slim` 仍超时，本次基于 `localhost/yyyl-api:api-admin-20260701-0240-openpyxl` 离线派生镜像 `yyyl-api:api-admin-20260706-0724-715576f`，API 蓝绿切到 `yyyl-api-green` / `127.0.0.1:8002`，旧 `yyyl-api-blue` 已停止保留用于回滚；Admin 静态资源已同步到 `/www/server/nginx/html/`，线上入口 JS 为 `/assets/index-wazgtEOT.js`；生产数据库 Alembic 为 `2b3c4d5e6f70 (head)`。本次源码备份 `/opt/yyyl/backups/source-before-api-admin-20260706-0724-715576f.tgz`，Admin 静态目录备份 `/opt/yyyl/backups/admin-html-before-api-admin-20260706-0724-715576f.tgz`。发布后验证 `https://www.yyylcamp.com/health` 200、`/api/v1/products?page_size=1&status=on_sale` 200、Admin 首页 200、新 JS asset 200、直连 `127.0.0.1:8002/health` 200；发布后检查新容器日志，未见 error/exception/traceback/critical/failed。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -84,7 +85,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、营位日历批量库存、手机号授权登录、订单展示字段、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
 8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 `/opt/yyyl/server/images/`，仍需在当前活跃 API 容器执行 `cd /app && python scripts/generate_image_variants.py --images-root /app/images` 补齐派生图。
 9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli`，最新构建产物位于 `uni-app/dist/build/mp-weixin-xijiao` 和 `uni-app/dist/build/mp-weixin-dalonggu`，AppID 为 `wx98ecb419c0a6aeb7`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-10. GitHub `origin/main` 当前同步到 `ad0a959 docs: 记录图片优化生产发布`；如需回看图片优化业务变更，相关提交仍是 `4b92d69 feat: 优化图片派生图加载链路`。
+10. GitHub `origin/main` 当前同步到 `715576f feat: 修复新小程序需求并准备后端Admin上线`；如需回看图片优化业务变更，相关提交仍是 `4b92d69 feat: 优化图片派生图加载链路`。
 11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 `certbot renew --dry-run`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
@@ -110,12 +111,13 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Admin 静态目录发布前备份：`/opt/yyyl/backups/admin-html-before-20260620135346.tgz`。
 - API 蓝绿容器：`yyyl-api-blue` / `yyyl-api-green`，端口 `8001` / `8002`。
 - 生产镜像：
-  - `yyyl-api:api-admin-20260701-0240-openpyxl`：2026-07-01 API/Admin 上线镜像，基于 `yyyl-api:image-variants-4b92d69` 离线派生并补入 `openpyxl`；当前活跃容器 `yyyl-api-blue`，Nginx upstream 指向 `127.0.0.1:8001`，数据库版本 `2b3c4d5e6f70`。
-  - `yyyl-api:image-variants-4b92d69`：图片派生图生产镜像，基于 `localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628` 离线派生，当前活跃容器 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`。
+  - `yyyl-api:api-admin-20260706-0724-715576f`：2026-07-06 新小程序需求与 bug 修复的 API/Admin 上线镜像，基于 `localhost/yyyl-api:api-admin-20260701-0240-openpyxl` 离线派生；当前活跃容器 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:api-admin-20260701-0240-openpyxl`：2026-07-01 API/Admin 上线镜像，基于 `yyyl-api:image-variants-4b92d69` 离线派生并补入 `openpyxl`；当前旧容器 `yyyl-api-blue` 已停止保留用于回滚，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:image-variants-4b92d69`：图片派生图生产镜像，基于 `localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628` 离线派生，已被后续版本替换。
   - `yyyl-api:v1.8-hotfix-qrcode-membership-20260628`：二维码和会员卡接口热修镜像，发布图片优化前活跃于 `yyyl-api-blue`，当前已停止保留用于回滚。
-  - `yyyl-api:v1.8-df0e695`：v1.8 全量上线镜像，当前活跃容器 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`，数据库版本 `1a2b3c4d5e6f`。
-  - `yyyl-api:53e092e-weather-ui`：修正西郊林场天气坐标并返回 `location_name`，当前活跃容器 `yyyl-api-blue`，Nginx upstream 指向 `127.0.0.1:8001`。
-  - `yyyl-api:c82570a-weather`：接入彩云天气，当前活跃容器 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`。
+  - `yyyl-api:v1.8-df0e695`：v1.8 全量上线镜像，已被后续版本替换，数据库版本 `1a2b3c4d5e6f`。
+  - `yyyl-api:53e092e-weather-ui`：修正西郊林场天气坐标并返回 `location_name`，已被后续版本替换。
+  - `yyyl-api:c82570a-weather`：接入彩云天气，已被后续版本替换。
   - `yyyl-api:payment-cert-mount`：补充证书挂载并映射微信支付异常。
   - `yyyl-api:65c5d55-orderfix`：真实微信支付接入 + 订单路由修复的基线镜像。
 - 生产依赖过渡状态：PostgreSQL/Redis 仍在 Docker 网络内，Podman API 容器用 host 网络并通过 `--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>` 解析。
@@ -163,6 +165,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 微信手机号授权登录已补齐真实服务：`server/services/auth_service.py::phone_login()`、`_get_phone_number()`、`_get_wechat_access_token()`；路由 `server/routers/auth.py::phone_login()` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：`server/routers/admin.py::verify_operation_password()` 使用 bcrypt `verify_password()`，返回短 TTL `confirm_token`；`verify_confirm_code()` 不再接受 hash 前缀。
 - 本地和远端 Git 提交：
+  - `715576f feat: 修复新小程序需求并准备后端Admin上线`
   - `ad0a959 docs: 记录图片优化生产发布`
   - `4b92d69 feat: 优化图片派生图加载链路`
   - `c29a7b3 docs: 优化项目 README 展示`
@@ -284,51 +287,41 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `.`
 - branch: `main`
 - upstream: `origin/main`
-- head: `c1f9ebf docs: 清理多人协作路径示例`
-- uncommitted changes: `85`
+- head: `715576f feat: 修复新小程序需求并准备后端Admin上线`
+- uncommitted changes: `30`
 - status sample:
 
 ```text
  M CURRENT.md
- M admin/src/api/cms.ts
- M admin/src/api/product.ts
- M admin/src/api/system.ts
- M admin/src/components/cms/ComponentPanel.vue
- M admin/src/components/cms/LinkPicker.vue
- M admin/src/components/cms/props/ImageProps.vue
- M admin/src/components/cms/props/ImageTextProps.vue
- M admin/src/components/cms/props/ProductListProps.vue
- M admin/src/components/cms/props/RichTextProps.vue
- M admin/src/components/landing/LandingImageText.vue
- M admin/src/components/landing/LandingRichText.vue
- M admin/src/layout/index.vue
- M admin/src/router/index.ts
- M admin/src/types/cms.ts
- M admin/src/types/index.ts
- M admin/src/types/inventory-pool.ts
- M admin/src/utils/index.ts
- M admin/src/views/calendar/index.vue
- M admin/src/views/camp-map/index.vue
- M admin/src/views/cms/editor.vue
- M admin/src/views/cms/index.vue
- M admin/src/views/products/edit.vue
- M admin/src/views/products/index.vue
- M admin/src/views/qrcodes/index.vue
- M admin/src/views/system/settings.vue
- M admin/tests/v18-admin-contract.test.mjs
+ M README.md
+ M docs/project_overview.md
  M scripts/update-current.sh
- M server/models/cms.py
- M server/models/order.py
- M server/models/product.py
- M server/requirements.txt
- M server/routers/admin.py
- M server/routers/cart.py
- M server/routers/cms.py
- M server/routers/orders.py
- M server/routers/products.py
- M server/routers/qrcodes.py
- M server/schemas/admin.py
- M server/schemas/order.py
+ M uni-app/src/components/cms/CmsDivider.vue
+ M uni-app/src/components/cms/CmsImage.vue
+ M uni-app/src/components/cms/CmsImageText.vue
+ M uni-app/src/components/cms/CmsNav.vue
+ M uni-app/src/components/cms/CmsNotice.vue
+ M uni-app/src/components/cms/CmsProductList.vue
+ M uni-app/src/components/default-home-page/index.vue
+ M uni-app/src/pages/address/index.vue
+ M uni-app/src/pages/cart/index.vue
+ M uni-app/src/pages/category/index.vue
+ M uni-app/src/pages/mine/index.vue
+ M uni-app/src/pages/order-confirm/index.vue
+ M uni-app/src/pages/order-detail/index.vue
+ M uni-app/src/pages/order/index.vue
+ M uni-app/src/pages/product-detail/index.vue
+ M uni-app/src/types/cms.ts
+ M uni-app/src/types/index.ts
+ M uni-app/src/utils/cms-link.ts
+ M uni-app/src/utils/product-rules.ts
+ M uni-app/tests/v18-product-flow.test.mjs
+?? docs/v1.8_feature_deployment_report_20260701.html
+?? findings.md
+?? output/
+?? progress.md
+?? task_plan.md
+?? tmp/
 ```
 
 ## Operating Rule

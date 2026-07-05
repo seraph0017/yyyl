@@ -13,7 +13,7 @@
 |------|------|
 | 生产域名 | `https://www.yyylcamp.com` |
 | 线上 API | Podman 蓝绿容器，Nginx 反向代理 |
-| 当前基线 | v1.8 已完成本地开发、构建和生产发布 |
+| 当前基线 | v1.8 已完成生产发布；2026-07-06 后端/Admin 新小程序需求修复已上线 |
 | 多营地 | 西郊林场 `site_id=1`，大聋谷 `site_id=2` |
 | 微信支付 | 真实 JSAPI 支付链路已接入；当前商户侧收款能力受限，真实支付可能返回 `NO_AUTH` |
 | 图片资源 | 后端自动生成 `thumb` / `large` / `banner` 派生图，小程序和 Admin 按场景加载缩略图 |
@@ -383,6 +383,8 @@ fab registry-release-api --tag=v0.1.0
 | 静态图片 | Nginx 映射 `/images/` 到生产图片目录 |
 | 微信支付证书 | 容器只读挂载，证书内容不得写入仓库 |
 | 数据层过渡状态 | PostgreSQL / Redis 仍在 Docker 网络内，Podman API 可使用 host 网络和 `--add-host` 访问 |
+
+当前生产快照以 `CURRENT.md` 为准。2026-07-06 后端/Admin 最新上线提交为 `715576f`，API 活跃容器为 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`，Admin 入口资源为 `/assets/index-wazgtEOT.js`。
 
 详细运维手册见 [scripts/prod/README.md](scripts/prod/README.md)。
 
