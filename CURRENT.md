@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-07-06 07:43:00 CST
+Last updated: 2026-07-06 07:45:16 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -85,7 +85,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、营位日历批量库存、手机号授权登录、订单展示字段、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
 8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 `/opt/yyyl/server/images/`，仍需在当前活跃 API 容器执行 `cd /app && python scripts/generate_image_variants.py --images-root /app/images` 补齐派生图。
 9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 `/Applications/wechatwebdevtools.app/Contents/MacOS/cli`，最新构建产物位于 `uni-app/dist/build/mp-weixin-xijiao` 和 `uni-app/dist/build/mp-weixin-dalonggu`，AppID 为 `wx98ecb419c0a6aeb7`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-10. GitHub `origin/main` 当前同步到 `715576f feat: 修复新小程序需求并准备后端Admin上线`；如需回看图片优化业务变更，相关提交仍是 `4b92d69 feat: 优化图片派生图加载链路`。
+10. 2026-07-06 后端/Admin 生产上线业务提交为 `715576f feat: 修复新小程序需求并准备后端Admin上线`；当前 Git head / upstream 以后文 Git Status Snapshot 为准。如需回看图片优化业务变更，相关提交仍是 `4b92d69 feat: 优化图片派生图加载链路`。
 11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 `certbot renew --dry-run`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
@@ -287,14 +287,11 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `.`
 - branch: `main`
 - upstream: `origin/main`
-- head: `715576f feat: 修复新小程序需求并准备后端Admin上线`
-- uncommitted changes: `30`
+- head: `d9f3678 docs: 同步后端Admin上线交接状态`
+- uncommitted changes: `26`
 - status sample:
 
 ```text
- M CURRENT.md
- M README.md
- M docs/project_overview.md
  M scripts/update-current.sh
  M uni-app/src/components/cms/CmsDivider.vue
  M uni-app/src/components/cms/CmsImage.vue
@@ -316,7 +313,6 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
  M uni-app/src/utils/cms-link.ts
  M uni-app/src/utils/product-rules.ts
  M uni-app/tests/v18-product-flow.test.mjs
-?? docs/v1.8_feature_deployment_report_20260701.html
 ?? findings.md
 ?? output/
 ?? progress.md
