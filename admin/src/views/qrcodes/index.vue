@@ -113,6 +113,21 @@
         <el-button type="primary" :loading="creating" @click="handleCreate">生成</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="previewVisible" title="二维码预览" width="420px" destroy-on-close @closed="closePreview">
+      <div class="qrcode-preview" v-if="previewQrcode">
+        <img v-if="previewUrl" :src="previewUrl" alt="二维码" class="qrcode-preview__image" />
+        <el-skeleton v-else animated :rows="4" />
+        <div class="qrcode-preview__title">{{ previewQrcode.title }}</div>
+        <div class="qrcode-preview__meta">路径：{{ previewQrcode.path }}</div>
+        <div class="qrcode-preview__meta">scene：{{ previewQrcode.scene }}</div>
+        <div class="qrcode-preview__meta">短码：{{ previewQrcode.short_code }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="previewVisible = false">关闭</el-button>
+        <el-button type="primary" :disabled="!previewQrcode" @click="downloadPreviewQrcode">下载透明底 PNG</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -131,6 +146,10 @@ const keyword = ref('')
 const showCreateDialog = ref(false)
 const creating = ref(false)
 const createFormRef = ref<FormInstance>()
+const previewVisible = ref(false)
+const previewQrcode = ref<Qrcode | null>(null)
+const previewBlob = ref<Blob | null>(null)
+const previewUrl = ref('')
 
 const targetTypeMap: Record<string, string> = {
   product: '商品',
@@ -209,9 +228,10 @@ async function handleCreate() {
   if (!valid) return
   creating.value = true
   try {
-    await createQrcode(createForm)
+    const res = await createQrcode(createForm)
     ElMessage.success('二维码已生成')
     showCreateDialog.value = false
+    await openPreview(res.data)
     fetchData()
   } finally {
     creating.value = false
@@ -227,8 +247,9 @@ async function handleToggleStatus(row: Qrcode) {
 
 async function handleRegenerate(row: Qrcode) {
   await ElMessageBox.confirm(`确认重新生成二维码「${row.title}」？`, '重新生成', { type: 'warning' })
-  await regenerateQrcode(row.id)
+  const res = await regenerateQrcode(row.id)
   ElMessage.success('已重新生成')
+  await openPreview(res.data)
   fetchData()
 }
 
@@ -237,12 +258,33 @@ async function handleDownload(row: Qrcode) {
   downloadFile(res.data as Blob, `${row.short_code}.png`)
 }
 
-function handlePreview(row: Qrcode) {
-  ElMessageBox.alert(
-    `<div style="text-align:left"><div>路径：<code>${row.path}</code></div><div>scene：<code>${row.scene}</code></div><div>短码：<code>${row.short_code}</code></div></div>`,
-    `二维码预览 - ${row.title}`,
-    { dangerouslyUseHTMLString: true, confirmButtonText: '关闭' },
-  )
+async function handlePreview(row: Qrcode) {
+  await openPreview(row)
+}
+
+async function openPreview(row: Qrcode) {
+  closePreview()
+  previewQrcode.value = row
+  previewVisible.value = true
+  const res = await downloadQrcode(row.id)
+  previewBlob.value = res.data as Blob
+  previewUrl.value = URL.createObjectURL(previewBlob.value)
+}
+
+function closePreview() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = ''
+  previewBlob.value = null
+  previewQrcode.value = null
+}
+
+async function downloadPreviewQrcode() {
+  if (!previewQrcode.value) return
+  if (!previewBlob.value) {
+    const res = await downloadQrcode(previewQrcode.value.id)
+    previewBlob.value = res.data as Blob
+  }
+  downloadFile(previewBlob.value, `${previewQrcode.value.short_code || previewQrcode.value.id}-transparent.png`)
 }
 
 onMounted(fetchData)
@@ -266,5 +308,37 @@ onMounted(fetchData)
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--color-border-light);
+}
+
+.qrcode-preview {
+  text-align: center;
+
+  &__image {
+    width: 240px;
+    height: 240px;
+    object-fit: contain;
+    border: 1px solid var(--color-border-light);
+    border-radius: 12px;
+    background:
+      linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
+      linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
+      linear-gradient(-45deg, transparent 75%, #f3f4f6 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  }
+
+  &__title {
+    margin-top: 12px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  &__meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--color-text-placeholder);
+    word-break: break-all;
+  }
 }
 </style>

@@ -56,11 +56,13 @@ from schemas.admin import (
     HeatmapDataResponse,
     OperationLogListParams,
     OperationLogResponse,
+    OperationPasswordUpdateRequest,
     SalesRankingItem,
     TrendDataResponse,
 )
 from schemas.common import AdminPaginationParams, PaginatedResponse, PaginationParams, ResponseModel
 from schemas.member import MembershipCardConfigSchema
+from schemas.order import OrderResponse
 from services.enterprise_wechat_robot_service import (
     send_text_message,
     validate_enterprise_wechat_webhook_url,
@@ -80,10 +82,25 @@ from services.inventory_pool_service import (
     validate_binding_target_site,
     validate_exactly_one_binding_target,
 )
+from services import order_service
 from services import inventory_calendar_service, inventory_pool_service, refund_service, member_service
 from utils.security import create_access_token, decrypt_sensitive, encrypt_sensitive, hash_password, verify_password, verify_token
 
 router = APIRouter(prefix="/api/v1/admin", tags=["管理后台"])
+
+
+def _get_admin_role_code(admin: AdminUser) -> str:
+    return getattr(getattr(admin, "role", None), "role_code", "") or ""
+
+
+def _ensure_admin_site_access(admin: AdminUser, site_id: int) -> None:
+    if _get_admin_role_code(admin) == "super_admin":
+        return
+    if getattr(admin, "site_id", None) != site_id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40311, "message": "无权操作其他营地数据"},
+        )
 
 
 def _serialize_inventory_pool(pool: InventoryPool, binding_count: int = 0) -> dict:
@@ -3242,6 +3259,32 @@ async def verify_operation_password(
     )
 
 
+@router.put("/admin-me/operation-password", summary="设置当前管理员操作密码")
+async def update_operation_password(
+    body: OperationPasswordUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """设置当前登录管理员的操作密码。"""
+    _ensure_super_admin(admin)
+    target_site_id = _get_required_confirm_site_id(request)
+    if admin.operation_password_hash:
+        if not body.old_password:
+            raise HTTPException(status_code=403, detail="请先输入旧操作密码")
+        if not verify_password(body.old_password, admin.operation_password_hash):
+            raise HTTPException(status_code=403, detail="旧操作密码错误")
+    admin.operation_password_hash = hash_password(body.password)
+    await db.flush()
+    return ResponseModel.success(
+        data={
+            "updated": True,
+            "site_id": target_site_id,
+        },
+        message="操作密码已更新",
+    )
+
+
 # ========== 会员详情 & 积分调整 ==========
 
 @router.get("/members/{user_id}", summary="会员详情")
@@ -4425,54 +4468,14 @@ async def admin_get_order_detail(
 ):
     """管理端获取订单详情"""
     site_id = get_site_id(request)
-    result = await db.execute(
-        select(Order).where(Order.id == order_id, Order.is_deleted.is_(False), Order.site_id == site_id)
-    )
-    order = result.scalar_one_or_none()
-    if not order:
-        raise HTTPException(status_code=404, detail="订单不存在")
-
-    # 获取订单项
-    items_result = await db.execute(
-        select(OrderItem, Product.name.label("product_name"))
-        .join(Product, Product.id == OrderItem.product_id, isouter=True)
-        .where(OrderItem.order_id == order_id)
-    )
-    order_items = []
-    for row in items_result.all():
-        item = row[0]
-        order_items.append({
-            "id": item.id,
-            "product_id": item.product_id,
-            "product_name": row[1],
-            "quantity": item.quantity,
-            "unit_price": float(item.unit_price) if item.unit_price else 0,
-            "subtotal": float(item.subtotal) if item.subtotal else 0,
-            "use_date": item.use_date.isoformat() if item.use_date else None,
-        })
-
-    # 获取用户信息
-    user_result = await db.execute(select(User).where(User.id == order.user_id))
-    user = user_result.scalar_one_or_none()
-
-    return ResponseModel.success(data={
-        "id": order.id,
-        "order_no": order.order_no,
-        "user_id": order.user_id,
-        "user_nickname": user.nickname if user else None,
-        "user_phone": user.phone if user else None,
-        "status": order.status,
-        "payment_status": order.payment_status,
-        "total_amount": float(order.total_amount) if order.total_amount else 0,
-        "paid_amount": float(order.actual_amount) if order.actual_amount else 0,
-        "refund_amount": float(order.refunded_amount) if order.refunded_amount else 0,
-        "settled_amount": float(order.settled_amount) if order.settled_amount else 0,
-        "settlement_status": order.settlement_status,
-        "payment_method": order.payment_method,
-        "paid_at": order.payment_time.isoformat() if order.payment_time else None,
-        "expire_at": order.expire_at.isoformat() if order.expire_at else None,
-        "items": order_items,
-        "remark": order.remark,
-        "created_at": order.created_at.isoformat() if order.created_at else None,
-        "updated_at": order.updated_at.isoformat() if order.updated_at else None,
+    _ensure_admin_site_access(admin, site_id)
+    order = await order_service.get_order_detail(db, order_id, site_id=site_id)
+    data = OrderResponse.model_validate(order).model_dump(mode="json")
+    data.update({
+        "paid_amount": data.get("actual_amount"),
+        "refund_amount": str(getattr(order, "refunded_amount", None) or 0),
+        "settled_amount": str(getattr(order, "settled_amount", None) or 0),
+        "settlement_status": getattr(order, "settlement_status", None),
+        "paid_at": data.get("payment_time"),
     })
+    return ResponseModel.success(data=data)

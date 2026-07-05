@@ -5,20 +5,24 @@ db 作为第一个参数传入。
 """
 
 import asyncio
+import csv
 import json
 import mimetypes
 import uuid
 from datetime import datetime, timedelta, timezone
+from io import StringIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import cast, func, or_, select, String
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from config import settings
 from models.admin import OperationLog
 from models.cms import CmsAsset, CmsComponent, CmsPage, CmsPageVersion
+from models.product import Product
 from redis_client import get_redis
 from schemas.cms import (
     CmsComponentCreate,
@@ -781,6 +785,122 @@ async def list_assets(
     items = list(result.scalars().all())
 
     return items, total
+
+
+def _asset_path_from_url(file_url: str) -> Optional[Path]:
+    if not file_url.startswith("/images/"):
+        return None
+    return IMAGES_ROOT / file_url.removeprefix("/images/")
+
+
+async def register_existing_asset(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    file_url: str,
+    file_name: str,
+    file_type: str,
+    admin_id: int,
+) -> CmsAsset:
+    """把系统生成的二维码/导出文件归档进云文件，避免同一 URL 重复建档。"""
+    result = await db.execute(
+        select(CmsAsset).where(
+            CmsAsset.site_id == site_id,
+            CmsAsset.file_url == file_url,
+            CmsAsset.is_deleted.is_(False),
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
+
+    file_size = 0
+    width, height = None, None
+    source_path = _asset_path_from_url(file_url)
+    if source_path and source_path.is_file():
+        file_size = source_path.stat().st_size
+        if file_type in {"image", "qrcode"}:
+            try:
+                width, height = inspect_image_size(source_path)
+            except ImageVariantError:
+                width, height = None, None
+
+    asset = CmsAsset(
+        site_id=site_id,
+        file_name=file_name,
+        file_url=file_url,
+        file_type=file_type,
+        file_size=file_size,
+        width=width,
+        height=height,
+        uploaded_by=admin_id,
+    )
+    db.add(asset)
+    await db.flush()
+    await db.refresh(asset)
+    return asset
+
+
+def _csv_escape_rows(rows: List[List[Any]]) -> bytes:
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerows(rows)
+    return ("\ufeff" + buffer.getvalue()).encode("utf-8")
+
+
+async def export_campsite_info_asset(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    admin_id: int,
+) -> CmsAsset:
+    """导出营位商品基础信息，并把 CSV 作为云文件归档。"""
+    result = await db.execute(
+        select(Product)
+        .options(selectinload(Product.ext_camping))
+        .where(
+            Product.site_id == site_id,
+            Product.type.in_(["daily_camping", "event_camping"]),
+            Product.is_deleted.is_(False),
+        )
+        .order_by(Product.sort_order.asc(), Product.id.asc())
+    )
+    products = list(result.scalars().all())
+    rows: List[List[Any]] = [["ID", "名称", "类型", "业务分类", "基础价", "状态", "区域", "营位编号", "包含人数"]]
+    for product in products:
+        ext = product.ext_camping
+        rows.append([
+            product.id,
+            product.name,
+            product.type,
+            product.category or "",
+            product.base_price,
+            product.status,
+            getattr(ext, "area", "") or "",
+            getattr(ext, "position_name", "") or "",
+            getattr(ext, "max_persons", "") or "",
+        ])
+
+    content = _csv_escape_rows(rows)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    filename = f"campsites-{site_id}-{timestamp}.csv"
+    export_dir = IMAGES_ROOT / "exports" / str(site_id)
+    export_dir.mkdir(parents=True, exist_ok=True)
+    save_path = export_dir / filename
+    await asyncio.to_thread(save_path.write_bytes, content)
+
+    asset = CmsAsset(
+        site_id=site_id,
+        file_name=filename,
+        file_url=f"/images/exports/{site_id}/{filename}",
+        file_type="export",
+        file_size=len(content),
+        uploaded_by=admin_id,
+    )
+    db.add(asset)
+    await db.flush()
+    await db.refresh(asset)
+    return asset
 
 
 # ---- B端：上传素材 ----

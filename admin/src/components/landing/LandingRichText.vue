@@ -4,14 +4,14 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import DOMPurify from 'dompurify'
+import { sanitizeRichText } from '@/utils/rich-text'
 
 const props = defineProps<{
   content?: string
 }>()
 
 // XSS 防护
-const safeHtml = computed(() => DOMPurify.sanitize(props.content || ''))
+const safeHtml = computed(() => sanitizeRichText(props.content || ''))
 </script>
 
 <style lang="scss" scoped>

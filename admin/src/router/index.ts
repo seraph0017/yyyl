@@ -41,14 +41,13 @@ const adminRoutes: RouteRecordRaw[] = [
         path: 'calendar',
         name: 'Calendar',
         component: () => import('@/views/calendar/index.vue'),
-        meta: { title: '营地日历', icon: 'Calendar' },
+        meta: { title: '库存日历', icon: 'Calendar', roles: ['super_admin'] },
       },
-      // 营位管理（独立品类）
       {
         path: 'campsites',
         name: 'Campsites',
-        component: () => import('@/views/campsites/index.vue'),
-        meta: { title: '营位管理', icon: 'Place' },
+        redirect: { path: '/products', query: { product_group: 'campsite' } },
+        meta: { title: '营位管理', icon: 'Place', hidden: true },
       },
       {
         path: 'campsites/create',
@@ -68,6 +67,12 @@ const adminRoutes: RouteRecordRaw[] = [
         name: 'Products',
         component: () => import('@/views/products/index.vue'),
         meta: { title: '商品管理', icon: 'Goods' },
+      },
+      {
+        path: 'products/campsites',
+        name: 'ProductsCampsites',
+        redirect: { path: '/products', query: { product_group: 'campsite' } },
+        meta: { title: '营位管理', hidden: true, activeMenu: '/products' },
       },
       {
         path: 'products/create',
@@ -157,6 +162,12 @@ const adminRoutes: RouteRecordRaw[] = [
         name: 'PageEdit',
         component: () => import('@/views/content/pages.vue'),
         meta: { title: '页面编辑', icon: 'Document' },
+      },
+      {
+        path: 'cloud-files',
+        name: 'CloudFiles',
+        component: () => import('@/views/cloud-files/index.vue'),
+        meta: { title: '云文件', icon: 'FolderOpened', roles: ['admin', 'super_admin'] },
       },
       {
         path: 'notifications',

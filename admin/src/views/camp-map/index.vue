@@ -49,19 +49,33 @@
         <template v-if="selectedMap">
           <div class="flex-between mb-16">
             <h3>{{ selectedMap.name }} — 区域管理</h3>
-            <el-button type="primary" size="small" @click="handleCreateZone">
-              <el-icon><Plus /></el-icon>添加区域
-            </el-button>
+            <div class="zone-toolbar">
+              <el-button size="small" :type="drawingMode ? 'warning' : 'primary'" plain @click="toggleDrawingMode">
+                {{ drawingMode ? '取消圈选' : '圈选区域' }}
+              </el-button>
+              <el-button type="primary" size="small" @click="() => handleCreateZone()">
+                <el-icon><Plus /></el-icon>手动添加
+              </el-button>
+            </div>
           </div>
 
           <!-- 地图图片预览 -->
           <div class="map-image-wrapper mb-16">
             <div v-if="selectedMap.map_image" class="map-preview-scroll">
-              <div class="map-preview-canvas">
+              <div
+                ref="mapCanvasRef"
+                class="map-preview-canvas"
+                :class="{ 'map-preview-canvas--drawing': drawingMode }"
+                @mousedown="handleMapMouseDown"
+                @mousemove="handleMapMouseMove"
+                @mouseup="handleMapMouseUp"
+                @mouseleave="handleMapMouseLeave"
+              >
                 <img
                   :src="selectedMap.map_image"
                   alt="营地地图"
                   class="map-image"
+                  draggable="false"
                 />
                 <button
                   v-for="zone in selectedMap.zones || []"
@@ -69,10 +83,16 @@
                   type="button"
                   class="map-zone-overlay"
                   :style="getZoneOverlayStyle(zone)"
+                  @mousedown.stop
                   @click="handleEditZone(zone)"
                 >
                   <span>{{ zone.zone_code || zone.zone_name }}</span>
                 </button>
+                <div
+                  v-if="drawingRect"
+                  class="map-zone-draft"
+                  :style="getDraftOverlayStyle()"
+                ></div>
               </div>
               <el-image
                 :src="selectedMap.map_image"
@@ -149,11 +169,11 @@
             <template #append>
               <el-upload
                 :show-file-list="false"
-                action="/api/v1/admin/cms/assets/upload"
-                :headers="uploadHeaders"
-                :on-success="handleMapImageUpload"
+                accept="image/*"
+                :before-upload="beforeMapImageUpload"
+                :http-request="handleMapImageUpload"
               >
-                <el-button>上传</el-button>
+                <el-button :loading="mapImageUploading">上传</el-button>
               </el-upload>
             </template>
           </el-input>
@@ -172,7 +192,8 @@
           <el-input v-model="zoneForm.zone_name" placeholder="如 A区、湖畔区" />
         </el-form-item>
         <el-form-item label="区域编码" prop="zone_code">
-          <el-input v-model="zoneForm.zone_code" placeholder="如 zone_a（可选）" />
+          <el-input v-model="zoneForm.zone_code" placeholder="保存时自动生成" disabled />
+          <div class="form-tip">区域编码由系统自动生成；请通过地图圈选或坐标设置区域范围。</div>
         </el-form-item>
         <el-form-item label="坐标">
           <div class="coordinates-row">
@@ -234,21 +255,28 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, computed } from 'vue'
-import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadRequestOptions } from 'element-plus'
 import { Plus, Edit, Delete } from '@element-plus/icons-vue'
 import { getCampMaps, createCampMap, updateCampMap, deleteCampMap, createCampMapZone, updateCampMapZone, deleteCampMapZone } from '@/api/camp-map'
-import { get, getToken, getCurrentSiteId } from '@/utils/request'
+import { uploadCmsAsset } from '@/api/cms'
+import { get } from '@/utils/request'
+import { createUploadRequestError } from '@/utils'
 import type { CampMap, CampMapZone, CampMapCreate, CampMapZoneCreate } from '@/types'
 
 type ZoneLinkType = 'none' | 'product' | 'cms' | 'h5'
 type ZoneFormState = Omit<CampMapZoneCreate, 'link_type'> & {
   link_type: ZoneLinkType
 }
+type DrawingRect = { startX: number; startY: number; x: number; y: number; width: number; height: number }
 
 const loading = ref(false)
 const submitting = ref(false)
 const mapList = ref<CampMap[]>([])
 const selectedMap = ref<CampMap | null>(null)
+const mapImageUploading = ref(false)
+const mapCanvasRef = ref<HTMLElement>()
+const drawingMode = ref(false)
+const drawingRect = ref<DrawingRect | null>(null)
 
 // 商品列表
 const productList = ref<{ id: number; name: string }[]>([])
@@ -261,12 +289,6 @@ async function fetchProducts() {
     ElMessage.error('商品列表加载失败，请检查网络后重试')
   }
 }
-
-// 上传请求头
-const uploadHeaders = computed(() => ({
-  Authorization: `Bearer ${getToken()}`,
-  'X-Site-Id': getCurrentSiteId(),
-}))
 
 // ========== 地图管理 ==========
 const mapDialogVisible = ref(false)
@@ -302,6 +324,8 @@ async function fetchMaps() {
 
 function selectMap(map: CampMap) {
   selectedMap.value = map
+  drawingMode.value = false
+  drawingRect.value = null
 }
 
 function handleCreateMap() {
@@ -348,11 +372,33 @@ async function handleSubmitMap() {
   }
 }
 
-function handleMapImageUpload(response: any) {
-  const url = response.data?.file_url || response.data?.url
-  if (url) {
-    mapForm.map_image = url
-    ElMessage.success('图片上传成功')
+function beforeMapImageUpload(file: File) {
+  if (!file.type.startsWith('image/')) {
+    ElMessage.error('请上传图片文件')
+    return false
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过 10MB')
+    return false
+  }
+  return true
+}
+
+async function handleMapImageUpload(options: UploadRequestOptions) {
+  mapImageUploading.value = true
+  try {
+    const res = await uploadCmsAsset(options.file as File)
+    const url = res.data?.file_url
+    if (url) {
+      mapForm.map_image = url
+      ElMessage.success('图片上传成功')
+      options.onSuccess?.(res.data)
+    }
+  } catch (error) {
+    options.onError?.(createUploadRequestError(error, options))
+    throw error
+  } finally {
+    mapImageUploading.value = false
   }
 }
 
@@ -403,6 +449,84 @@ function getZoneOverlayStyle(zone: CampMapZone) {
     top: `${c.y}%`,
     width: `${c.width}%`,
     height: `${c.height}%`,
+  }
+}
+
+function getDraftOverlayStyle() {
+  const rect = drawingRect.value
+  if (!rect) return {}
+  return {
+    left: `${rect.x}%`,
+    top: `${rect.y}%`,
+    width: `${rect.width}%`,
+    height: `${rect.height}%`,
+  }
+}
+
+function toggleDrawingMode() {
+  if (!selectedMap.value?.map_image) {
+    ElMessage.warning('请先上传地图图片')
+    return
+  }
+  drawingMode.value = !drawingMode.value
+  drawingRect.value = null
+  if (drawingMode.value) {
+    ElMessage.info('在地图图片上按住鼠标拖拽圈选区域')
+  }
+}
+
+function toPercentPoint(event: MouseEvent) {
+  const rect = mapCanvasRef.value?.getBoundingClientRect()
+  if (!rect) return null
+  const x = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100))
+  const y = Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100))
+  return { x: Number(x.toFixed(2)), y: Number(y.toFixed(2)) }
+}
+
+function handleMapMouseDown(event: MouseEvent) {
+  if (!drawingMode.value) return
+  const point = toPercentPoint(event)
+  if (!point) return
+  drawingRect.value = { startX: point.x, startY: point.y, x: point.x, y: point.y, width: 0, height: 0 }
+}
+
+function handleMapMouseMove(event: MouseEvent) {
+  if (!drawingMode.value || !drawingRect.value) return
+  const point = toPercentPoint(event)
+  if (!point) return
+  const startX = drawingRect.value.startX
+  const startY = drawingRect.value.startY
+  drawingRect.value = {
+    startX,
+    startY,
+    x: Number(Math.min(startX, point.x).toFixed(2)),
+    y: Number(Math.min(startY, point.y).toFixed(2)),
+    width: Number(Math.abs(point.x - startX).toFixed(2)),
+    height: Number(Math.abs(point.y - startY).toFixed(2)),
+  }
+}
+
+function handleMapMouseUp() {
+  if (!drawingMode.value || !drawingRect.value) return
+  const rect = drawingRect.value
+  if (rect.width < 1 || rect.height < 1) {
+    drawingRect.value = null
+    ElMessage.warning('圈选区域太小，请重新拖拽')
+    return
+  }
+  handleCreateZone({
+    x: rect.x,
+    y: rect.y,
+    width: rect.width,
+    height: rect.height,
+  })
+  drawingMode.value = false
+  drawingRect.value = null
+}
+
+function handleMapMouseLeave() {
+  if (drawingRect.value && drawingMode.value) {
+    drawingRect.value = null
   }
 }
 
@@ -462,11 +586,20 @@ function validateZoneLink(): boolean {
   return true
 }
 
-function handleCreateZone() {
+function generateZoneCode() {
+  const existing = new Set((selectedMap.value?.zones || []).map(zone => zone.zone_code).filter(Boolean))
+  for (let index = (selectedMap.value?.zones?.length || 0) + 1; index < 1000; index += 1) {
+    const code = `zone_${String(index).padStart(2, '0')}`
+    if (!existing.has(code)) return code
+  }
+  return `zone_${Date.now()}`
+}
+
+function handleCreateZone(coordinates?: { x: number; y: number; width: number; height: number }) {
   editingZoneId.value = null
-  zoneForm.zone_name = ''
-  zoneForm.zone_code = ''
-  zoneForm.coordinates = { x: 0, y: 0, width: 100, height: 100 }
+  zoneForm.zone_name = coordinates ? `区域${(selectedMap.value?.zones?.length || 0) + 1}` : ''
+  zoneForm.zone_code = generateZoneCode()
+  zoneForm.coordinates = coordinates || { x: 0, y: 0, width: 100, height: 100 }
   zoneForm.product_ids = []
   zoneForm.description = ''
   zoneForm.sort_order = 0
@@ -502,6 +635,9 @@ async function handleSubmitZone() {
   if (!selectedMap.value) return
   if (!validateZoneCoordinates()) return
   if (!validateZoneLink()) return
+  if (!zoneForm.zone_code) {
+    zoneForm.zone_code = generateZoneCode()
+  }
   submitting.value = true
   try {
     if (editingZoneId.value) {
@@ -539,6 +675,12 @@ onMounted(() => {
 .map-preview-panel {
   flex: 1;
   min-width: 0;
+}
+
+.zone-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .map-list {
@@ -598,6 +740,11 @@ onMounted(() => {
     display: inline-block;
     line-height: 0;
     max-width: 100%;
+
+    &--drawing {
+      cursor: crosshair;
+      user-select: none;
+    }
   }
 
   .map-image {
@@ -610,6 +757,13 @@ onMounted(() => {
   .map-preview-hidden {
     display: none;
   }
+}
+
+.map-zone-draft {
+  position: absolute;
+  border: 2px dashed var(--color-primary);
+  background: rgba(126, 212, 160, 0.18);
+  pointer-events: none;
 }
 
 .map-zone-overlay {
@@ -660,6 +814,13 @@ onMounted(() => {
 
 .text-secondary {
   font-size: 12px;
+  color: var(--color-text-placeholder);
+}
+
+.form-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--color-text-placeholder);
 }
 </style>

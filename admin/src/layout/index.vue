@@ -161,8 +161,7 @@ function filterMenuByRole(items: MenuItem[]): MenuItem[] {
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     { path: '/dashboard', title: 'Dashboard', icon: DataAnalysis },
-    { path: '/calendar', title: '营地日历', icon: Calendar },
-    { path: '/campsites', title: '营位管理', icon: Place },
+    { path: '/calendar', title: '库存日历', icon: Calendar, roles: ['super_admin'] },
     { path: '/products', title: '商品管理', icon: Goods },
     { path: '/orders', title: '订单管理', icon: List },
     {
@@ -185,6 +184,8 @@ const menuItems = computed<MenuItem[]>(() => {
         { path: '/faq', title: 'FAQ管理' },
         { path: '/customer-service-ai', title: '智能客服', icon: ChatDotRound, roles: ['admin', 'super_admin'] },
         { path: '/pages', title: '页面编辑' },
+        { path: '/cloud-files', title: '云文件', roles: ['admin', 'super_admin'] },
+        { path: '/qrcodes', title: '二维码管理', roles: ['admin', 'super_admin'] },
         { path: '/notifications', title: '消息管理' },
         { path: '/cms', title: '页面装修' },
       ],
@@ -195,7 +196,6 @@ const menuItems = computed<MenuItem[]>(() => {
       icon: Connection,
       children: [
         { path: '/bundles', title: '搭配组合' },
-        { path: '/inventory-pools', title: '共享库存', roles: ['super_admin'] },
         { path: '/seckill-monitor', title: '秒杀监控' },
         { path: '/enterprise-wechat', title: '企业微信', roles: ['super_admin'] },
         { path: '/camp-maps', title: '营地地图' },

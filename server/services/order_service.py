@@ -29,7 +29,7 @@ from sqlalchemy.orm import selectinload
 from config import settings
 from models.order import Order, OrderItem, TemporaryOrderSession, Ticket
 from models.product import DateTypeConfig, DiscountRule, Inventory, PricingRule, Product, SKU
-from models.user import User
+from models.user import User, UserAddress, UserIdentity
 from redis_client import get_redis
 from services import inventory_pool_service, inventory_service, member_service, qrcode_service, settlement_service, ticket_service, wechat_pay_service
 from utils.helpers import generate_order_no, generate_qr_token, generate_ticket_code
@@ -37,10 +37,159 @@ from utils.helpers import generate_order_no, generate_qr_token, generate_ticket_
 logger = logging.getLogger(__name__)
 
 CAMPSITE_PRODUCT_TYPES = {"daily_camping", "event_camping"}
+ACTIVITY_PRODUCT_TYPES = {"daily_activity", "special_activity"}
+DATE_INVENTORY_PRODUCT_TYPES = CAMPSITE_PRODUCT_TYPES | ACTIVITY_PRODUCT_TYPES
 TEMPORARY_ORDER_EXPIRE_SECONDS = 15 * 60
 
 # 排序字段白名单
 ALLOWED_SORT_FIELDS = {"id", "created_at", "actual_amount", "status"}
+
+
+def _first_product_image(product: Optional[Product]) -> Optional[str]:
+    """取商品图片列表中的首图，兼容历史 string 和 {url} 两种结构。"""
+    if product is None:
+        return None
+    images = getattr(product, "images", None) or []
+    if not isinstance(images, list) or not images:
+        return None
+    sorted_images = sorted(
+        images,
+        key=lambda image: image.get("sort_order", 0) if isinstance(image, dict) else 0,
+    )
+    first = sorted_images[0]
+    if isinstance(first, dict):
+        return first.get("url") or first.get("src")
+    if isinstance(first, str):
+        return first
+    return None
+
+
+async def _resolve_primary_identity_id(
+    db: AsyncSession,
+    user: User,
+    identity_ids: Optional[List[int]],
+) -> Optional[int]:
+    """校验出行人身份归属，并返回当前订单项记录的主出行人 ID。"""
+    normalized_ids = [int(identity_id) for identity_id in (identity_ids or []) if identity_id]
+    if not normalized_ids:
+        return None
+
+    unique_ids = set(normalized_ids)
+    result = await db.execute(
+        select(UserIdentity.id).where(
+            UserIdentity.id.in_(unique_ids),
+            UserIdentity.user_id == user.id,
+            UserIdentity.is_deleted.is_(False),
+        )
+    )
+    valid_ids = set(result.scalars().all())
+    if valid_ids != unique_ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40021, "message": "出行人信息不存在或不属于当前用户"},
+        )
+    return normalized_ids[0]
+
+
+async def _resolve_shipping_address(
+    db: AsyncSession,
+    user: User,
+    address_id: Optional[int],
+    *,
+    shipping_required: bool,
+) -> Optional[UserAddress]:
+    """校验邮寄地址归属，需邮寄商品必须提供当前用户地址。"""
+    if not shipping_required:
+        return None
+    if not address_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40917, "message": "邮寄商品请选择收货地址"},
+        )
+
+    result = await db.execute(
+        select(UserAddress).where(
+            UserAddress.id == address_id,
+            UserAddress.user_id == user.id,
+            UserAddress.is_deleted.is_(False),
+        )
+    )
+    address = result.scalar_one_or_none()
+    if address is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "收货地址不存在或不属于当前用户"},
+        )
+    return address
+
+
+async def _attach_order_display_fields(db: AsyncSession, orders: List[Order]) -> None:
+    """为订单响应补充前端展示字段，避免序列化阶段触发懒加载。"""
+    order_items: List[OrderItem] = []
+    order_user_by_item: Dict[int, int] = {}
+    order_user_ids: set[int] = set()
+    for order in orders:
+        order_user_id = getattr(order, "user_id", None)
+        if order_user_id:
+            order_user_ids.add(order_user_id)
+        for item in list(getattr(order, "items", []) or []):
+            order_items.append(item)
+            if order_user_id:
+                order_user_by_item[id(item)] = order_user_id
+    if not order_items:
+        return
+
+    product_ids = {item.product_id for item in order_items if item.product_id}
+    sku_ids = {item.sku_id for item in order_items if item.sku_id}
+    identity_ids = {item.identity_id for item in order_items if item.identity_id}
+
+    products_by_id: Dict[int, Product] = {}
+    if product_ids:
+        product_result = await db.execute(
+            select(Product).where(
+                Product.id.in_(product_ids),
+                Product.is_deleted.is_(False),
+            )
+        )
+        products_by_id = {product.id: product for product in product_result.scalars().all()}
+
+    skus_by_id: Dict[int, SKU] = {}
+    if sku_ids:
+        sku_result = await db.execute(
+            select(SKU).where(
+                SKU.id.in_(sku_ids),
+                SKU.is_deleted.is_(False),
+            )
+        )
+        skus_by_id = {sku.id: sku for sku in sku_result.scalars().all()}
+
+    identities_by_id: Dict[int, UserIdentity] = {}
+    if identity_ids and order_user_ids:
+        identity_result = await db.execute(
+            select(UserIdentity).where(
+                UserIdentity.id.in_(identity_ids),
+                UserIdentity.user_id.in_(order_user_ids),
+                UserIdentity.is_deleted.is_(False),
+            )
+        )
+        identities_by_id = {identity.id: identity for identity in identity_result.scalars().all()}
+
+    for order in orders:
+        order_remark = getattr(order, "remark", None)
+        for item in getattr(order, "items", []) or []:
+            product = products_by_id.get(item.product_id)
+            sku = skus_by_id.get(item.sku_id) if item.sku_id else None
+            identity = identities_by_id.get(item.identity_id) if item.identity_id else None
+            if identity and getattr(identity, "user_id", None) != order_user_by_item.get(id(item)):
+                identity = None
+            product_image = getattr(sku, "image_url", None) or _first_product_image(product)
+
+            setattr(item, "product_name", getattr(product, "name", None))
+            setattr(item, "product_image", product_image)
+            setattr(item, "cover_image", product_image)
+            setattr(item, "sku_spec_values", getattr(sku, "spec_values", None) if sku else None)
+            setattr(item, "identity_name", getattr(identity, "name", None) if identity else None)
+            setattr(item, "remark", order_remark)
 
 
 def build_order_list_query(
@@ -58,16 +207,18 @@ def build_order_list_query(
     keyword: Optional[str] = None,
     payment_status: Optional[str] = None,
     product_id: Optional[int] = None,
+    sku_id: Optional[int] = None,
     product_type: Optional[str] = None,
     booking_date_start: Optional[date] = None,
     booking_date_end: Optional[date] = None,
+    time_slot: Optional[str] = None,
     verify_status: Optional[str] = None,
     source_channel: Optional[str] = None,
 ) -> Any:
     """构造订单列表基础查询，供列表和导出复用。"""
     query = (
         select(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.user))
         .join(Order.user)
         .join(Order.items, isouter=True)
         .join(Product, Product.id == OrderItem.product_id, isouter=True)
@@ -99,12 +250,16 @@ def build_order_list_query(
         query = query.where(Order.payment_status == payment_status)
     if product_id:
         query = query.where(OrderItem.product_id == product_id)
+    if sku_id:
+        query = query.where(OrderItem.sku_id == sku_id)
     if product_type:
         query = query.where(Product.type == product_type)
     if booking_date_start:
         query = query.where(OrderItem.date >= booking_date_start)
     if booking_date_end:
         query = query.where(OrderItem.date <= booking_date_end)
+    if time_slot:
+        query = query.where(OrderItem.time_slot == time_slot)
     if verify_status:
         query = query.where(Ticket.verify_status == verify_status)
     if source_channel:
@@ -175,6 +330,9 @@ async def create_order(
     order_items: List[Dict[str, Any]] = []
     locked_inventories: List[Tuple[int, Any, int, Any, Any]] = []  # 记录已锁定的旧库存，异常时回滚
     locked_inventory_pools: List[Tuple[int, int]] = []  # 记录已锁定的共享库存池，异常时回滚
+    locked_skus: List[Tuple[int, int]] = []  # 记录已预扣的无日期 SKU 静态库存
+    shipping_required = False
+    shipping_address: Optional[UserAddress] = None
 
     try:
         for item_data in items_data:
@@ -184,7 +342,7 @@ async def create_order(
             dates = item_data.get("dates", [])
             time_slot = item_data.get("time_slot")
             identity_ids = item_data.get("identity_ids", [])
-            primary_identity_id = identity_ids[0] if identity_ids else None
+            primary_identity_id = await _resolve_primary_identity_id(db, user, identity_ids)
 
             # 1. 查询并校验商品
             result = await db.execute(
@@ -214,17 +372,32 @@ async def create_order(
                 )
 
             is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
+            is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES
+            is_date_inventory_product = product.type in DATE_INVENTORY_PRODUCT_TYPES
             if is_campsite_product and not dates:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={"code": 40916, "message": "营位商品请选择预约日期"},
                 )
-            if not is_campsite_product:
+            if is_activity_product and not dates:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": 40916, "message": "活动商品请选择预约日期"},
+                )
+            if is_activity_product and not time_slot:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": 40918, "message": "活动商品请选择预约时间"},
+                )
+            if not is_date_inventory_product:
                 dates = []
 
             # 确定订单类型（取第一个商品类型）
             if not order_type:
                 order_type = product.type
+
+            if product.ext_shop and product.ext_shop.shipping_required:
+                shipping_required = True
 
             # 2. 校验免责声明
             if product.require_disclaimer and not disclaimer_signed:
@@ -274,8 +447,8 @@ async def create_order(
                 })
                 total_amount += actual_price
 
-            # 非营位商品不按日期拆单，直接按购买数量生成一个无日期订单项
-            if not is_campsite_product:
+            # 无日期库存商品不按日期拆单，直接按购买数量生成一个无日期订单项
+            if not is_date_inventory_product:
                 inventory_pool_id = await _lock_inventory_for_order_item(
                     db,
                     site_id=product.site_id,
@@ -288,6 +461,8 @@ async def create_order(
                     locked_inventories=locked_inventories,
                     locked_inventory_pools=locked_inventory_pools,
                 )
+                if inventory_pool_id is None and sku_id:
+                    await _lock_static_sku_stock(db, product, sku_id, quantity, locked_skus)
                 unit_price = await _resolve_sku_price(db, product, sku_id)
                 actual_price = unit_price * quantity
                 order_items.append({
@@ -313,6 +488,13 @@ async def create_order(
             await _calculate_discount(db, items_data, order_items, total_amount)
         )
 
+        shipping_address = await _resolve_shipping_address(
+            db,
+            user,
+            address_id,
+            shipping_required=shipping_required,
+        )
+
         # 6. 创建订单
         actual_amount = total_amount - discount_amount + deposit_amount
         payment_timeout = payment_timeout_seconds
@@ -333,7 +515,7 @@ async def create_order(
             payment_status="unpaid",
             site_id=order_site_id or user_site_id or 1,
             times_card_id=times_card_id,
-            address_id=address_id,
+            address_id=shipping_address.id if shipping_address else address_id,
             remark=remark,
             expire_at=datetime.now(timezone.utc) + timedelta(seconds=payment_timeout),
             source_qrcode_id=source_qrcode_id,
@@ -373,6 +555,11 @@ async def create_order(
                 await inventory_pool_service.release_pool_inventory(db, pool_id=pool_id, quantity=qty)
             except Exception:
                 logger.error(f"[订单] 回滚共享库存池失败: pool={pool_id}")
+        for sid, qty in locked_skus:
+            try:
+                await _release_static_sku_stock(db, sid, qty)
+            except Exception:
+                logger.error(f"[订单] 回滚 SKU 静态库存失败: sku={sid}")
         raise
 
 
@@ -393,6 +580,7 @@ async def quote_order(
     discount_items: List[Dict[str, Any]] = []
     pool_requirements: Dict[int, int] = {}
     inventory_requirements: Dict[Tuple[int, int, Any, str], int] = {}
+    sku_requirements: Dict[int, int] = {}
 
     for item_data in items_data:
         product_id = item_data["product_id"]
@@ -428,12 +616,24 @@ async def quote_order(
             )
 
         is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
+        is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES
+        is_date_inventory_product = product.type in DATE_INVENTORY_PRODUCT_TYPES
         if is_campsite_product and not dates:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": 40916, "message": "营位商品请选择预约日期"},
             )
-        if not is_campsite_product:
+        if is_activity_product and not dates:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40916, "message": "活动商品请选择预约日期"},
+            )
+        if is_activity_product and not time_slot:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40918, "message": "活动商品请选择预约时间"},
+            )
+        if not is_date_inventory_product:
             dates = []
 
         if not order_type:
@@ -469,6 +669,7 @@ async def quote_order(
                 "sku_id": sku_id,
                 "product_name": product.name,
                 "date": d,
+                "time_slot": time_slot,
                 "quantity": quantity,
                 "unit_price": day_price,
                 "actual_price": actual_price,
@@ -488,7 +689,7 @@ async def quote_order(
             })
             total_amount += actual_price
 
-        if not is_campsite_product:
+        if not is_date_inventory_product:
             inventory_source, inventory_pool_id, available = await _quote_inventory_for_order_item(
                 db,
                 site_id=product.site_id,
@@ -500,6 +701,14 @@ async def quote_order(
                 pool_requirements=pool_requirements,
                 inventory_requirements=inventory_requirements,
             )
+            if inventory_source == "none" and sku_id:
+                available = await _quote_static_sku_stock(
+                    db,
+                    product,
+                    sku_id,
+                    quantity,
+                    sku_requirements,
+                )
             unit_price = await _resolve_sku_price(db, product, sku_id)
             actual_price = unit_price * quantity
             quote_item = {
@@ -507,6 +716,7 @@ async def quote_order(
                 "sku_id": sku_id,
                 "product_name": product.name,
                 "date": None,
+                "time_slot": time_slot,
                 "quantity": quantity,
                 "unit_price": unit_price,
                 "actual_price": actual_price,
@@ -1415,6 +1625,14 @@ async def _relock_released_order_inventory_for_payment(db: AsyncSession, order: 
                 getattr(item, "sku_id", None),
                 getattr(item, "time_slot", None),
             )
+        elif getattr(item, "sku_id", None):
+            await _lock_static_sku_stock(
+                db,
+                await _get_order_item_product(db, item.product_id),
+                item.sku_id,
+                quantity,
+                [],
+            )
 
 
 async def settle_completed_order(
@@ -1531,6 +1749,7 @@ async def seckill_order(
     booking_date: date,
     quantity: int = 1,
     sku_id: Optional[int] = None,
+    time_slot: Optional[str] = None,
     identity_ids: Optional[List[int]] = None,
     disclaimer_signed: bool = False,
 ) -> Order:
@@ -1554,8 +1773,8 @@ async def seckill_order(
     redis = get_redis()
 
     # Redis 预扣库存
-    stock_key = f"seckill_stock:{product_id}:{booking_date}"
-    user_key = f"seckill_user:{product_id}:{booking_date}:{user.id}"
+    stock_key = f"seckill_stock:{product_id}:{booking_date}:{sku_id or 0}:{time_slot or ''}"
+    user_key = f"seckill_user:{product_id}:{booking_date}:{sku_id or 0}:{time_slot or ''}:{user.id}"
 
     # 检查是否已抢购
     if await redis.exists(user_key):
@@ -1582,6 +1801,7 @@ async def seckill_order(
         "sku_id": sku_id,
         "quantity": quantity,
         "dates": [booking_date],
+        "time_slot": time_slot,
         "identity_ids": identity_ids or [],
     }]
 
@@ -1618,7 +1838,7 @@ async def get_order_detail(
     """
     query = (
         select(Order)
-        .options(selectinload(Order.items))
+        .options(selectinload(Order.items), selectinload(Order.user))
         .where(Order.id == order_id, Order.is_deleted.is_(False))
     )
     if user_id:
@@ -1635,6 +1855,7 @@ async def get_order_detail(
             detail={"code": 40402, "message": "订单不存在"},
         )
 
+    await _attach_order_display_fields(db, [order])
     return order
 
 
@@ -1650,9 +1871,11 @@ async def list_orders(
     keyword: Optional[str] = None,
     payment_status: Optional[str] = None,
     product_id: Optional[int] = None,
+    sku_id: Optional[int] = None,
     product_type: Optional[str] = None,
     booking_date_start: Optional[date] = None,
     booking_date_end: Optional[date] = None,
+    time_slot: Optional[str] = None,
     payment_time_start: Optional[datetime] = None,
     payment_time_end: Optional[datetime] = None,
     amount_min: Optional[Decimal] = None,
@@ -1694,9 +1917,11 @@ async def list_orders(
         keyword=keyword,
         payment_status=payment_status,
         product_id=product_id,
+        sku_id=sku_id,
         product_type=product_type,
         booking_date_start=booking_date_start,
         booking_date_end=booking_date_end,
+        time_slot=time_slot,
         payment_time_start=payment_time_start,
         payment_time_end=payment_time_end,
         amount_min=amount_min,
@@ -1705,25 +1930,41 @@ async def list_orders(
         source_channel=source_channel,
     )
 
-    # 总数
-    count_query = select(func.count()).select_from(query.subquery())
+    distinct_order_ids = query.with_only_columns(Order.id).order_by(None).distinct().subquery()
+
+    # 总数：按订单去重，避免一单多商品/多票导致 total 放大。
+    count_query = select(func.count()).select_from(distinct_order_ids)
     total_result = await db.execute(count_query)
     total = total_result.scalar() or 0
 
     # 排序（白名单校验）
+    id_query = select(distinct_order_ids.c.id).join(Order, Order.id == distinct_order_ids.c.id)
     if sort_by and sort_by in ALLOWED_SORT_FIELDS:
         order_col = getattr(Order, sort_by)
-        query = query.order_by(order_col.desc() if sort_order == "desc" else order_col.asc())
+        id_query = id_query.order_by(order_col.desc() if sort_order == "desc" else order_col.asc())
+        if sort_by != "id":
+            id_query = id_query.order_by(Order.id.desc())
     else:
-        query = query.order_by(Order.id.desc())
+        id_query = id_query.order_by(Order.id.desc())
 
     # 分页
     offset = (page - 1) * page_size
-    query = query.offset(offset).limit(page_size)
+    id_query = id_query.offset(offset).limit(page_size)
 
-    result = await db.execute(query)
-    orders = list(result.scalars().unique().all())
+    id_result = await db.execute(id_query)
+    order_ids = list(id_result.scalars().all())
+    if not order_ids:
+        return [], total
 
+    result = await db.execute(
+        select(Order)
+        .options(selectinload(Order.items), selectinload(Order.user))
+        .where(Order.id.in_(order_ids), Order.is_deleted.is_(False))
+    )
+    orders_by_id = {order.id: order for order in result.scalars().unique().all()}
+    orders = [orders_by_id[order_id] for order_id in order_ids if order_id in orders_by_id]
+
+    await _attach_order_display_fields(db, orders)
     return orders, total
 
 
@@ -1810,9 +2051,13 @@ async def _quote_inventory_for_order_item(
         Inventory.is_deleted.is_(False),
         Inventory.status == "open",
     )
-    if sku_id:
+    if sku_id is None:
+        query = query.where(Inventory.sku_id.is_(None))
+    else:
         query = query.where(Inventory.sku_id == sku_id)
-    if time_slot:
+    if time_slot is None:
+        query = query.where(Inventory.time_slot.is_(None))
+    else:
         query = query.where(Inventory.time_slot == time_slot)
 
     result = await db.execute(query)
@@ -1879,6 +2124,103 @@ async def _lock_inventory_for_order_item(
     return None
 
 
+async def _lock_static_sku_stock(
+    db: AsyncSession,
+    product: Product,
+    sku_id: int,
+    quantity: int,
+    locked_skus: List[Tuple[int, int]],
+) -> SKU:
+    """无日期且未绑定共享池的 SKU 商品，直接预扣 SKU.stock 防止绕过购物车超卖。"""
+    result = await db.execute(
+        select(SKU)
+        .where(
+            SKU.id == sku_id,
+            SKU.product_id == product.id,
+            SKU.is_deleted.is_(False),
+            SKU.status == "active",
+        )
+        .with_for_update()
+    )
+    sku = result.scalar_one_or_none()
+    if sku is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "SKU不存在或已下架"},
+        )
+    if int(sku.stock or 0) < quantity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40901, "message": f"库存不足，可用: {sku.stock}, 需要: {quantity}"},
+        )
+    sku.stock = int(sku.stock or 0) - quantity
+    locked_skus.append((sku_id, quantity))
+    return sku
+
+
+async def _quote_static_sku_stock(
+    db: AsyncSession,
+    product: Product,
+    sku_id: int,
+    quantity: int,
+    sku_requirements: Dict[int, int],
+) -> int:
+    """报价阶段校验无日期 SKU 静态库存，不改变库存数量。"""
+    result = await db.execute(
+        select(SKU).where(
+            SKU.id == sku_id,
+            SKU.product_id == product.id,
+            SKU.is_deleted.is_(False),
+            SKU.status == "active",
+        )
+    )
+    sku = result.scalar_one_or_none()
+    if sku is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "SKU不存在或已下架"},
+        )
+    available = int(sku.stock or 0)
+    required_quantity = sku_requirements.get(sku_id, 0) + quantity
+    if available < required_quantity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40901, "message": f"库存不足，可用: {available}, 需要: {required_quantity}"},
+        )
+    sku_requirements[sku_id] = required_quantity
+    return available
+
+
+async def _get_order_item_product(db: AsyncSession, product_id: int) -> Product:
+    """根据订单项商品 ID 读取商品，用于无日期 SKU 库存恢复/重锁。"""
+    result = await db.execute(
+        select(Product).where(Product.id == product_id, Product.is_deleted.is_(False))
+    )
+    product = result.scalar_one_or_none()
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "商品不存在或已删除"},
+        )
+    return product
+
+
+async def _release_static_sku_stock(
+    db: AsyncSession,
+    sku_id: int,
+    quantity: int,
+) -> None:
+    """释放无日期 SKU 静态库存预扣。"""
+    result = await db.execute(
+        select(SKU)
+        .where(SKU.id == sku_id, SKU.is_deleted.is_(False))
+        .with_for_update()
+    )
+    sku = result.scalar_one_or_none()
+    if sku is not None:
+        sku.stock = int(sku.stock or 0) + quantity
+
+
 async def _release_order_item_inventory(
     db: AsyncSession,
     item: OrderItem,
@@ -1903,6 +2245,8 @@ async def _release_order_item_inventory(
             getattr(item, "sku_id", None),
             getattr(item, "time_slot", None),
         )
+    elif getattr(item, "sku_id", None):
+        await _release_static_sku_stock(db, item.sku_id, getattr(item, "quantity", 1) or 1)
 
 
 async def _confirm_order_item_inventory(
@@ -1958,6 +2302,8 @@ async def _refund_order_item_inventory(
             getattr(item, "sku_id", None),
             getattr(item, "time_slot", None),
         )
+    elif getattr(item, "sku_id", None):
+        await _release_static_sku_stock(db, item.sku_id, refund_quantity)
 
 
 async def _get_user_order(db: AsyncSession, order_id: int, user_id: int) -> Order:
@@ -2036,23 +2382,31 @@ async def _refund_inventory(
         Inventory.date == inv_date,
         Inventory.is_deleted.is_(False),
     )
-    if sku_id:
+    if sku_id is None:
+        query = query.where(Inventory.sku_id.is_(None))
+    else:
         query = query.where(Inventory.sku_id == sku_id)
-    if time_slot:
+    if time_slot is None:
+        query = query.where(Inventory.time_slot.is_(None))
+    else:
         query = query.where(Inventory.time_slot == time_slot)
 
-    result = await db.execute(query)
+    result = await db.execute(query.with_for_update())
     inv = result.scalar_one_or_none()
 
     if inv:
-        refund_qty = min(quantity, inv.sold)
-        inv.sold -= refund_qty
-        inv.available += refund_qty
+        if inv.sold < quantity:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={"code": 40907, "message": f"库存已售数量不足，已售: {inv.sold}, 需要退款: {quantity}"},
+            )
+        inv.sold -= quantity
+        inv.available += quantity
 
         log = InventoryLog(
             inventory_id=inv.id,
             change_type="refund",
-            quantity=refund_qty,
+            quantity=quantity,
             order_id=order_id,
             remark=f"退款恢复 order_id={order_id}",
         )

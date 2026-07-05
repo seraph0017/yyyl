@@ -103,6 +103,127 @@ class V18InventoryPoolContractTest(unittest.TestCase):
                 "rental_asset_id": None,
             })
 
+    def test_product_editor_supports_product_private_sku_shared_inventory(self):
+        from routers import cart
+        from schemas.product import SKUCreate, SKUSchema, SKUUpdate
+        from services import inventory_pool_service
+        from services import product_service
+
+        self.assertIn("inventory_mode", SKUCreate.model_fields)
+        self.assertIn("inventory_mode", SKUUpdate.model_fields)
+        self.assertIn("inventory_mode", SKUSchema.model_fields)
+        self.assertIn("inventory_pool_id", SKUSchema.model_fields)
+        self.assertIn("inventory_pool_available", SKUSchema.model_fields)
+        sku_payload = SKUCreate(price=Decimal("10.00"), stock=5, spec_values="一大一小")
+        self.assertIsNone(sku_payload.sku_code)
+        self.assertEqual(sku_payload.spec_values, {"规格": "一大一小"})
+        self.assertEqual(product_service.normalize_sku_inventory_mode(None), "independent")
+        self.assertEqual(product_service.normalize_sku_inventory_mode("shared_product"), "shared_product")
+
+        create_source = inspect.getsource(product_service.create_product)
+        update_source = inspect.getsource(product_service.update_product)
+        sync_source = inspect.getsource(product_service._sync_product_sku_inventory_pool)
+        pool_source = inspect.getsource(product_service._get_or_create_product_sku_shared_pool)
+        annotate_source = inspect.getsource(product_service.annotate_product_sku_inventory_modes)
+        get_bound_source = inspect.getsource(inventory_pool_service.get_bound_inventory_pool)
+        cart_list_source = inspect.getsource(cart.list_cart_items)
+        stock_source = inspect.getsource(product_service.resolve_product_detail_stock)
+
+        self.assertIn("inventory_mode", create_source)
+        self.assertIn("_ensure_sku_code", create_source)
+        self.assertIn("_normalize_sku_spec_values", create_source)
+        self.assertIn("_sync_product_sku_inventory_pool", create_source)
+        self.assertIn("_sync_product_sku_inventory_pool", update_source)
+        self.assertIn("_product_sku_shared_pool_code", pool_source)
+        self.assertIn("InventoryPool.pool_code == _product_sku_shared_pool_code(product)", annotate_source)
+        self.assertIn("inventory_pool_available", annotate_source)
+        self.assertIn("InventoryPoolBinding.sku_id == sku_id", get_bound_source)
+        self.assertNotIn("get_product_sku_shared_pool_code(site_id, product_id)", get_bound_source)
+        self.assertIn("sku_pool_map", cart_list_source)
+        self.assertIn("expected_pool_code_by_sku", cart_list_source)
+        self.assertIn("InventoryPoolBinding.sku_id == sku_id", cart_list_source)
+        self.assertIn("InventoryPool.pool_code == pool_code", cart_list_source)
+        self.assertIn("stock = int(pool.available) if pool else int(sku.stock)", cart_list_source)
+        self.assertIn("InventoryPoolBinding(", sync_source)
+        self.assertIn("sku_id=sku.id", sync_source)
+        self.assertIn("binding.status = \"inactive\"", sync_source)
+        self.assertIn("InventoryPool.pool_code == _product_sku_shared_pool_code(product)", sync_source)
+        self.assertNotIn("InventoryPoolBinding.product_id == product.id", sync_source)
+        self.assertIn("counted_pool_ids", stock_source)
+
+    def test_inventory_pool_resolution_prefers_sku_binding_over_product_binding(self):
+        from services.inventory_pool_service import resolve_bound_inventory_pool
+
+        pools = {
+            1: SimpleNamespace(id=1, status="active", available=5),
+            2: SimpleNamespace(id=2, status="active", available=9),
+        }
+        bindings = [
+            SimpleNamespace(
+                id=1,
+                inventory_pool_id=2,
+                status="active",
+                product_id=8,
+                sku_id=None,
+                activity_session_id=None,
+                rental_asset_id=None,
+                priority=1,
+            ),
+            SimpleNamespace(
+                id=2,
+                inventory_pool_id=1,
+                status="active",
+                product_id=None,
+                sku_id=18,
+                activity_session_id=None,
+                rental_asset_id=None,
+                priority=100,
+            ),
+        ]
+
+        pool = resolve_bound_inventory_pool(
+            bindings,
+            pools=pools,
+            product_id=8,
+            sku_id=18,
+        )
+
+        self.assertEqual(pool.id, 1)
+
+    def test_product_list_supports_manual_ids_for_cms_product_list(self):
+        from routers import products
+        from schemas.product import ProductSearchParams
+        from services import product_service
+
+        self.assertIn("ids", ProductSearchParams.model_fields)
+        route_source = inspect.getsource(products.list_products)
+        service_source = inspect.getsource(product_service.list_products)
+
+        self.assertIn("_parse_product_ids(params.ids)", route_source)
+        self.assertIn("product_ids=params_product_ids", route_source)
+        self.assertIn("product_ids", inspect.signature(product_service.list_products).parameters)
+        self.assertIn("Product.id.in_(product_ids)", service_source)
+
+    def test_cloud_files_backend_exports_and_archives_sources(self):
+        from routers import cms
+        from services import cms_service, qrcode_service
+
+        route_source = inspect.getsource(cms.export_campsite_info_asset)
+        cms_source = inspect.getsource(cms_service.export_campsite_info_asset)
+        register_source = inspect.getsource(cms_service.register_existing_asset)
+        qrcode_source = inspect.getsource(qrcode_service.create_or_reuse_qrcode)
+        regenerate_source = inspect.getsource(qrcode_service.regenerate_qrcode)
+
+        self.assertIn("/admin/cms/assets/export/campsites", route_source)
+        self.assertIn("file_type=\"export\"", cms_source)
+        self.assertIn("/images/exports/", cms_source)
+        self.assertIn("daily_camping", cms_source)
+        self.assertIn("event_camping", cms_source)
+        self.assertIn("register_existing_asset", qrcode_source)
+        self.assertIn("register_existing_asset", regenerate_source)
+        self.assertIn("file_type=\"qrcode\"", qrcode_source)
+        self.assertIn("CmsAsset.file_url == file_url", register_source)
+
     def test_order_item_tracks_locked_inventory_pool(self):
         from models.order import OrderItem
 
@@ -219,6 +340,27 @@ class V18InventoryPoolContractTest(unittest.TestCase):
         self.assertIn("order_service.create_order", source)
         self.assertNotIn("OrderItem(", source)
         self.assertNotIn("Order(", source)
+
+    def test_cart_sku_static_stock_checks_skip_shared_inventory_pool(self):
+        from routers import cart
+
+        add_source = inspect.getsource(cart.add_cart_item)
+        checkout_source = inspect.getsource(cart.checkout)
+        update_source = inspect.getsource(cart.update_cart_item)
+
+        self.assertTrue(hasattr(cart, "_validate_cart_sku_stock"))
+        helper_source = inspect.getsource(cart._validate_cart_sku_stock)
+        self.assertIn("inventory_pool_service.get_bound_inventory_pool", helper_source)
+        self.assertIn("inventory_pool_service.validate_pool_availability", helper_source)
+        self.assertIn("if pool:", helper_source)
+        self.assertIn("return", helper_source)
+
+        self.assertIn("_validate_cart_sku_stock", add_source)
+        self.assertIn("_validate_cart_sku_stock", checkout_source)
+        self.assertIn("_validate_cart_sku_stock", update_source)
+        self.assertNotIn("if sku.stock < quantity:", add_source)
+        self.assertNotIn("if sku.stock < item.quantity:", checkout_source)
+        self.assertNotIn("if sku and sku.stock < quantity:", update_source)
 
     def test_cart_checkout_passes_disclaimer_signed_to_order_service(self):
         from routers import cart
@@ -357,7 +499,9 @@ class V18WechatPaymentHardeningContractTest(unittest.TestCase):
         list_source = inspect.getsource(cart.list_cart_items)
         quote_source = inspect.getsource(cart.quote_cart)
         self.assertIn('"stock": stock', list_source)
-        self.assertIn("stock = sku.stock", list_source)
+        self.assertIn("stock = int(pool.available) if pool else int(sku.stock)", list_source)
+        self.assertIn('"shipping_required"', list_source)
+        self.assertIn("product.ext_shop", list_source)
         self.assertIn("order_service.quote_order", quote_source)
         self.assertIn("disclaimer_signed: bool = Body(default=False", quote_source)
         self.assertIn('/quote"', quote_source)
@@ -515,6 +659,16 @@ class V18ProductDetailContractTest(unittest.TestCase):
 
         self.assertIn("resolve_product_detail_stock", source)
         self.assertIn('"stock"', source)
+
+    def test_admin_product_create_reloads_detail_before_serializing(self):
+        from routers import products
+
+        source = inspect.getsource(products.create_product)
+
+        self.assertIn("product_service.create_product", source)
+        self.assertIn("product_service.get_product_detail", source)
+        self.assertIn("ProductDetail.model_validate(product_detail)", source)
+        self.assertIn("resolve_product_detail_stock(product_detail)", source)
 
 
 class V18MapAnalyticsContractTest(unittest.TestCase):
@@ -786,6 +940,40 @@ class V18AdminRouteContractTest(unittest.TestCase):
         self.assertIn("def _ensure_admin_site_access", orders_source)
         self.assertGreaterEqual(orders_source.count("_ensure_admin_site_access(admin, site_id)"), 5)
 
+    def test_admin_cms_and_qrcode_routes_check_admin_site_access(self):
+        from fastapi import HTTPException
+        from routers import cms, qrcodes
+
+        blocked_admin = SimpleNamespace(site_id=1, role=SimpleNamespace(role_code="admin"))
+        super_admin = SimpleNamespace(site_id=1, role=SimpleNamespace(role_code="super_admin"))
+
+        for module in (cms, qrcodes):
+            module._ensure_admin_site_access(super_admin, 2)
+            module._ensure_admin_site_access(blocked_admin, 1)
+            with self.subTest(module=module.__name__):
+                with self.assertRaises(HTTPException):
+                    module._ensure_admin_site_access(blocked_admin, 2)
+
+        cms_source = inspect.getsource(cms)
+        qrcode_source = inspect.getsource(qrcodes)
+        self.assertIn("def _ensure_admin_site_access", cms_source)
+        self.assertGreaterEqual(cms_source.count("_ensure_admin_site_access(admin, site_id)"), 15)
+        self.assertIn("def _ensure_admin_site_access", qrcode_source)
+        self.assertGreaterEqual(qrcode_source.count("_ensure_admin_site_access(admin, site_id)"), 6)
+
+    def test_admin_cms_lock_and_force_delete_use_site_safe_checks(self):
+        from routers import cms
+
+        acquire_source = inspect.getsource(cms.acquire_lock)
+        release_source = inspect.getsource(cms.release_lock)
+        delete_source = inspect.getsource(cms.delete_asset)
+
+        self.assertIn("cms_service.get_page", acquire_source)
+        self.assertIn("CMS_PAGE_NOT_FOUND", acquire_source)
+        self.assertIn("cms_service.get_page", release_source)
+        self.assertIn("CMS_PAGE_NOT_FOUND", release_source)
+        self.assertIn('_get_admin_role_code(admin) != "super_admin"', delete_source)
+
     def test_codepay_unknown_state_does_not_raise_and_rollback_local_order(self):
         from services import order_service
 
@@ -1021,11 +1209,35 @@ class V18AdminRouteContractTest(unittest.TestCase):
         self.assertIn("role_code != \"super_admin\"", source)
         self.assertNotIn("order_service.approve_refund", source)
 
+    def test_legacy_admin_order_detail_reuses_order_service_schema(self):
+        from routers import admin as admin_router
+
+        source = inspect.getsource(admin_router.admin_get_order_detail)
+
+        self.assertIn("_ensure_admin_site_access(admin, site_id)", source)
+        self.assertIn("order_service.get_order_detail", source)
+        self.assertIn("OrderResponse.model_validate(order)", source)
+        self.assertNotIn("item.subtotal", source)
+        self.assertNotIn("item.use_date", source)
+
+    def test_qrcode_download_returns_transparent_png_copy(self):
+        from routers import qrcodes
+        from services import qrcode_service
+
+        route_source = inspect.getsource(qrcodes.download_qrcode)
+        service_source = inspect.getsource(qrcode_service.get_transparent_qrcode_image_path)
+
+        self.assertIn("get_transparent_qrcode_image_path", route_source)
+        self.assertIn("Image.open", service_source)
+        self.assertIn("format=\"PNG\"", service_source)
+        self.assertIn("TRANSPARENT_QRCODE_IMAGE_DIR", inspect.getsource(qrcode_service))
+
     def test_high_risk_confirm_routes_reject_placeholder_success(self):
         from routers import admin as admin_router
 
         source = inspect.getsource(admin_router.verify_confirm_code)
         password_source = inspect.getsource(admin_router.verify_operation_password)
+        update_password_source = inspect.getsource(admin_router.update_operation_password)
 
         self.assertNotIn("code 不为空即通过", source)
         self.assertIn("_ensure_super_admin(admin)", source)
@@ -1033,6 +1245,10 @@ class V18AdminRouteContractTest(unittest.TestCase):
         self.assertIn("确认码错误", source)
         self.assertIn("operation_password_hash", password_source)
         self.assertIn("操作密码未设置", password_source)
+        self.assertIn("_ensure_super_admin(admin)", update_password_source)
+        self.assertIn("body.old_password", update_password_source)
+        self.assertIn("旧操作密码错误", update_password_source)
+        self.assertIn("hash_password(body.password)", update_password_source)
 
 
 class V18StaffTicketContractTest(unittest.TestCase):
@@ -1132,6 +1348,131 @@ class V18StaffTicketContractTest(unittest.TestCase):
         )
         self.assertIn("sku_id=sku_id", create_source)
         self.assertIn("sku_id=sku_id", quote_source)
+
+    def test_activity_products_require_date_time_slot_and_use_inventory_calendar(self):
+        from services import order_service
+
+        create_source = inspect.getsource(order_service.create_order)
+        quote_source = inspect.getsource(order_service.quote_order)
+
+        self.assertEqual(order_service.ACTIVITY_PRODUCT_TYPES, {"daily_activity", "special_activity"})
+        self.assertIn("DATE_INVENTORY_PRODUCT_TYPES", inspect.getsource(order_service))
+        self.assertIn("is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES", create_source)
+        self.assertIn("is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES", quote_source)
+        self.assertIn("活动商品请选择预约日期", create_source)
+        self.assertIn("活动商品请选择预约日期", quote_source)
+        self.assertIn("活动商品请选择预约时间", create_source)
+        self.assertIn("活动商品请选择预约时间", quote_source)
+        self.assertIn("if not is_date_inventory_product:", create_source)
+        self.assertIn("if not is_date_inventory_product:", quote_source)
+        self.assertIn("if not is_date_inventory_product:", create_source)
+        self.assertIn("if not is_date_inventory_product:", quote_source)
+        self.assertNotIn("if not is_campsite_product:\n                dates = []", create_source)
+        self.assertNotIn("if not is_campsite_product:\n            dates = []", quote_source)
+
+    def test_inventory_calendar_and_order_filters_keep_sku_and_time_slot_dimensions(self):
+        from schemas.order import OrderListParams
+        from services import inventory_calendar_service, order_service
+        from routers import orders
+
+        calendar_source = inspect.getsource(inventory_calendar_service.get_inventory_calendar)
+        order_query_source = inspect.getsource(order_service.build_order_list_query)
+        list_signature = inspect.signature(order_service.list_orders)
+        admin_list_source = inspect.getsource(orders.admin_list_orders)
+
+        self.assertIn("time_slots_by_product", calendar_source)
+        self.assertIn("for row_time_slot in target_time_slots", calendar_source)
+        self.assertIn("time_slot_filter_provided", calendar_source)
+        self.assertNotIn("Inventory.time_slot.is_(None)", calendar_source)
+        self.assertIn('"time_slot": target.time_slot', calendar_source)
+        self.assertIn("time_slot=target.time_slot", calendar_source)
+
+        fields = OrderListParams.model_fields
+        self.assertIn("sku_id", fields)
+        self.assertIn("time_slot", fields)
+        self.assertIn("sku_id", list_signature.parameters)
+        self.assertIn("time_slot", list_signature.parameters)
+        self.assertIn("OrderItem.sku_id == sku_id", order_query_source)
+        self.assertIn("OrderItem.time_slot == time_slot", order_query_source)
+        self.assertIn("sku_id=params.sku_id", admin_list_source)
+        self.assertIn("time_slot=params.time_slot", admin_list_source)
+
+    def test_activity_time_slot_contract_covers_quote_seckill_and_migration(self):
+        from schemas.order import OrderQuoteItemResponse, SeckillOrderCreateRequest
+        from services import product_service
+        from services import order_service
+        from routers import orders
+        from routers import products
+
+        quote_source = inspect.getsource(order_service.quote_order)
+        seckill_source = inspect.getsource(order_service.seckill_order)
+        seckill_route_source = inspect.getsource(orders.seckill_order)
+        service_source = inspect.getsource(order_service)
+        price_route_source = inspect.getsource(products.get_price_calendar)
+        price_service_source = inspect.getsource(product_service.get_price_calendar)
+
+        self.assertIn("time_slot", OrderQuoteItemResponse.model_fields)
+        self.assertIn("time_slot", SeckillOrderCreateRequest.model_fields)
+        self.assertIn('"time_slot": time_slot', quote_source)
+        self.assertIn('getattr(body, "time_slot", None)', seckill_route_source)
+        self.assertIn('time_slot=getattr(body, "time_slot", None)', seckill_route_source)
+        self.assertIn("seckill_stock:{product_id}:{booking_date}:{sku_id or 0}:{time_slot or ''}", seckill_source)
+        self.assertIn('"time_slot": time_slot', seckill_source)
+        self.assertIn("_lock_static_sku_stock", service_source)
+        self.assertIn(".with_for_update()", inspect.getsource(order_service._lock_static_sku_stock))
+        self.assertIn("_quote_static_sku_stock", service_source)
+        self.assertIn("time_slot", inspect.signature(products.get_price_calendar).parameters)
+        self.assertIn("time_slot", inspect.signature(product_service.get_price_calendar).parameters)
+        self.assertIn("time_slot=time_slot", price_route_source)
+        self.assertIn("Inventory.time_slot == time_slot", price_service_source)
+
+        migration_path = Path("alembic/versions/2b3c4d5e6f70_v1_8_add_activity_meeting_point.py")
+        migration_source = migration_path.read_text(encoding="utf-8")
+        self.assertIn('down_revision: Union[str, None] = "1a2b3c4d5e6f"', migration_source)
+        self.assertIn('op.add_column', migration_source)
+        self.assertIn('"product_ext_activity"', migration_source)
+        self.assertIn('"meeting_point"', migration_source)
+
+    def test_inventory_dimension_queries_handle_null_sku_and_time_slot_explicitly(self):
+        from services import inventory_service, order_service
+
+        lock_source = inspect.getsource(inventory_service.lock_inventory)
+        release_source = inspect.getsource(inventory_service.release_inventory)
+        confirm_source = inspect.getsource(inventory_service.confirm_sell)
+        quote_source = inspect.getsource(order_service._quote_inventory_for_order_item)
+
+        for source in [lock_source, release_source, confirm_source, quote_source]:
+            self.assertIn("Inventory.sku_id.is_(None)", source)
+            self.assertIn("Inventory.time_slot.is_(None)", source)
+
+    def test_refund_inventory_locks_row_and_rejects_partial_stock_recovery(self):
+        from services import order_service
+
+        source = inspect.getsource(order_service._refund_inventory)
+        self.assertIn(".with_for_update()", source)
+        self.assertIn("inv.sold < quantity", source)
+        self.assertIn("库存已售数量不足", source)
+        self.assertNotIn("refund_qty = min(quantity, inv.sold)", source)
+
+    def test_timeout_release_restores_static_sku_and_new_seckill_dimensions(self):
+        from tasks import inventory
+
+        source = inspect.getsource(inventory.task_inventory_auto_release)
+        self.assertIn("SKU", inspect.getsource(inventory))
+        self.assertIn("item.sku_id", source)
+        self.assertIn("sku.stock += item.quantity", source)
+        self.assertIn("seckill_stock:{item.product_id}:{item.date}:{item.sku_id or 0}:{item.time_slot or ''}", source)
+        self.assertIn("seckill_sold_out:{item.product_id}:{item.sku_id or 0}:{item.time_slot or ''}", source)
+
+    def test_seckill_consistency_check_reads_new_sku_and_time_slot_key_shape(self):
+        from tasks import inventory
+
+        source = inspect.getsource(inventory.task_inventory_consistency_check)
+        self.assertIn("len(parts) not in {3, 5}", source)
+        self.assertIn("sku_id = int(parts[3])", source)
+        self.assertIn('time_slot = parts[4] or None', source)
+        self.assertIn("Inventory.sku_id.is_(None)", source)
+        self.assertIn("Inventory.time_slot == time_slot", source)
 
 
 if __name__ == "__main__":

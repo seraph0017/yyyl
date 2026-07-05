@@ -4,7 +4,7 @@ v1.7 小程序码路由
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +19,20 @@ import services.qrcode_service as qrcode_service
 router = APIRouter(prefix="/api/v1", tags=["小程序码"])
 
 
+def _get_admin_role_code(admin: AdminUser) -> str:
+    return getattr(getattr(admin, "role", None), "role_code", "") or ""
+
+
+def _ensure_admin_site_access(admin: AdminUser, site_id: int) -> None:
+    if _get_admin_role_code(admin) == "super_admin":
+        return
+    if getattr(admin, "site_id", None) != site_id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40311, "message": "无权操作其他营地数据"},
+        )
+
+
 @router.post("/admin/qrcodes", summary="创建或复用小程序码")
 async def create_qrcode(
     body: QrcodeCreateRequest,
@@ -28,6 +42,7 @@ async def create_qrcode(
 ):
     """创建或复用小程序码。"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     qrcode = await qrcode_service.create_or_reuse_qrcode(
         db,
         site_id=site_id,
@@ -51,6 +66,7 @@ async def list_qrcodes(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     items, total = await qrcode_service.list_qrcodes(
         db,
         site_id=site_id,
@@ -76,6 +92,7 @@ async def get_qrcode_detail(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     qrcode = await qrcode_service.get_qrcode(db, site_id=site_id, qrcode_id=qrcode_id)
     if not qrcode:
         return ResponseModel.error(code=40404, message="小程序码不存在")
@@ -92,10 +109,12 @@ async def regenerate_qrcode(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     qrcode = await qrcode_service.regenerate_qrcode(
         db,
         site_id=site_id,
         qrcode_id=qrcode_id,
+        generated_by=admin.id,
     )
     return ResponseModel.success(
         data=QrcodeResponse.model_validate(qrcode).model_dump(mode="json")
@@ -111,6 +130,7 @@ async def update_qrcode_status(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     qrcode = await qrcode_service.update_qrcode_status(
         db,
         site_id=site_id,
@@ -130,7 +150,8 @@ async def download_qrcode(
     admin: AdminUser = Depends(get_current_admin),
 ):
     site_id = get_site_id(request)
-    image_path = await qrcode_service.get_qrcode_image_path(
+    _ensure_admin_site_access(admin, site_id)
+    image_path = await qrcode_service.get_transparent_qrcode_image_path(
         db,
         site_id=site_id,
         qrcode_id=qrcode_id,

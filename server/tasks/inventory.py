@@ -13,7 +13,7 @@ from sqlalchemy import select, update
 
 from celery_app import celery_app
 from models.inventory_pool import InventoryPool
-from models.product import Inventory, InventoryLog, Product
+from models.product import Inventory, InventoryLog, Product, SKU
 from models.order import Order, OrderItem
 from tasks.helpers import get_sync_db, get_sync_redis, task_monitor
 
@@ -113,13 +113,22 @@ def task_inventory_auto_release(self):
                         continue
 
                     if item.date:
-                        inv = db.execute(
+                        inventory_query = (
                             select(Inventory).where(
                                 Inventory.product_id == item.product_id,
                                 Inventory.date == item.date,
                                 Inventory.is_deleted.is_(False),
                             )
-                        ).scalar_one_or_none()
+                        )
+                        if item.sku_id is None:
+                            inventory_query = inventory_query.where(Inventory.sku_id.is_(None))
+                        else:
+                            inventory_query = inventory_query.where(Inventory.sku_id == item.sku_id)
+                        if item.time_slot is None:
+                            inventory_query = inventory_query.where(Inventory.time_slot.is_(None))
+                        else:
+                            inventory_query = inventory_query.where(Inventory.time_slot == item.time_slot)
+                        inv = db.execute(inventory_query.with_for_update()).scalar_one_or_none()
 
                         if inv and inv.locked >= item.quantity:
                             inv.locked -= item.quantity
@@ -136,12 +145,31 @@ def task_inventory_auto_release(self):
 
                             # 回补 Redis 秒杀库存（如果有）
                             r = get_sync_redis()
-                            stock_key = f"seckill_stock:{item.product_id}:{item.date}"
+                            stock_key = f"seckill_stock:{item.product_id}:{item.date}:{item.sku_id or 0}:{item.time_slot or ''}"
                             if r.exists(stock_key):
                                 r.incrby(stock_key, item.quantity)
                                 # 清除售罄标记
-                                sold_out_key = f"seckill_sold_out:{item.product_id}"
+                                sold_out_key = f"seckill_sold_out:{item.product_id}:{item.sku_id or 0}:{item.time_slot or ''}"
                                 r.delete(sold_out_key)
+                                r.delete(f"seckill_sold_out:{item.product_id}")
+                    elif item.sku_id:
+                        sku = db.execute(
+                            select(SKU)
+                            .where(
+                                SKU.id == item.sku_id,
+                                SKU.product_id == item.product_id,
+                                SKU.is_deleted.is_(False),
+                            )
+                            .with_for_update()
+                        ).scalar_one_or_none()
+                        if sku:
+                            sku.stock += item.quantity
+                            logger.info(
+                                "[库存释放] SKU静态库存超时释放: order_id=%s, sku_id=%s, qty=%s",
+                                order.id,
+                                sku.id,
+                                item.quantity,
+                            )
 
                 db.flush()
                 cancelled += 1
@@ -171,21 +199,31 @@ def task_inventory_consistency_check(self):
     with get_sync_db() as db:
         for key in r.scan_iter("seckill_stock:*"):
             parts = key.split(":")
-            if len(parts) != 3:
+            if len(parts) not in {3, 5}:
                 continue
 
             product_id = int(parts[1])
             inv_date = parts[2]
+            sku_id = int(parts[3]) if len(parts) == 5 else 0
+            time_slot = parts[4] or None if len(parts) == 5 else None
 
             redis_stock = int(r.get(key) or 0)
 
-            inv = db.execute(
-                select(Inventory).where(
-                    Inventory.product_id == product_id,
-                    Inventory.date == inv_date,
-                    Inventory.is_deleted.is_(False),
-                )
-            ).scalar_one_or_none()
+            inventory_query = select(Inventory).where(
+                Inventory.product_id == product_id,
+                Inventory.date == inv_date,
+                Inventory.is_deleted.is_(False),
+            )
+            if sku_id:
+                inventory_query = inventory_query.where(Inventory.sku_id == sku_id)
+            else:
+                inventory_query = inventory_query.where(Inventory.sku_id.is_(None))
+            if time_slot is None:
+                inventory_query = inventory_query.where(Inventory.time_slot.is_(None))
+            else:
+                inventory_query = inventory_query.where(Inventory.time_slot == time_slot)
+
+            inv = db.execute(inventory_query).scalar_one_or_none()
 
             if inv is None:
                 continue

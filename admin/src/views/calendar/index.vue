@@ -1,16 +1,28 @@
 <template>
   <div class="page-container">
     <div class="card-box calendar-page">
-      <!-- 顶部操作栏 -->
       <div class="calendar-toolbar">
         <div class="toolbar-left">
           <h3 class="page-title">
             <el-icon class="title-icon"><Calendar /></el-icon>
-            营地日历
+            库存日历
           </h3>
           <el-tag type="info" size="small" effect="plain">{{ monthLabel }}</el-tag>
         </div>
         <div class="toolbar-right">
+          <el-select
+            v-model="calendarProductType"
+            size="small"
+            style="width: 132px"
+            @change="handleTypeChange"
+          >
+            <el-option
+              v-for="item in calendarTypeOptions"
+              :key="item.value"
+              :label="item.label"
+              :value="item.value"
+            />
+          </el-select>
           <el-button-group class="month-nav">
             <el-button :icon="ArrowLeft" size="small" @click="changeMonth(-1)" />
             <el-button size="small" @click="goToday">今天</el-button>
@@ -25,24 +37,25 @@
             style="width: 140px"
             @change="fetchData"
           />
+          <el-button type="primary" size="small" @click="openBatchDialog">
+            <el-icon><Plus /></el-icon>批量调整
+          </el-button>
         </div>
       </div>
 
-      <!-- 图例 -->
       <div class="calendar-legend">
         <span class="legend-item"><span class="legend-dot available" />可预订</span>
         <span class="legend-item"><span class="legend-dot low" />库存紧张 (≤3)</span>
         <span class="legend-item"><span class="legend-dot sold-out" />已售罄</span>
         <span class="legend-item"><span class="legend-dot closed" />未开放</span>
+        <span class="legend-item"><span class="legend-dot shared" />共享库存</span>
       </div>
 
-      <!-- 日历表格 -->
       <div v-loading="loading" class="calendar-wrapper">
         <div class="calendar-grid">
-          <!-- 表头 -->
           <div class="calendar-header">
             <div class="cell-fixed product-name-header">
-              <span>营位名称</span>
+              <span>{{ selectedTypeLabel }}名称</span>
             </div>
             <div
               v-for="date in dates"
@@ -55,54 +68,243 @@
             </div>
           </div>
 
-          <!-- 数据行 -->
           <div
             v-for="(product, idx) in productRows"
-            :key="product.product_id"
+            :key="product.row_key"
             class="calendar-row"
             :class="{ 'row-even': idx % 2 === 0 }"
           >
             <div class="cell-fixed product-name" :title="product.product_name">
               <span class="name-text">{{ product.product_name }}</span>
+              <span class="name-sub">{{ formatRowSub(product) }}</span>
             </div>
-            <div
+            <button
               v-for="date in dates"
               :key="date"
+              type="button"
               class="cell data-cell"
-              :class="[getCellClass(product.product_id, date), { 'col-weekend': isWeekend(date), 'col-today': isToday(date) }]"
+              :class="[getCellClass(product, date), { 'col-weekend': isWeekend(date), 'col-today': isToday(date) }]"
+              @click="openCellDialog(product, date)"
             >
-              <template v-if="getCellData(product.product_id, date)">
+              <template v-if="getCellData(product, date)">
                 <div class="cell-stock">
-                  <span class="stock-available">{{ getCellData(product.product_id, date)!.available_stock }}</span>
+                  <span class="stock-available">{{ getCellData(product, date)!.available }}</span>
                   <span class="stock-divider">/</span>
-                  <span class="stock-total">{{ getCellData(product.product_id, date)!.total_stock }}</span>
+                  <span class="stock-total">{{ getCellData(product, date)!.total }}</span>
                 </div>
-                <div class="cell-price">¥{{ formatPrice(getCellData(product.product_id, date)!.price) }}</div>
+                <div class="cell-price">¥{{ formatYuanAmount(getCellData(product, date)!.price) }}</div>
+                <div class="cell-source" v-if="getCellData(product, date)!.inventory_source === 'inventory_pool'">共享</div>
               </template>
               <span v-else class="cell-empty">-</span>
-            </div>
+            </button>
           </div>
 
-          <el-empty v-if="!productRows.length && !loading" description="暂无营位数据" :image-size="120" />
+          <el-empty v-if="!productRows.length && !loading" :description="emptyDescription" :image-size="120" />
         </div>
       </div>
     </div>
+
+    <el-dialog v-model="cellDialogVisible" title="日历库存" width="520px" @closed="resetCellForm">
+      <template v-if="selectedCell">
+        <el-descriptions :column="2" border class="mb-16">
+          <el-descriptions-item :label="selectedTypeLabel">{{ selectedCell.product_name }}</el-descriptions-item>
+          <el-descriptions-item label="日期">{{ selectedCell.date }}</el-descriptions-item>
+          <el-descriptions-item label="可用 / 总量">{{ selectedCell.available }} / {{ selectedCell.total }}</el-descriptions-item>
+          <el-descriptions-item label="已售 / 锁定">{{ selectedCell.sold }} / {{ selectedCell.locked }}</el-descriptions-item>
+        </el-descriptions>
+
+        <el-alert
+          v-if="selectedCell.inventory_source === 'inventory_pool'"
+          type="warning"
+          :closable="false"
+          show-icon
+          :title="`该${selectedTypeLabel}绑定共享库存池，请到共享库存页调整库存池。`"
+          class="mb-16"
+        />
+
+        <el-form label-width="92px">
+          <el-form-item label="总库存">
+            <el-input-number
+              v-model="cellForm.total"
+              :min="selectedCell.locked + selectedCell.sold"
+              controls-position="right"
+              :disabled="!selectedCell.editable"
+            />
+          </el-form-item>
+          <el-form-item label="状态">
+            <el-radio-group v-model="cellForm.status" :disabled="!selectedCell.editable">
+              <el-radio-button label="open">开放</el-radio-button>
+              <el-radio-button label="closed">关闭</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model.trim="cellForm.remark" maxlength="120" clearable :disabled="!selectedCell.editable" />
+          </el-form-item>
+        </el-form>
+      </template>
+
+      <template #footer>
+        <el-button @click="openOrdersDialog">查看当天订单</el-button>
+        <el-button @click="cellDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingCell" :disabled="!selectedCell?.editable" @click="saveCell">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="batchDialogVisible" :title="`批量调整${selectedTypeLabel}库存`" width="560px" @closed="resetBatchForm">
+      <el-form label-width="104px">
+        <el-form-item :label="selectedTypeLabel">
+          <el-select v-model="batchForm.row_key" filterable :placeholder="`请选择${selectedTypeLabel}`" style="width: 100%">
+            <el-option
+              v-for="row in productRows"
+              :key="row.row_key"
+              :label="formatBatchTargetLabel(row)"
+              :value="row.row_key"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="日期范围">
+          <el-date-picker
+            v-model="batchDateRange"
+            type="daterange"
+            range-separator="至"
+            start-placeholder="开始日期"
+            end-placeholder="结束日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
+          />
+        </el-form-item>
+        <el-form-item label="星期">
+          <el-checkbox-group v-model="batchForm.weekdays">
+            <el-checkbox-button v-for="item in weekdayOptions" :key="item.value" :label="item.value">{{ item.label }}</el-checkbox-button>
+          </el-checkbox-group>
+        </el-form-item>
+        <el-form-item label="模式">
+          <el-radio-group v-model="batchForm.mode">
+            <el-radio-button label="set_total">设总量</el-radio-button>
+            <el-radio-button label="adjust_total">增减</el-radio-button>
+            <el-radio-button label="open">开放</el-radio-button>
+            <el-radio-button label="close">关闭</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item v-if="batchForm.mode === 'set_total'" label="总库存">
+          <el-input-number v-model="batchForm.total" :min="0" controls-position="right" />
+        </el-form-item>
+        <el-form-item v-if="batchForm.mode === 'adjust_total'" label="调整量">
+          <el-input-number v-model="batchForm.delta" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model.trim="batchForm.remark" type="textarea" :rows="3" maxlength="120" show-word-limit />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="batchDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="savingBatch" @click="saveBatch">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="ordersDialogVisible" title="当天订单" width="860px">
+      <el-table :data="orders" v-loading="ordersLoading" stripe>
+        <el-table-column prop="order_no" label="订单号" min-width="180">
+          <template #default="{ row }">
+            <el-link type="primary" @click="router.push(`/orders/${row.id}`)">{{ row.order_no }}</el-link>
+          </template>
+        </el-table-column>
+        <el-table-column label="用户" width="150">
+          <template #default="{ row }">
+            <div>{{ row.user_nickname || row.user_name || `用户#${row.user_id}` }}</div>
+            <div class="text-secondary">{{ row.user_phone_masked || row.user_phone || '-' }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="金额" width="110" align="right">
+          <template #default="{ row }">¥{{ formatYuanAmount(row.actual_amount) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100" align="center">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === 'verified' ? 'success' : row.status === 'paid' ? 'primary' : 'info'">
+              {{ orderStatusMap[row.status]?.label || row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="详细数量" min-width="160">
+          <template #default="{ row }">{{ getOrderDetailCount(row) }}</template>
+        </el-table-column>
+        <el-table-column label="备注" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.remark || '-' }}</template>
+        </el-table-column>
+      </el-table>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { Calendar, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Calendar, ArrowLeft, ArrowRight, Plus } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 import dayjs from 'dayjs'
-import { getCalendarData } from '@/api/product'
-import { formatPrice } from '@/utils'
-import type { CalendarItem } from '@/types'
+import { batchUpdateInventory, getInventoryCalendarData, updateInventory } from '@/api/product'
+import { getOrders } from '@/api/order'
+import { orderStatusMap } from '@/utils'
+import { requestHighRiskConfirm } from '@/utils/high-risk-confirm'
+import type { Order } from '@/types'
+import type { InventoryBatchPayload, InventoryCalendarCell } from '@/types/inventory-pool'
 
+interface CalendarRow {
+  row_key: string
+  product_id: number
+  product_name: string
+  sku_id?: number | null
+  sku_code?: string | null
+  sku_name?: string | null
+  time_slot?: string | null
+  cells: Record<string, InventoryCalendarCell>
+}
+
+const router = useRouter()
 const loading = ref(false)
 const monthValue = ref(dayjs().format('YYYY-MM'))
-const calendarData = ref<CalendarItem[]>([])
+const calendarProductType = ref('daily_camping')
+const cells = ref<InventoryCalendarCell[]>([])
+const cellDialogVisible = ref(false)
+const selectedCell = ref<InventoryCalendarCell | null>(null)
+const savingCell = ref(false)
+const cellForm = reactive({ total: 0, status: 'open' as 'open' | 'closed', remark: '' })
+const batchDialogVisible = ref(false)
+const savingBatch = ref(false)
+const batchDateRange = ref<[string, string] | null>(null)
+const batchForm = reactive({
+  row_key: undefined as string | undefined,
+  mode: 'set_total' as 'set_total' | 'adjust_total' | 'open' | 'close',
+  total: 0,
+  delta: 0,
+  weekdays: [] as number[],
+  remark: '',
+})
+const ordersDialogVisible = ref(false)
+const ordersLoading = ref(false)
+const orders = ref<Order[]>([])
+
+const weekdayOptions = [
+  { label: '一', value: 0 },
+  { label: '二', value: 1 },
+  { label: '三', value: 2 },
+  { label: '四', value: 3 },
+  { label: '五', value: 4 },
+  { label: '六', value: 5 },
+  { label: '日', value: 6 },
+]
+
+const calendarTypeOptions = [
+  { label: '日常营位', value: 'daily_camping' },
+  { label: '活动营位', value: 'event_camping' },
+  { label: '日常活动', value: 'daily_activity' },
+  { label: '特定活动', value: 'special_activity' },
+  { label: '租赁', value: 'rental' },
+]
 
 const monthLabel = computed(() => dayjs(monthValue.value).format('YYYY年M月'))
+const selectedTypeLabel = computed(() => calendarTypeOptions.find(item => item.value === calendarProductType.value)?.label || '商品')
+const emptyDescription = computed(() => `暂无${selectedTypeLabel.value}数据`)
 
 const dates = computed(() => {
   const start = dayjs(monthValue.value).startOf('month')
@@ -116,26 +318,47 @@ const dates = computed(() => {
   return result
 })
 
-const productRows = computed(() => {
-  const map = new Map<number, { product_id: number; product_name: string }>()
-  calendarData.value.forEach(item => {
-    if (!map.has(item.product_id)) {
-      map.set(item.product_id, { product_id: item.product_id, product_name: item.product_name })
+const productRows = computed<CalendarRow[]>(() => {
+  const rows = new Map<string, CalendarRow>()
+  cells.value.forEach(cell => {
+    const rowKey = `${cell.product_id}:${cell.sku_id || 0}:${cell.time_slot || ''}:${cell.inventory_source}`
+    if (!rows.has(rowKey)) {
+      rows.set(rowKey, {
+        row_key: rowKey,
+        product_id: cell.product_id,
+        product_name: cell.product_name,
+        sku_id: cell.sku_id,
+        sku_code: cell.sku_code,
+        sku_name: cell.sku_name,
+        time_slot: cell.time_slot || null,
+        cells: {},
+      })
     }
+    rows.get(rowKey)!.cells[cell.date] = cell
   })
-  return Array.from(map.values())
+  return Array.from(rows.values())
 })
 
-function getCellData(productId: number, date: string): CalendarItem | undefined {
-  return calendarData.value.find(item => item.product_id === productId && item.date === date)
+function getCellData(row: CalendarRow, date: string): InventoryCalendarCell | undefined {
+  return row.cells[date]
 }
 
-function getCellClass(productId: number, date: string): string {
-  const data = getCellData(productId, date)
-  if (!data) return 'closed'
-  if (data.status === 'closed') return 'closed'
-  if (data.status === 'sold_out' || data.available_stock === 0) return 'sold-out'
-  if (data.available_stock <= 3) return 'low'
+function formatRowSub(row: CalendarRow): string {
+  const parts = [row.sku_name || row.sku_code, row.time_slot ? `场次 ${row.time_slot}` : ''].filter(Boolean)
+  return parts.join(' · ') || '商品库存'
+}
+
+function formatBatchTargetLabel(row: CalendarRow): string {
+  const suffix = formatRowSub(row)
+  return `${row.product_name} #${row.product_id}${suffix ? ` · ${suffix}` : ''}`
+}
+
+function getCellClass(row: CalendarRow, date: string): string {
+  const data = getCellData(row, date)
+  if (!data || data.status === 'closed') return 'closed'
+  if (data.available === 0) return 'sold-out'
+  if (data.available <= 3) return 'low'
+  if (data.inventory_source === 'inventory_pool') return 'shared'
   return 'available'
 }
 
@@ -162,32 +385,223 @@ function goToday() {
   fetchData()
 }
 
+function handleTypeChange() {
+  cells.value = []
+  selectedCell.value = null
+  batchForm.row_key = undefined
+  fetchData()
+}
+
+function formatYuanAmount(value: number | string | null | undefined): string {
+  const amount = Number(value || 0)
+  return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
+}
+
 async function fetchData() {
   loading.value = true
   try {
     const start = dayjs(monthValue.value).startOf('month').format('YYYY-MM-DD')
     const end = dayjs(monthValue.value).endOf('month').format('YYYY-MM-DD')
-    const res: any = await getCalendarData({ date_start: start, date_end: end })
-    const raw = res.data || res
-    const products: Record<number, string> = {}
-    if (Array.isArray(raw.products)) {
-      raw.products.forEach((p: any) => { products[p.id] = p.name })
-    }
-    const cells = Array.isArray(raw.cells) ? raw.cells : []
-    calendarData.value = cells.map((c: any) => ({
-      product_id: c.product_id,
-      product_name: products[c.product_id] || '',
-      date: c.date,
-      date_type: c.date_type || '',
-      price: c.price ?? 0,
-      total_stock: c.total ?? 0,
-      available_stock: c.available ?? 0,
-      booked_stock: c.sold ?? 0,
-      status: c.status === 'open' ? (c.available === 0 ? 'sold_out' : 'open') : (c.status || 'closed'),
-    }))
+    const res = await getInventoryCalendarData({
+      date_start: start,
+      date_end: end,
+      product_type: calendarProductType.value,
+      inventory_source: 'all',
+      include_missing: true,
+    })
+    cells.value = res.data.cells
   } catch {
-    calendarData.value = []
-  } finally { loading.value = false }
+    cells.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+function openCellDialog(row: CalendarRow, date: string) {
+  const cell = getCellData(row, date)
+  if (!cell) return
+  selectedCell.value = cell
+  Object.assign(cellForm, {
+    total: cell.total,
+    status: cell.status,
+    remark: '',
+  })
+  cellDialogVisible.value = true
+}
+
+function resetCellForm() {
+  selectedCell.value = null
+  Object.assign(cellForm, { total: 0, status: 'open', remark: '' })
+}
+
+async function saveCell() {
+  if (!selectedCell.value) return
+  const cell = selectedCell.value
+  const payload = {
+    total: cellForm.total,
+    status: cellForm.status,
+    remark: cellForm.remark?.trim() || undefined,
+  }
+  let confirmToken = ''
+  try {
+    confirmToken = await requestHighRiskConfirm(
+      cell.inventory_id ? `inventory:update:${cell.inventory_id}` : 'inventory:batch-upsert',
+      `确认调整「${cell.product_name}」${cell.date} 的库存？`,
+      cell.inventory_id ? payload : {
+        product_ids: [cell.product_id],
+        sku_ids: cell.sku_id ? [cell.sku_id] : undefined,
+        time_slot: cell.time_slot || undefined,
+        dates: [cell.date],
+        mode: 'set_total',
+        total: payload.total,
+        status: payload.status,
+        create_missing: true,
+        remark: payload.remark,
+      },
+    )
+  } catch {
+    return
+  }
+  savingCell.value = true
+  try {
+    if (cell.inventory_id) {
+      await updateInventory(cell.inventory_id, payload as any, confirmToken)
+    } else {
+      await batchUpdateInventory({
+        product_ids: [cell.product_id],
+        sku_ids: cell.sku_id ? [cell.sku_id] : undefined,
+        time_slot: cell.time_slot || undefined,
+        dates: [cell.date],
+        mode: 'set_total',
+        total: payload.total,
+        status: payload.status,
+        create_missing: true,
+        remark: payload.remark,
+      }, confirmToken)
+    }
+    ElMessage.success('库存已更新')
+    cellDialogVisible.value = false
+    fetchData()
+  } finally {
+    savingCell.value = false
+  }
+}
+
+function openBatchDialog() {
+  batchDateRange.value = [
+    dayjs(monthValue.value).startOf('month').format('YYYY-MM-DD'),
+    dayjs(monthValue.value).endOf('month').format('YYYY-MM-DD'),
+  ]
+  batchDialogVisible.value = true
+}
+
+function resetBatchForm() {
+  Object.assign(batchForm, {
+    row_key: undefined,
+    mode: 'set_total',
+    total: 0,
+    delta: 0,
+    weekdays: [],
+    remark: '',
+  })
+  batchDateRange.value = null
+}
+
+function buildBatchPayload(): InventoryBatchPayload | null {
+  const selectedBatchTarget = productRows.value.find(row => row.row_key === batchForm.row_key)
+  if (!selectedBatchTarget) {
+    ElMessage.error(`请选择${selectedTypeLabel.value}`)
+    return null
+  }
+  if (!batchDateRange.value?.[0] || !batchDateRange.value?.[1]) {
+    ElMessage.error('请选择日期范围')
+    return null
+  }
+  const payload: InventoryBatchPayload = {
+    product_ids: [selectedBatchTarget.product_id],
+    sku_ids: selectedBatchTarget.sku_id ? [selectedBatchTarget.sku_id] : undefined,
+    time_slot: selectedBatchTarget.time_slot || undefined,
+    date_start: batchDateRange.value[0],
+    date_end: batchDateRange.value[1],
+    mode: batchForm.mode,
+    create_missing: true,
+  }
+  if (batchForm.weekdays.length) payload.weekdays = [...batchForm.weekdays]
+  if (batchForm.remark.trim()) payload.remark = batchForm.remark.trim()
+  if (batchForm.mode === 'set_total') {
+    payload.total = batchForm.total || 0
+    payload.status = 'open'
+  } else if (batchForm.mode === 'adjust_total') {
+    payload.delta = batchForm.delta || 0
+  } else if (batchForm.mode === 'open') {
+    payload.status = 'open'
+  } else if (batchForm.mode === 'close') {
+    payload.status = 'closed'
+  }
+  return payload
+}
+
+async function saveBatch() {
+  const payload = buildBatchPayload()
+  if (!payload || !batchDateRange.value) return
+  let confirmToken = ''
+  try {
+    confirmToken = await requestHighRiskConfirm(
+      'inventory:batch-upsert',
+      `确认批量调整 ${batchDateRange.value[0]} 至 ${batchDateRange.value[1]} 的${selectedTypeLabel.value}库存？`,
+      payload,
+    )
+  } catch {
+    return
+  }
+  savingBatch.value = true
+  try {
+    const res = await batchUpdateInventory(payload, confirmToken)
+    ElMessage.success(`已创建 ${res.data.created_count} 条，更新 ${res.data.updated_count} 条`)
+    batchDialogVisible.value = false
+    fetchData()
+  } finally {
+    savingBatch.value = false
+  }
+}
+
+async function openOrdersDialog() {
+  if (!selectedCell.value) return
+  ordersDialogVisible.value = true
+  ordersLoading.value = true
+  try {
+    const res = await getOrders({
+      page: 1,
+      page_size: 50,
+      product_id: selectedCell.value.product_id,
+      sku_id: selectedCell.value.sku_id || undefined,
+      product_type: calendarProductType.value,
+      booking_date_start: selectedCell.value.date,
+      booking_date_end: selectedCell.value.date,
+      time_slot: selectedCell.value.time_slot || undefined,
+    })
+    orders.value = res.data.list
+  } finally {
+    ordersLoading.value = false
+  }
+}
+
+function getOrderDetailCount(order: Order): string {
+  const cell = selectedCell.value
+  const items = (order.items || []).filter(item => {
+    if (!cell) return true
+    if (item.product_id !== cell.product_id) return false
+    if (cell.sku_id && item.sku_id !== cell.sku_id) return false
+    if (cell.date && item.date !== cell.date) return false
+    if (cell.time_slot && item.time_slot !== cell.time_slot) return false
+    return true
+  })
+  const persons = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+  const dates = new Set(items.map(item => item.date).filter(Boolean))
+  if (dates.size > 0) {
+    return `${persons}人${dates.size}晚`
+  }
+  return `${items.length || order.item_count || 0}单`
 }
 
 onMounted(fetchData)
@@ -198,12 +612,13 @@ onMounted(fetchData)
   padding: 20px 24px;
 }
 
-/* ---------- 顶部工具栏 ---------- */
 .calendar-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
 .toolbar-left {
@@ -231,19 +646,16 @@ onMounted(fetchData)
   display: flex;
   align-items: center;
   gap: 12px;
-
-  .month-nav .el-button {
-    padding: 5px 10px;
-  }
+  flex-wrap: wrap;
 }
 
-/* ---------- 图例 ---------- */
 .calendar-legend {
   display: flex;
   gap: 24px;
   margin-bottom: 16px;
   font-size: 12px;
   color: #86909c;
+  flex-wrap: wrap;
 
   .legend-item {
     display: flex;
@@ -257,25 +669,32 @@ onMounted(fetchData)
     border-radius: 3px;
 
     &.available {
-      background: linear-gradient(135deg, #d4f5e9, #b8ebdb);
+      background: #d4f5e9;
       border: 1px solid #52c41a;
     }
+
     &.low {
-      background: linear-gradient(135deg, #fff1d6, #ffe4a8);
+      background: #fff1d6;
       border: 1px solid #faad14;
     }
+
     &.sold-out {
-      background: linear-gradient(135deg, #ffe1e1, #ffc6c6);
+      background: #ffe1e1;
       border: 1px solid #f5222d;
     }
+
     &.closed {
       background: #f2f3f5;
       border: 1px solid #e5e6eb;
     }
+
+    &.shared {
+      background: #fdf2d7;
+      border: 1px solid #c8a872;
+    }
   }
 }
 
-/* ---------- 日历主体 ---------- */
 .calendar-wrapper {
   border: 1px solid #e5e6eb;
   border-radius: 8px;
@@ -285,19 +704,6 @@ onMounted(fetchData)
 .calendar-grid {
   overflow-x: auto;
   overflow-y: visible;
-
-  /* 美化滚动条 */
-  &::-webkit-scrollbar {
-    height: 6px;
-  }
-  &::-webkit-scrollbar-track {
-    background: #f7f8fa;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: #c9cdd4;
-    border-radius: 3px;
-    &:hover { background: #86909c; }
-  }
 }
 
 .calendar-header,
@@ -306,10 +712,9 @@ onMounted(fetchData)
   min-width: fit-content;
 }
 
-/* ---------- 固定列（营位名称） ---------- */
 .cell-fixed {
-  min-width: 160px;
-  max-width: 160px;
+  min-width: 180px;
+  max-width: 180px;
   flex-shrink: 0;
   position: sticky;
   left: 0;
@@ -330,7 +735,8 @@ onMounted(fetchData)
 
 .product-name {
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  justify-content: center;
   padding: 0 12px;
   background: #fff;
   border-bottom: 1px solid #f2f3f5;
@@ -338,23 +744,27 @@ onMounted(fetchData)
 
   .name-text {
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 600;
     color: #1d2129;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.4;
   }
+
+  .name-sub {
+    color: #86909c;
+    font-size: 11px;
+    margin-top: 3px;
+  }
 }
 
-/* 斑马行背景 */
 .row-even .product-name {
   background: #fafbfc;
 }
 
-/* ---------- 日期列 ---------- */
 .cell {
-  min-width: 80px;
+  min-width: 88px;
   flex-shrink: 0;
   text-align: center;
 }
@@ -371,6 +781,7 @@ onMounted(fetchData)
     color: #1d2129;
     line-height: 1.4;
   }
+
   .date-weekday {
     font-size: 11px;
     color: #86909c;
@@ -379,8 +790,11 @@ onMounted(fetchData)
 
   &.weekend {
     background: #fef7ed;
-    .date-num { color: #d46b08; }
-    .date-weekday { color: #d46b08; }
+
+    .date-num,
+    .date-weekday {
+      color: #d46b08;
+    }
   }
 
   &.today {
@@ -396,22 +810,27 @@ onMounted(fetchData)
       line-height: 26px;
       display: inline-block;
     }
-    .date-weekday { color: #4080ff; font-weight: 600; }
+
+    .date-weekday {
+      color: #4080ff;
+      font-weight: 600;
+    }
   }
 }
 
-/* ---------- 数据单元格 ---------- */
 .data-cell {
+  appearance: none;
+  border: 0;
   padding: 8px 4px;
   border-bottom: 1px solid #f2f3f5;
   border-right: 1px solid #f2f3f5;
-  cursor: default;
+  cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  min-height: 56px;
+  min-height: 64px;
 
   &:hover {
     transform: scale(1.02);
@@ -420,77 +839,101 @@ onMounted(fetchData)
     position: relative;
   }
 
-  /* 状态配色 */
   &.available {
     background: #f0faf4;
-    .stock-available { color: #0b8235; }
-    .cell-price { color: #52c41a; }
+
+    .stock-available {
+      color: #0b8235;
+    }
+  }
+
+  &.shared {
+    background: #fdf8ea;
+
+    .stock-available {
+      color: #9b6a00;
+    }
   }
 
   &.low {
     background: #fffcf0;
-    .stock-available { color: #d46b08; font-weight: 700; }
-    .cell-price { color: #faad14; }
+
+    .stock-available {
+      color: #d46b08;
+      font-weight: 700;
+    }
   }
 
   &.sold-out {
     background: #fff2f0;
-    .stock-available { color: #cf1322; font-weight: 700; }
-    .cell-price { color: #f5222d; }
+
+    .stock-available {
+      color: #cf1322;
+      font-weight: 700;
+    }
   }
 
   &.closed {
     background: #f7f8fa;
-    .cell-stock, .cell-price { color: #c9cdd4; }
+
+    .cell-stock,
+    .cell-price {
+      color: #c9cdd4;
+    }
   }
 
-  /* 周末列加一层微淡色 */
-  &.col-weekend {
-    &.available { background: #eaf7ef; }
-    &.low { background: #fef9e8; }
-  }
-
-  /* 今天列加蓝色左边框 */
   &.col-today {
     border-left: 2px solid #4080ff;
   }
+}
 
-  /* 斑马行 */
-  .row-even & {
-    &.available { background: #edf8f1; }
-    &.closed { background: #f5f6f8; }
+.cell-stock {
+  font-size: 14px;
+  line-height: 1.5;
+
+  .stock-available {
+    font-weight: 700;
+    font-size: 15px;
   }
 
-  .cell-stock {
-    font-size: 14px;
-    line-height: 1.5;
-
-    .stock-available {
-      font-weight: 700;
-      font-size: 15px;
-    }
-    .stock-divider {
-      color: #c9cdd4;
-      margin: 0 1px;
-      font-weight: 400;
-    }
-    .stock-total {
-      color: #86909c;
-      font-size: 12px;
-      font-weight: 400;
-    }
+  .stock-divider {
+    color: #c9cdd4;
+    margin: 0 1px;
+    font-weight: 400;
   }
 
-  .cell-price {
-    font-size: 11px;
+  .stock-total {
     color: #86909c;
-    margin-top: 2px;
-    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    font-weight: 400;
+  }
+}
+
+.cell-price,
+.cell-source {
+  font-size: 11px;
+  color: #86909c;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-empty {
+  color: #e5e6eb;
+  font-size: 16px;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+@media (max-width: 720px) {
+  .calendar-page {
+    padding: 16px;
   }
 
-  .cell-empty {
-    color: #e5e6eb;
-    font-size: 16px;
+  .cell-fixed {
+    min-width: 150px;
+    max-width: 150px;
   }
 }
 </style>

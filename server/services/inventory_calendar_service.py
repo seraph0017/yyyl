@@ -18,7 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.inventory_pool import InventoryPool, InventoryPoolBinding
-from models.product import DateTypeConfig, Inventory, InventoryLog, PricingRule, Product, SKU
+from models.product import DateTypeConfig, Inventory, InventoryLog, PricingRule, Product, ProductExtActivity, SKU
 from services.inventory_pool_service import get_declared_inventory_pool, resolve_declared_inventory_pool
 
 
@@ -31,6 +31,7 @@ class InventoryCalendarTarget:
 
     product_id: int
     sku_id: Optional[int] = None
+    time_slot: Optional[str] = None
 
 
 def recompute_available(*, total: int, locked: int, sold: int) -> int:
@@ -274,6 +275,44 @@ async def _load_skus(
     return skus
 
 
+def _format_activity_time_slot(slot: Any) -> Optional[str]:
+    """将活动扩展里的场次对象规整成订单库存使用的 time_slot 字符串。"""
+    if not isinstance(slot, dict):
+        value = str(slot or "").strip()
+        return value or None
+    start = str(slot.get("start") or "").strip()
+    end = str(slot.get("end") or "").strip()
+    if start and end:
+        return f"{start}-{end}"
+    value = str(slot.get("time_slot") or slot.get("label") or "").strip()
+    return value or None
+
+
+async def _load_activity_time_slots(
+    db: AsyncSession,
+    *,
+    product_ids: list[int],
+) -> dict[int, list[str]]:
+    """读取活动商品配置的场次，用于库存日历按场次展开行。"""
+    if not product_ids:
+        return {}
+    result = await db.execute(
+        select(ProductExtActivity).where(ProductExtActivity.product_id.in_(product_ids))
+    )
+    time_slots_by_product: dict[int, list[str]] = {}
+    for ext in result.scalars().all():
+        seen: set[str] = set()
+        slots: list[str] = []
+        for raw_slot in ext.time_slots or []:
+            slot = _format_activity_time_slot(raw_slot)
+            if slot and slot not in seen:
+                seen.add(slot)
+                slots.append(slot)
+        if slots:
+            time_slots_by_product[ext.product_id] = slots
+    return time_slots_by_product
+
+
 async def _load_declared_pool_map(
     db: AsyncSession,
     *,
@@ -343,6 +382,12 @@ async def get_inventory_calendar(
         product_type=product_type,
     )
     product_map = {product.id: product for product in products}
+    time_slot_filter_provided = time_slot is not None
+    activity_product_ids = [
+        product.id for product in products
+        if product.type in {"daily_activity", "special_activity"}
+    ]
+    time_slots_by_product = await _load_activity_time_slots(db, product_ids=activity_product_ids)
     skus = await _load_skus(
         db,
         site_id=site_id,
@@ -354,12 +399,31 @@ async def get_inventory_calendar(
     for sku in skus:
         skus_by_product.setdefault(sku.product_id, []).append(sku)
 
-    targets = [InventoryCalendarTarget(product_id=product.id) for product in products]
+    base_targets: list[InventoryCalendarTarget] = [InventoryCalendarTarget(product_id=product.id) for product in products]
     if sku_ids:
-        targets = [InventoryCalendarTarget(product_id=sku.product_id, sku_id=sku.id) for sku in skus]
+        base_targets = [InventoryCalendarTarget(product_id=sku.product_id, sku_id=sku.id) for sku in skus]
     else:
         for sku in skus:
-            targets.append(InventoryCalendarTarget(product_id=sku.product_id, sku_id=sku.id))
+            base_targets.append(InventoryCalendarTarget(product_id=sku.product_id, sku_id=sku.id))
+
+    targets: list[InventoryCalendarTarget] = []
+    for base_target in base_targets:
+        product = product_map[base_target.product_id]
+        configured_slots = time_slots_by_product.get(product.id, [])
+        if time_slot_filter_provided:
+            target_time_slots = [time_slot]
+        elif product.type in {"daily_activity", "special_activity"} and configured_slots:
+            target_time_slots = configured_slots
+        else:
+            target_time_slots = [None]
+        for row_time_slot in target_time_slots:
+            targets.append(
+                InventoryCalendarTarget(
+                    product_id=base_target.product_id,
+                    sku_id=base_target.sku_id,
+                    time_slot=row_time_slot,
+                )
+            )
 
     bound_pool_map = await _load_declared_pool_map(db, site_id=site_id, targets=targets)
 
@@ -372,9 +436,7 @@ async def get_inventory_calendar(
     ]
     if sku_ids:
         inv_conditions.append(Inventory.sku_id.in_(sku_ids))
-    if time_slot is None:
-        inv_conditions.append(Inventory.time_slot.is_(None))
-    else:
+    if time_slot_filter_provided:
         inv_conditions.append(Inventory.time_slot == time_slot)
     inv_result = await db.execute(select(Inventory).where(*inv_conditions))
     inventory_map = {
@@ -422,6 +484,7 @@ async def get_inventory_calendar(
                 "sku_id": target.sku_id,
                 "sku_code": getattr(sku, "sku_code", None),
                 "sku_name": _sku_label(sku),
+                "time_slot": target.time_slot,
                 "inventory_source": target_source,
                 "inventory_pool_id": getattr(pool, "id", None),
                 "inventory_pool_code": getattr(pool, "pool_code", None),
@@ -429,7 +492,7 @@ async def get_inventory_calendar(
             }
         )
         for current_date in dates:
-            inv = inventory_map.get((target.product_id, target.sku_id, current_date, time_slot))
+            inv = inventory_map.get((target.product_id, target.sku_id, current_date, target.time_slot))
             if inv is None and not include_missing and pool is None:
                 continue
             date_type = _date_type_for(current_date, date_type_map)
@@ -450,7 +513,7 @@ async def get_inventory_calendar(
                     price=price,
                     inventory=inv,
                     inventory_pool=pool,
-                    time_slot=time_slot,
+                    time_slot=target.time_slot,
                 )
             )
 

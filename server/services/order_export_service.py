@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import HTTPException, status
+from openpyxl import Workbook
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -213,39 +214,53 @@ def _write_export_file(
     orders: list[Any],
     include_sensitive: bool,
 ) -> str:
-    ext = "csv" if file_format == "csv" else "csv"
     export_dir = PRIVATE_EXPORT_DIR / str(site_id)
     export_dir.mkdir(parents=True, exist_ok=True)
-    file_path = export_dir / f"{task_no}.{ext}"
     headers = ["订单号", "状态", "支付状态", "实付金额", "来源渠道", "下单时间", "商品"]
     if include_sensitive:
         headers.insert(1, "用户昵称")
         headers.insert(2, "手机号")
-    with file_path.open("w", newline="", encoding="utf-8-sig") as fp:
-        writer = csv.writer(fp)
-        writer.writerow(headers)
-        for order in orders:
-            products = "；".join(
-                [
-                    getattr(item, "product_name", "") or str(getattr(item, "product_id", ""))
-                    for item in getattr(order, "items", [])
-                ]
-            )
-            row = [
-                order.order_no,
-                order.status,
-                order.payment_status,
-                order.actual_amount,
-                order.source_channel or "",
-                order.created_at,
-                products,
-            ]
-            if include_sensitive:
-                user = getattr(order, "user", None)
-                row.insert(1, getattr(user, "nickname", "") or "")
-                row.insert(2, getattr(user, "phone", "") or "")
-            writer.writerow(row)
+    if file_format == "csv":
+        file_path = export_dir / f"{task_no}.csv"
+        with file_path.open("w", newline="", encoding="utf-8-sig") as fp:
+            writer = csv.writer(fp)
+            writer.writerow(headers)
+            for order in orders:
+                writer.writerow(_build_export_row(order, include_sensitive=include_sensitive))
+        return str(file_path)
+
+    file_path = export_dir / f"{task_no}.xlsx"
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "订单导出"
+    worksheet.append(headers)
+    for order in orders:
+        worksheet.append(_build_export_row(order, include_sensitive=include_sensitive))
+    workbook.save(file_path)
     return str(file_path)
+
+
+def _build_export_row(order: Any, *, include_sensitive: bool) -> list[Any]:
+    products = "；".join(
+        [
+            getattr(item, "product_name", "") or str(getattr(item, "product_id", ""))
+            for item in getattr(order, "items", [])
+        ]
+    )
+    row = [
+        getattr(order, "order_no", ""),
+        getattr(order, "status", ""),
+        getattr(order, "payment_status", ""),
+        getattr(order, "actual_amount", ""),
+        getattr(order, "source_channel", "") or "",
+        getattr(order, "created_at", ""),
+        products,
+    ]
+    if include_sensitive:
+        user = getattr(order, "user", None)
+        row.insert(1, getattr(user, "nickname", "") or "")
+        row.insert(2, getattr(user, "phone", "") or "")
+    return row
 
 
 def _add_export_operation_log(

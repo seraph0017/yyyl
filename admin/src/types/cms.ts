@@ -73,7 +73,7 @@ export interface CmsAsset {
   id: number
   file_name: string
   file_url: string
-  file_type: 'image' | 'video'
+  file_type: 'image' | 'video' | 'qrcode' | 'export'
   file_size: number
   width?: number
   height?: number
@@ -120,10 +120,21 @@ export interface BannerPropsConfig {
   border_radius: number  // 圆角，默认 0
 }
 
+/** 图片热区配置 */
+export interface ImageHotspotConfig {
+  x: number              // 左上角 X 百分比
+  y: number              // 左上角 Y 百分比
+  width: number          // 宽度百分比
+  height: number         // 高度百分比
+  link: LinkConfig       // 热区点击链接
+  title?: string         // 运营备注
+}
+
 /** 图片组件属性 */
 export interface ImagePropsConfig {
   url: string            // 图片地址
   link: LinkConfig       // 点击链接配置
+  hotspots: ImageHotspotConfig[] // 图片局部热区链接
   mode: 'aspectFill' | 'aspectFit' | 'widthFix'  // 图片裁剪模式
   width: string          // 宽度，默认 '100%'
   height?: string        // 高度，不设则自适应
@@ -138,6 +149,12 @@ export interface ImageTextPropsConfig {
   link: LinkConfig       // 点击链接配置
   title_color: string    // 标题颜色，默认 '#333333'
   desc_color: string     // 描述颜色，默认 '#999999'
+  title_font_size: number // 标题字号，单位 rpx，默认 32
+  desc_font_size: number  // 描述字号，单位 rpx，默认 26
+  title_font_family: string // 标题字体
+  desc_font_family: string  // 描述字体
+  title_font_weight: string // 标题字重
+  desc_font_weight: string  // 描述字重
 }
 
 /** 快捷导航组件属性 */
@@ -164,7 +181,8 @@ export interface NoticePropsConfig {
 export interface ProductListPropsConfig {
   source: 'manual' | 'category' | 'tag'  // 商品来源
   product_ids?: number[]   // 手动选择的商品ID列表
-  category_id?: number     // 按分类筛选
+  category_key?: string    // 按分类筛选
+  category_id?: number     // 旧版分类 ID 兼容字段；新配置使用 category_key
   tag?: string             // 按标签筛选
   count: number            // 展示数量，默认 6
   layout: 'list' | 'grid'  // 布局模式
@@ -179,7 +197,7 @@ export interface CouponPropsConfig {
 
 /** 富文本组件属性 */
 export interface RichTextPropsConfig {
-  content: string          // HTML 内容（后端 nh3 sanitize，前端 DOMPurify 渲染）
+  content: string          // HTML 内容（前端统一通过 sanitizeRichText 渲染）
 }
 
 /** 间距组件属性 */

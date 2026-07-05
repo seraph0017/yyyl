@@ -171,8 +171,8 @@ function handleAddComponent(componentType: string) {
   // 从 ComponentPanel 的分组定义查找默认属性
   const allGroups = [
     { type: 'banner', defaultProps: { images: [], interval: 5, indicator_style: 'dot', autoplay: true, border_radius: 0 } },
-    { type: 'image', defaultProps: { url: '', link: { type: 'none', target: '', title: '' }, mode: 'widthFix', width: '100%' } },
-    { type: 'image_text', defaultProps: { layout: 'left-right', image_url: '', title: '标题文字', description: '描述文字', link: { type: 'none', target: '', title: '' }, title_color: '#333333', desc_color: '#999999' } },
+    { type: 'image', defaultProps: { url: '', link: { type: 'none', target: '', title: '' }, hotspots: [], mode: 'widthFix', width: '100%' } },
+    { type: 'image_text', defaultProps: { layout: 'left-right', image_url: '', title: '标题文字', description: '描述文字', link: { type: 'none', target: '', title: '' }, title_color: '#333333', desc_color: '#999999', title_font_size: 32, desc_font_size: 26, title_font_family: 'system', desc_font_family: 'system', title_font_weight: '600', desc_font_weight: '400' } },
     { type: 'notice', defaultProps: { texts: ['欢迎来到一月一露营地'], speed: 50, background_color: '#FFF9E6', text_color: '#FF6600', icon: '' } },
     { type: 'nav', defaultProps: { items: [], columns: 4, show_label: true } },
     { type: 'video', defaultProps: { url: '', poster: '', autoplay: false, loop: false } },

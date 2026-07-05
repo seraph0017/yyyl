@@ -1,5 +1,6 @@
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -73,6 +74,85 @@ class OrderServiceTest(unittest.IsolatedAsyncioTestCase):
         create_prepay.assert_awaited_once_with(order, site_id=1)
         self.assertEqual(order.payment_method, "wechat_pay")
         db.flush.assert_awaited_once()
+
+    async def test_quote_activity_uses_booking_date_and_time_slot_inventory(self):
+        activity = SimpleNamespace(
+            id=8,
+            site_id=1,
+            type="daily_activity",
+            name="皮划艇活动",
+            require_disclaimer=False,
+            sale_start_at=None,
+            ext_rental=None,
+        )
+
+        class _Result:
+            def scalar_one_or_none(self):
+                return activity
+
+        db = SimpleNamespace(execute=AsyncMock(return_value=_Result()))
+        user = SimpleNamespace(id=7, site_id=1)
+        booking_date = date(2026, 7, 18)
+
+        with (
+            patch.object(
+                order_service,
+                "_quote_inventory_for_order_item",
+                AsyncMock(return_value=("inventory", None, 12)),
+            ) as quote_inventory,
+            patch.object(order_service, "_resolve_price", AsyncMock(return_value=Decimal("88.00"))) as resolve_price,
+            patch.object(order_service, "_calculate_discount", AsyncMock(return_value=(Decimal("0"), None, None))),
+        ):
+            result = await order_service.quote_order(
+                db,
+                user,
+                [
+                    {
+                        "product_id": activity.id,
+                        "quantity": 2,
+                        "dates": [booking_date],
+                        "time_slot": "15:00-16:00",
+                    }
+                ],
+                disclaimer_signed=True,
+            )
+
+        quote_inventory.assert_awaited_once()
+        kwargs = quote_inventory.await_args.kwargs
+        self.assertEqual(kwargs["inv_date"], booking_date)
+        self.assertEqual(kwargs["time_slot"], "15:00-16:00")
+        self.assertEqual(kwargs["quantity"], 2)
+        resolve_price.assert_awaited_once_with(db, activity, booking_date, sku_id=None)
+        self.assertEqual(result["items"][0]["date"], booking_date)
+        self.assertEqual(result["items"][0]["inventory_source"], "inventory")
+
+    async def test_quote_activity_requires_time_slot(self):
+        activity = SimpleNamespace(
+            id=8,
+            site_id=1,
+            type="daily_activity",
+            name="皮划艇活动",
+            require_disclaimer=False,
+            sale_start_at=None,
+            ext_rental=None,
+        )
+
+        class _Result:
+            def scalar_one_or_none(self):
+                return activity
+
+        db = SimpleNamespace(execute=AsyncMock(return_value=_Result()))
+
+        with self.assertRaises(HTTPException) as context:
+            await order_service.quote_order(
+                db,
+                SimpleNamespace(id=7, site_id=1),
+                [{"product_id": activity.id, "quantity": 1, "dates": [date(2026, 7, 18)]}],
+                disclaimer_signed=True,
+            )
+
+        self.assertEqual(context.exception.status_code, 400)
+        self.assertEqual(context.exception.detail["message"], "活动商品请选择预约时间")
 
 
 if __name__ == "__main__":

@@ -76,6 +76,8 @@ export type ProductCategory = ProductType | 'campsite' | 'activity' | 'meal' | '
 
 export type ProductStatus = 'draft' | 'on_sale' | 'off_sale'
 
+export type SkuInventoryMode = 'independent' | 'shared_product'
+
 export type LegacyProductStatus = 'active' | 'inactive'
 
 export interface ProductImage {
@@ -99,6 +101,7 @@ export interface ActivityExt {
   booking_unit?: 'person' | 'group' | string
   time_slots?: Array<Record<string, any>>
   event_date?: string | null
+  meeting_point?: string | null
 }
 
 export interface RentalExt {
@@ -122,6 +125,8 @@ export interface ProductSkuUpsert {
   stock: number
   status?: 'active' | 'inactive'
   image_url?: string | null
+  inventory_mode?: SkuInventoryMode
+  inventory_pool_id?: number | null
 }
 
 export interface Product {
@@ -187,6 +192,8 @@ export interface ProductSKU {
   spec_values?: Record<string, any>
   status: 'active' | 'inactive'
   image_url?: string | null
+  inventory_mode?: SkuInventoryMode
+  inventory_pool_id?: number | null
 }
 
 export interface PricingRule {
@@ -251,6 +258,7 @@ export interface ProductSearchParams extends PaginationParams, SortParams {
   category?: ProductCategory
   status?: ProductStatus
   type?: ProductType
+  types?: ProductType[]
 }
 
 // ==================== 库存 ====================
@@ -316,6 +324,7 @@ export interface Order {
 export interface OrderItem {
   id: number
   product_id: number
+  sku_id?: number | null
   product_name: string
   product_category: ProductCategory
   sku_name: string
@@ -323,6 +332,7 @@ export interface OrderItem {
   unit_price: number
   actual_price: number
   date: string
+  time_slot?: string | null
   refund_status: 'none' | 'refunding' | 'refunded'
   ticket_code: string | null
   ticket_status: 'unused' | 'used' | 'expired' | 'refunded'
@@ -337,9 +347,11 @@ export interface OrderSearchParams extends PaginationParams {
   end_date?: string
   order_no?: string
   product_id?: number
+  sku_id?: number
   product_type?: string
   booking_date_start?: string
   booking_date_end?: string
+  time_slot?: string
   payment_time_start?: string
   payment_time_end?: string
   amount_min?: number

@@ -9,20 +9,33 @@
       </el-radio-group>
     </el-form-item>
 
-    <!-- 手动选择商品ID -->
-    <el-form-item v-if="localProps.source === 'manual'" label="商品ID">
-      <el-input
-        v-model="productIdsText"
-        type="textarea"
-        :rows="2"
-        placeholder="输入商品ID，用逗号分隔"
-        @blur="parseProductIds"
-      />
+    <!-- 手动选择商品 -->
+    <el-form-item v-if="localProps.source === 'manual'" label="选择商品">
+      <el-select
+        v-model="localProps.product_ids"
+        multiple
+        filterable
+        remote
+        :remote-method="searchProducts"
+        :loading="productLoading"
+        placeholder="搜索并选择商品"
+        style="width: 100%"
+        @change="emitChange"
+      >
+        <el-option
+          v-for="product in productOptions"
+          :key="product.id"
+          :label="product.name"
+          :value="product.id"
+        />
+      </el-select>
     </el-form-item>
 
     <!-- 分类选择 -->
-    <el-form-item v-if="localProps.source === 'category'" label="分类ID">
-      <el-input-number v-model="localProps.category_id" :min="1" @change="emitChange" />
+    <el-form-item v-if="localProps.source === 'category'" label="商品分类">
+      <el-select v-model="localProps.category_key" filterable placeholder="选择商品分类" style="width: 100%" @change="emitChange">
+        <el-option v-for="category in categoryOptions" :key="category.value" :label="category.label" :value="category.value" />
+      </el-select>
     </el-form-item>
 
     <!-- 标签输入 -->
@@ -54,8 +67,10 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { getProducts } from '@/api/product'
 import type { ProductListPropsConfig } from '@/types/cms'
+import type { Product } from '@/types'
 
 const props = defineProps<{ modelValue: ProductListPropsConfig }>()
 const emit = defineEmits<{ (e: 'update:modelValue', value: ProductListPropsConfig): void }>()
@@ -68,12 +83,37 @@ const localProps = reactive<ProductListPropsConfig>({
   columns: 2,
 })
 
-const productIdsText = ref('')
+const productLoading = ref(false)
+const productOptions = ref<Array<Pick<Product, 'id' | 'name'>>>([])
+const categoryOptions = [
+  { label: '日常露营', value: 'daily_camping' },
+  { label: '活动露营', value: 'event_camping' },
+  { label: '装备租赁', value: 'equipment_rental' },
+  { label: '日常活动', value: 'daily_activity' },
+  { label: '特定活动', value: 'special_activity' },
+  { label: '小商店', value: 'camp_shop' },
+  { label: '周边商品', value: 'merchandise' },
+]
+
+const legacyCategoryIdMap: Record<number, string> = {
+  1: 'daily_camping',
+  2: 'event_camping',
+  3: 'equipment_rental',
+  4: 'daily_activity',
+  5: 'special_activity',
+  6: 'camp_shop',
+  7: 'merchandise',
+}
 
 watch(() => props.modelValue, (val) => {
   if (val) {
     Object.assign(localProps, val)
-    productIdsText.value = (val.product_ids || []).join(', ')
+    if (!localProps.category_key && val.category_id) {
+      localProps.category_key = legacyCategoryIdMap[Number(val.category_id)]
+    }
+    if (val.product_ids?.length) {
+      searchProducts()
+    }
   }
 }, { immediate: true, deep: true })
 
@@ -81,11 +121,24 @@ function emitChange() {
   emit('update:modelValue', { ...localProps })
 }
 
-function parseProductIds() {
-  localProps.product_ids = productIdsText.value
-    .split(/[,，\s]+/)
-    .map(s => parseInt(s.trim()))
-    .filter(n => !isNaN(n) && n > 0)
-  emitChange()
+async function searchProducts(keyword = '') {
+  productLoading.value = true
+  try {
+    const res = await getProducts({
+      page: 1,
+      page_size: 50,
+      keyword: keyword || undefined,
+    })
+    productOptions.value = (res.data.list || []).map(product => ({
+      id: product.id,
+      name: product.name,
+    }))
+  } finally {
+    productLoading.value = false
+  }
 }
+
+onMounted(() => {
+  searchProducts()
+})
 </script>

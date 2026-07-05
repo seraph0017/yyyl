@@ -68,6 +68,56 @@
           </el-form>
         </el-tab-pane>
 
+        <!-- 操作密码 -->
+        <el-tab-pane v-if="userStore.isSuperAdmin" label="操作密码" name="operation">
+          <el-form :model="operationPasswordForm" label-width="140px" style="max-width: 600px;">
+            <el-alert
+              class="mb-20"
+              title="操作密码用于提现、批量导出、库存批量调整等高风险操作。已有操作密码时需输入旧密码后才能修改。"
+              type="warning"
+              :closable="false"
+            />
+            <el-form-item label="旧操作密码">
+              <el-input
+                v-model="operationPasswordForm.oldPassword"
+                type="password"
+                maxlength="6"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                show-password
+                placeholder="首次设置可留空"
+              />
+            </el-form-item>
+            <el-form-item label="六位数字密码">
+              <el-input
+                v-model="operationPasswordForm.password"
+                type="password"
+                maxlength="6"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                show-password
+                placeholder="请输入6位数字"
+              />
+            </el-form-item>
+            <el-form-item label="再次输入">
+              <el-input
+                v-model="operationPasswordForm.confirmPassword"
+                type="password"
+                maxlength="6"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                show-password
+                placeholder="请再次输入"
+              />
+            </el-form-item>
+            <el-form-item>
+              <el-button type="primary" :loading="savingOperationPassword" @click="handleSaveOperationPassword">
+                保存操作密码
+              </el-button>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
         <!-- 免责声明 -->
         <el-tab-pane label="免责声明" name="disclaimer">
           <div v-for="tpl in disclaimerTemplates" :key="tpl.id" class="mb-20">
@@ -84,9 +134,11 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getSettings, updateSettings, updateCustomerServiceConfig, getDisclaimerTemplates, updateDisclaimerTemplate } from '@/api/system'
+import { getSettings, updateSettings, updateCustomerServiceConfig, getDisclaimerTemplates, updateDisclaimerTemplate, updateOperationPassword } from '@/api/system'
+import { useUserStore } from '@/stores/user'
 
 const activeTab = ref('basic')
+const userStore = useUserStore()
 
 const settings = reactive({
   payment_mode: 'mock',
@@ -100,6 +152,8 @@ const settings = reactive({
 
 const csConfig = reactive({ phone: '', wechat: '', work_hours: '' })
 const disclaimerTemplates = ref<any[]>([])
+const operationPasswordForm = reactive({ oldPassword: '', password: '', confirmPassword: '' })
+const savingOperationPassword = ref(false)
 
 async function fetchSettings() {
   try {
@@ -122,6 +176,34 @@ async function handleSaveCS() {
 
 async function handleSaveDisclaimer(tpl: any) {
   try { await updateDisclaimerTemplate(tpl.id, { content: tpl.content }); ElMessage.success('免责声明已保存') } catch {}
+}
+
+async function handleSaveOperationPassword() {
+  if (operationPasswordForm.oldPassword && !/^\d{6}$/.test(operationPasswordForm.oldPassword)) {
+    ElMessage.warning('旧操作密码必须是6位数字')
+    return
+  }
+  if (!/^\d{6}$/.test(operationPasswordForm.password)) {
+    ElMessage.warning('操作密码必须是6位数字')
+    return
+  }
+  if (operationPasswordForm.password !== operationPasswordForm.confirmPassword) {
+    ElMessage.warning('两次输入的操作密码不一致')
+    return
+  }
+  savingOperationPassword.value = true
+  try {
+    await updateOperationPassword({
+      password: operationPasswordForm.password,
+      ...(operationPasswordForm.oldPassword ? { old_password: operationPasswordForm.oldPassword } : {}),
+    })
+    operationPasswordForm.oldPassword = ''
+    operationPasswordForm.password = ''
+    operationPasswordForm.confirmPassword = ''
+    ElMessage.success('操作密码已保存')
+  } finally {
+    savingOperationPassword.value = false
+  }
 }
 
 onMounted(() => { fetchSettings(); fetchDisclaimers() })

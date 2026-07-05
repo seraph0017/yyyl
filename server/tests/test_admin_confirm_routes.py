@@ -1,10 +1,13 @@
 import unittest
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from routers import admin as admin_router
-from utils.security import hash_password
+from schemas.admin import OperationPasswordUpdateRequest
+from utils.security import hash_password, verify_password
 
 
 class AdminConfirmRouteTest(unittest.IsolatedAsyncioTestCase):
@@ -15,6 +18,100 @@ class AdminConfirmRouteTest(unittest.IsolatedAsyncioTestCase):
             role=SimpleNamespace(role_code=role_code),
             operation_password_hash=hash_password("123456"),
         )
+
+    async def test_update_operation_password_requires_old_password_when_already_set(self):
+        admin = self.make_admin()
+        request = SimpleNamespace(headers={"X-Site-Id": "2"})
+
+        with self.assertRaises(HTTPException) as missing_ctx:
+            await admin_router.update_operation_password(
+                OperationPasswordUpdateRequest(password="654321"),
+                request=request,
+                db=SimpleNamespace(flush=AsyncMock()),
+                admin=admin,
+            )
+
+        self.assertEqual(missing_ctx.exception.status_code, 403)
+        self.assertIn("旧操作密码", str(missing_ctx.exception.detail))
+
+        with self.assertRaises(HTTPException) as wrong_ctx:
+            await admin_router.update_operation_password(
+                OperationPasswordUpdateRequest(password="654321", old_password="111111"),
+                request=request,
+                db=SimpleNamespace(flush=AsyncMock()),
+                admin=admin,
+            )
+
+        self.assertEqual(wrong_ctx.exception.status_code, 403)
+        self.assertIn("旧操作密码错误", str(wrong_ctx.exception.detail))
+
+    async def test_update_operation_password_writes_bcrypt_hash_after_old_password(self):
+        admin = self.make_admin()
+        request = SimpleNamespace(headers={"X-Site-Id": "2"})
+        db = SimpleNamespace(flush=AsyncMock())
+
+        result = await admin_router.update_operation_password(
+            OperationPasswordUpdateRequest(password="654321", old_password="123456"),
+            request=request,
+            db=db,
+            admin=admin,
+        )
+
+        self.assertTrue(result.data["updated"])
+        self.assertEqual(result.data["site_id"], 2)
+        self.assertNotEqual(admin.operation_password_hash, "654321")
+        self.assertTrue(verify_password("654321", admin.operation_password_hash))
+        self.assertTrue(admin.operation_password_hash.startswith("$2"))
+        db.flush.assert_awaited_once()
+
+    async def test_update_operation_password_allows_first_setup_without_old_password(self):
+        admin = self.make_admin()
+        admin.operation_password_hash = None
+        request = SimpleNamespace(headers={"X-Site-Id": "2"})
+        db = SimpleNamespace(flush=AsyncMock())
+
+        result = await admin_router.update_operation_password(
+            OperationPasswordUpdateRequest(password="654321"),
+            request=request,
+            db=db,
+            admin=admin,
+        )
+
+        self.assertTrue(result.data["updated"])
+        self.assertTrue(verify_password("654321", admin.operation_password_hash))
+        db.flush.assert_awaited_once()
+
+    def test_operation_password_schema_rejects_non_ascii_digits(self):
+        with self.assertRaises(ValidationError):
+            OperationPasswordUpdateRequest(password="１２３４５６")
+
+    async def test_update_operation_password_requires_super_admin(self):
+        admin = self.make_admin(role_code="admin")
+        request = SimpleNamespace(headers={"X-Site-Id": "2"})
+
+        with self.assertRaises(HTTPException) as ctx:
+            await admin_router.update_operation_password(
+                OperationPasswordUpdateRequest(password="654321"),
+                request=request,
+                db=SimpleNamespace(flush=AsyncMock()),
+                admin=admin,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    async def test_update_operation_password_requires_explicit_site_header(self):
+        admin = self.make_admin()
+
+        with self.assertRaises(HTTPException) as ctx:
+            await admin_router.update_operation_password(
+                OperationPasswordUpdateRequest(password="654321"),
+                request=SimpleNamespace(headers={}),
+                db=SimpleNamespace(flush=AsyncMock()),
+                admin=admin,
+            )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("X-Site-Id", str(ctx.exception.detail))
 
     async def test_verify_operation_password_uses_bcrypt_and_returns_bound_token(self):
         admin = self.make_admin()

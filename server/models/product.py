@@ -339,6 +339,9 @@ class ProductExtActivity(Base):
         server_default=BookingUnit.PERSON.value,
         comment="预约单位: person/group"
     )
+    meeting_point: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, comment="集合地点"
+    )
     time_slots: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default="[]",
         comment="场次 [{start,end,capacity}]"

@@ -73,6 +73,20 @@ router = APIRouter(prefix="/api/v1", tags=["CMS"])
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _get_admin_role_code(admin: AdminUser) -> str:
+    return getattr(getattr(admin, "role", None), "role_code", "") or ""
+
+
+def _ensure_admin_site_access(admin: AdminUser, site_id: int) -> None:
+    if _get_admin_role_code(admin) == "super_admin":
+        return
+    if getattr(admin, "site_id", None) != site_id:
+        raise HTTPException(
+            status_code=403,
+            detail={"code": 40311, "message": "无权操作其他营地数据"},
+        )
+
+
 # ==================== C端接口（公开） ====================
 
 @router.get("/cms/pages/{page_code}", summary="获取已发布的页面配置")
@@ -169,6 +183,7 @@ async def list_pages(
 ):
     """获取页面列表（分页、按类型筛选）"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     items, total = await cms_service.list_pages(
         db, site_id=site_id, page=page, page_size=page_size, page_type=page_type,
     )
@@ -188,6 +203,7 @@ async def create_page(
 ):
     """创建 CMS 页面"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     page_obj = await cms_service.create_page(db, site_id=site_id, data=body)
     return ResponseModel.success(
         data=CmsPageDetail.model_validate(page_obj).model_dump(),
@@ -203,6 +219,7 @@ async def get_page_detail(
 ):
     """获取页面详情（含草稿配置）"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     page_obj = await cms_service.get_page(db, site_id=site_id, page_id=page_id)
     if not page_obj:
         raise HTTPException(
@@ -223,6 +240,7 @@ async def create_page_qrcode(
 ):
     """为已发布 CMS 页面创建或复用小程序码。"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     qrcode = await qrcode_service.create_or_reuse_cms_page_qrcode(
         db,
         site_id=site_id,
@@ -244,6 +262,7 @@ async def update_page(
 ):
     """更新页面基本信息（标题、状态等）"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     page_obj = await cms_service.update_page(
         db, site_id=site_id, page_id=page_id, data=body,
     )
@@ -261,6 +280,7 @@ async def delete_page(
 ):
     """软删除页面（仅 custom 类型可删）"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     await cms_service.delete_page(db, site_id=site_id, page_id=page_id)
     return ResponseModel.success(message="删除成功")
 
@@ -278,6 +298,7 @@ async def save_draft(
     使用 draft_updated_at 乐观锁防止并发覆盖。
     """
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     page_obj = await cms_service.save_draft(
         db, site_id=site_id, page_id=page_id, data=body,
     )
@@ -305,6 +326,7 @@ async def reset_page(
         )
 
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     page_obj = await cms_service.reset_page(
         db, site_id=site_id, page_id=page_id,
     )
@@ -334,6 +356,7 @@ async def publish_page(
         )
 
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     version = await cms_service.publish_page(
         db, site_id=site_id, page_id=page_id,
         admin_id=admin.id, remark=body.remark,
@@ -354,6 +377,7 @@ async def list_versions(
 ):
     """获取页面版本历史列表"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     versions = await cms_service.list_versions(db, site_id=site_id, page_id=page_id)
     return ResponseModel.success(data=versions)
 
@@ -374,6 +398,7 @@ async def rollback_page(
         )
 
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     await cms_service.rollback_page(
         db, site_id=site_id, page_id=page_id,
         version_id=body.version_id, admin_id=admin.id,
@@ -390,6 +415,7 @@ async def create_preview(
 ):
     """生成草稿预览 token（UUID → Redis，TTL=30min）"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     result = await cms_service.create_preview_token(db, site_id=site_id, page_id=page_id)
     return ResponseModel.success(data=result)
 
@@ -402,6 +428,14 @@ async def acquire_lock(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """获取或续期编辑锁（Redis 分布式锁，TTL=5min）"""
+    site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
+    page_obj = await cms_service.get_page(db, site_id=site_id, page_id=page_id)
+    if not page_obj:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CMS_PAGE_NOT_FOUND", "message": "页面不存在"},
+        )
     success = await cms_service.acquire_edit_lock(
         page_id=page_id, admin_id=admin.id, admin_name=admin.username,
     )
@@ -426,6 +460,14 @@ async def release_lock(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """释放编辑锁"""
+    site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
+    page_obj = await cms_service.get_page(db, site_id=site_id, page_id=page_id)
+    if not page_obj:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "CMS_PAGE_NOT_FOUND", "message": "页面不存在"},
+        )
     await cms_service.release_edit_lock(page_id=page_id, admin_id=admin.id)
     return ResponseModel.success(message="释放编辑锁成功")
 
@@ -438,6 +480,7 @@ async def list_components(
 ):
     """获取可用组件列表"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     components = await cms_service.list_components(db, site_id=site_id)
     data = [CmsComponentListItem.model_validate(c).model_dump() for c in components]
     return ResponseModel.success(data=data)
@@ -457,6 +500,7 @@ async def create_component(
             detail={"code": "CMS_PUBLISH_PERMISSION_DENIED", "message": "仅超级管理员可注册组件"},
         )
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     comp = await cms_service.create_component(db, site_id=site_id, data=body)
     return ResponseModel.success(
         data=CmsComponentListItem.model_validate(comp).model_dump(),
@@ -474,6 +518,7 @@ async def list_assets(
 ):
     """素材库列表（分页、按类型筛选）"""
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     items, total = await cms_service.list_assets(
         db, site_id=site_id, page=page, page_size=page_size, file_type=file_type,
     )
@@ -495,11 +540,32 @@ async def upload_asset(
     频率限制：60次/分钟/用户。
     """
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
     asset = await cms_service.upload_asset(
         db, site_id=site_id, file=file, admin_id=admin.id,
     )
     return ResponseModel.success(
         data=CmsAssetListItem.model_validate(asset).model_dump(),
+    )
+
+
+@router.post("/admin/cms/assets/export/campsites", summary="导出营位信息到云文件")
+async def export_campsite_info_asset(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    admin: AdminUser = Depends(get_current_admin),
+):
+    """导出营位商品基础信息 CSV，并归档到云文件的“导出数据”。"""
+    site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
+    asset = await cms_service.export_campsite_info_asset(
+        db,
+        site_id=site_id,
+        admin_id=admin.id,
+    )
+    return ResponseModel.success(
+        data=CmsAssetListItem.model_validate(asset).model_dump(),
+        message="营位信息已导出到云文件",
     )
 
 
@@ -516,8 +582,9 @@ async def delete_asset(
     有引用时拒绝删除（除非 force=true 且为 super_admin）。
     """
     site_id = get_site_id(request)
+    _ensure_admin_site_access(admin, site_id)
 
-    if force and admin.role != "super_admin":
+    if force and _get_admin_role_code(admin) != "super_admin":
         raise HTTPException(
             status_code=403,
             detail={"code": "CMS_PUBLISH_PERMISSION_DENIED", "message": "仅超级管理员可强制删除"},

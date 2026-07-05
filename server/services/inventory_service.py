@@ -127,12 +127,16 @@ async def lock_inventory(
             Inventory.is_deleted.is_(False),
             Inventory.status == "open",
         )
-        if sku_id:
+        if sku_id is None:
+            query = query.where(Inventory.sku_id.is_(None))
+        else:
             query = query.where(Inventory.sku_id == sku_id)
-        if time_slot:
+        if time_slot is None:
+            query = query.where(Inventory.time_slot.is_(None))
+        else:
             query = query.where(Inventory.time_slot == time_slot)
 
-        result = await db.execute(query)
+        result = await db.execute(query.with_for_update())
         inv = result.scalar_one_or_none()
 
         if inv is None:
@@ -196,12 +200,16 @@ async def release_inventory(
         Inventory.date == inv_date,
         Inventory.is_deleted.is_(False),
     )
-    if sku_id:
+    if sku_id is None:
+        query = query.where(Inventory.sku_id.is_(None))
+    else:
         query = query.where(Inventory.sku_id == sku_id)
-    if time_slot:
+    if time_slot is None:
+        query = query.where(Inventory.time_slot.is_(None))
+    else:
         query = query.where(Inventory.time_slot == time_slot)
 
-    result = await db.execute(query)
+    result = await db.execute(query.with_for_update())
     inv = result.scalar_one_or_none()
 
     if inv is None:
@@ -253,25 +261,34 @@ async def confirm_sell(
         Inventory.date == inv_date,
         Inventory.is_deleted.is_(False),
     )
-    if sku_id:
+    if sku_id is None:
+        query = query.where(Inventory.sku_id.is_(None))
+    else:
         query = query.where(Inventory.sku_id == sku_id)
-    if time_slot:
+    if time_slot is None:
+        query = query.where(Inventory.time_slot.is_(None))
+    else:
         query = query.where(Inventory.time_slot == time_slot)
 
-    result = await db.execute(query)
+    result = await db.execute(query.with_for_update())
     inv = result.scalar_one_or_none()
 
     if inv is None:
         return None
 
-    sell_qty = min(quantity, inv.locked)
-    inv.locked -= sell_qty
-    inv.sold += sell_qty
+    if inv.locked < quantity:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": 40906, "message": f"锁定库存不足，已锁定: {inv.locked}, 需要确认: {quantity}"},
+        )
+
+    inv.locked -= quantity
+    inv.sold += quantity
 
     log = InventoryLog(
         inventory_id=inv.id,
         change_type="sell",
-        quantity=sell_qty,
+        quantity=quantity,
         order_id=order_id,
         remark=f"订单确认 order_id={order_id}",
     )

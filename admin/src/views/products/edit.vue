@@ -26,6 +26,9 @@
               </el-form-item>
               <el-form-item label="业务分类">
                 <el-input v-model="form.category" maxlength="50" placeholder="如 campsite / drink / family" />
+                <div class="form-tip">
+                  业务分类用于前台筛选、装修组件和运营统计；商品类型决定业务规则，业务分类只做展示/归类标签。
+                </div>
               </el-form-item>
               <el-form-item label="预约模式">
                 <el-radio-group v-model="form.booking_mode">
@@ -85,6 +88,17 @@
             <div class="editor-section">
               <el-form-item label="商品图片">
                 <div class="image-editor">
+                  <el-upload
+                    class="product-image-upload"
+                    accept="image/*"
+                    :show-file-list="false"
+                    :before-upload="beforeProductImageUpload"
+                    :http-request="handleProductImageUpload"
+                  >
+                    <el-button type="primary" plain :loading="uploadingImage">
+                      <el-icon><Upload /></el-icon>上传封面图
+                    </el-button>
+                  </el-upload>
                   <div v-for="(image, index) in form.images" :key="index" class="image-row">
                     <el-input v-model="image.url" placeholder="图片 URL" />
                     <el-input-number v-model="image.sort_order" :min="0" controls-position="right" />
@@ -94,7 +108,47 @@
                 </div>
               </el-form-item>
               <el-form-item label="富文本描述">
-                <el-input v-model="form.description" type="textarea" :rows="10" placeholder="支持 HTML，预览会做安全过滤" />
+                <div class="rich-editor">
+                  <div class="rich-editor__toolbar">
+                    <el-tooltip content="加粗" placement="top">
+                      <el-button size="small" @click="applyDescriptionCommand('bold')">B</el-button>
+                    </el-tooltip>
+                    <el-tooltip content="斜体" placement="top">
+                      <el-button size="small" @click="applyDescriptionCommand('italic')">I</el-button>
+                    </el-tooltip>
+                    <el-tooltip content="小标题" placement="top">
+                      <el-button size="small" @click="applyDescriptionCommand('heading')">H3</el-button>
+                    </el-tooltip>
+                    <el-select v-model="richTextFontSize" size="small" style="width: 98px" @change="applyDescriptionCommand('fontSize', richTextFontSize)">
+                      <el-option label="14px" value="14px" />
+                      <el-option label="16px" value="16px" />
+                      <el-option label="18px" value="18px" />
+                      <el-option label="22px" value="22px" />
+                    </el-select>
+                    <el-color-picker v-model="richTextColor" size="small" @change="value => applyDescriptionCommand('textColor', value || richTextColor)" />
+                    <el-color-picker v-model="richTextBgColor" size="small" @change="value => applyDescriptionCommand('backgroundColor', value || richTextBgColor)" />
+                    <el-button size="small" @click="applyDescriptionCommand('divider')">分割线</el-button>
+                    <el-upload
+                      class="rich-editor__upload"
+                      accept="image/*"
+                      :show-file-list="false"
+                      :before-upload="beforeProductImageUpload"
+                      :http-request="handleDescriptionImageUpload"
+                    >
+                      <el-button size="small" :loading="uploadingRichImage">上传图片</el-button>
+                    </el-upload>
+                    <el-button size="small" @click="insertDescriptionImage">图片URL</el-button>
+                    <el-button size="small" @click="insertDescriptionLink">链接</el-button>
+                  </div>
+                  <div
+                    ref="descriptionEditorRef"
+                    class="rich-editor__editable"
+                    contenteditable="true"
+                    @input="syncDescriptionFromEditor"
+                    @blur="syncDescriptionFromEditor"
+                  ></div>
+                  <textarea v-model="form.description" class="rich-editor__sync-input" aria-hidden="true" tabindex="-1" />
+                </div>
               </el-form-item>
               <el-form-item label="安全预览">
                 <div class="rich-preview" v-html="safeDescriptionPreview"></div>
@@ -106,7 +160,36 @@
             <div class="editor-section">
               <template v-if="isCampingType">
                 <el-form-item label="区域">
-                  <el-input v-model="form.ext_camping.area" placeholder="如 A区 / 林下区" />
+                  <div class="area-editor">
+                    <el-select
+                      v-model="form.ext_camping.area"
+                      filterable
+                      allow-create
+                      clearable
+                      default-first-option
+                      placeholder="请选择或新增区域"
+                      style="width: 100%"
+                      @change="syncCampingAreaOption"
+                    >
+                      <el-option
+                        v-for="area in campingAreaOptions"
+                        :key="area"
+                        :label="area"
+                        :value="area"
+                      />
+                    </el-select>
+                    <div class="area-editor__chips" v-if="campingAreaOptions.length">
+                      <el-tag
+                        v-for="area in campingAreaOptions"
+                        :key="area"
+                        closable
+                        effect="plain"
+                        @close="removeCampingArea(area)"
+                      >
+                        {{ area }}
+                      </el-tag>
+                    </div>
+                  </div>
                 </el-form-item>
                 <el-form-item label="营位编号">
                   <el-input v-model="form.ext_camping.position_name" />
@@ -127,7 +210,7 @@
                     <el-switch v-model="form.ext_camping.has_platform" active-text="木平台" />
                   </div>
                 </el-form-item>
-                <el-form-item label="最大人数">
+                <el-form-item label="包含人数">
                   <el-input-number v-model="form.ext_camping.max_persons" :min="0" controls-position="right" />
                 </el-form-item>
               </template>
@@ -139,6 +222,10 @@
                     <el-radio-button label="group">按组</el-radio-button>
                   </el-radio-group>
                 </el-form-item>
+                <el-form-item label="集合地点">
+                  <el-input v-model="form.ext_activity.meeting_point" placeholder="如 皮划艇码头" />
+                  <div class="form-tip">日常活动通过“场次”设置每天可预约时间；特定活动还需填写“活动日期”。</div>
+                </el-form-item>
                 <el-form-item label="活动日期" v-if="form.type === 'special_activity'">
                   <el-date-picker v-model="form.ext_activity.event_date" type="date" value-format="YYYY-MM-DD" />
                 </el-form-item>
@@ -147,7 +234,10 @@
                     <div v-for="(slot, index) in form.ext_activity.time_slots" :key="index" class="image-row">
                       <el-time-picker v-model="slot.start" value-format="HH:mm" placeholder="开始" />
                       <el-time-picker v-model="slot.end" value-format="HH:mm" placeholder="结束" />
-                      <el-input-number v-model="slot.capacity" :min="0" controls-position="right" />
+                      <div class="slot-capacity-field">
+                        <span>库存</span>
+                        <el-input-number v-model="slot.capacity" :min="0" controls-position="right" />
+                      </div>
                       <el-button @click="removeTimeSlot(index)">移除</el-button>
                     </div>
                     <el-button @click="addTimeSlot">添加场次</el-button>
@@ -197,15 +287,26 @@
 
           <el-tab-pane label="SKU" name="sku">
             <div class="editor-section">
+              <el-form-item label="库存类型">
+                <div class="inventory-mode-editor">
+                  <el-radio-group v-model="form.sku_inventory_mode" @change="applySkuInventoryMode">
+                    <el-radio-button label="independent">独立库存</el-radio-button>
+                    <el-radio-button label="shared_product">本商品共享库存</el-radio-button>
+                  </el-radio-group>
+                  <div class="form-tip">
+                    商品新建时先选择库存类型；同一商品不同 SKU 可在表格里单独选择是否共享库存，不同商品不会共用这个库存池；共享 SKU 保存时以这些行的最大库存作为共享总量。
+                  </div>
+                </div>
+              </el-form-item>
               <el-table :data="form.skus" border>
                 <el-table-column label="编码" min-width="160">
                   <template #default="{ row }">
                     <el-input v-model="row.sku_code" placeholder="不填自动生成" />
                   </template>
                 </el-table-column>
-                <el-table-column label="规格 JSON" min-width="220">
+                <el-table-column label="规格" min-width="220">
                   <template #default="{ row }">
-                    <el-input v-model="row.spec_values_text" placeholder='{"规格":"默认"}' />
+                    <el-input v-model="row.spec_values_text" placeholder="如 一大一小 / 双人套餐" />
                   </template>
                 </el-table-column>
                 <el-table-column label="价格" width="140">
@@ -216,6 +317,14 @@
                 <el-table-column label="库存" width="120">
                   <template #default="{ row }">
                     <el-input-number v-model="row.stock" :min="0" controls-position="right" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="库存类型" width="170">
+                  <template #default="{ row }">
+                    <el-select v-model="row.inventory_mode" class="sku-inventory-mode-select">
+                      <el-option label="独立库存" value="independent" />
+                      <el-option label="本商品共享" value="shared_product" />
+                    </el-select>
                   </template>
                 </el-table-column>
                 <el-table-column label="图片 URL" min-width="180">
@@ -254,9 +363,12 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import DOMPurify from 'dompurify'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadRequestOptions } from 'element-plus'
+import { Upload } from '@element-plus/icons-vue'
+import { uploadCmsAsset } from '@/api/cms'
 import { createProduct, getAdminProductDetail, updateProduct, updateProductStatus } from '@/api/product'
+import { createUploadRequestError } from '@/utils'
+import { applyRichTextCommand, sanitizeRichText, type RichTextFormatCommand } from '@/utils/rich-text'
 import type {
   ActivityExt,
   CampingExt,
@@ -268,6 +380,7 @@ import type {
   ProductType,
   RentalExt,
   ShopExt,
+  SkuInventoryMode,
 } from '@/types'
 
 interface EditableSku extends ProductSkuUpsert {
@@ -297,6 +410,7 @@ interface ProductForm {
   ext_activity: ActivityExt
   ext_rental: RentalExt
   ext_shop: ShopExt
+  sku_inventory_mode: SkuInventoryMode
   skus: EditableSku[]
 }
 
@@ -308,12 +422,19 @@ const saving = ref(false)
 const saleRange = ref<[string, string] | null>(null)
 const campingEventRange = ref<[string, string] | null>(null)
 const specDefinitionsText = ref('[]')
+const descriptionEditorRef = ref<HTMLElement>()
+const richTextFontSize = ref('16px')
+const richTextColor = ref('#2d4a3e')
+const richTextBgColor = ref('#faf6f0')
+const uploadingImage = ref(false)
+const uploadingRichImage = ref(false)
+const campingAreaOptions = ref<string[]>(['A区', 'B区', '林下区', '草坪区'])
 
 const isEdit = computed(() => !!route.params.id)
 const productId = computed(() => Number(route.params.id || 0))
 const isCampingType = computed(() => ['daily_camping', 'event_camping'].includes(form.type))
 const isActivityType = computed(() => ['daily_activity', 'special_activity'].includes(form.type))
-const safeDescriptionPreview = computed(() => DOMPurify.sanitize(form.description || ''))
+const safeDescriptionPreview = computed(() => sanitizeRichText(form.description || ''))
 
 const form = reactive<ProductForm>({
   name: '',
@@ -347,6 +468,7 @@ const form = reactive<ProductForm>({
     booking_unit: 'person',
     time_slots: [],
     event_date: null,
+    meeting_point: '',
   },
   ext_rental: {
     deposit_amount: 0,
@@ -359,6 +481,7 @@ const form = reactive<ProductForm>({
     shipping_required: false,
     shop_type: 'onsite',
   },
+  sku_inventory_mode: 'independent',
   skus: [],
 })
 
@@ -384,7 +507,7 @@ function resetFormWithProduct(product: Product) {
     booking_mode: product.booking_mode || 'by_quantity',
     base_price: Number(product.base_price || 0),
     images: normalizeImages(product.images),
-    description: product.description || '',
+    description: sanitizeRichText(product.description || ''),
     sale_start_at: product.sale_start_at || null,
     sale_end_at: product.sale_end_at || null,
     refund_deadline_type: product.refund_deadline_type || 'hours',
@@ -403,18 +526,24 @@ function resetFormWithProduct(product: Product) {
       id: sku.id,
       sku_code: sku.sku_code,
       spec_values: sku.spec_values || sku.attributes || {},
-      spec_values_text: JSON.stringify(sku.spec_values || sku.attributes || {}),
+      spec_values_text: formatSkuSpecText(sku.spec_values || sku.attributes || {}),
       price: Number(sku.price || 0),
       stock: Number(sku.stock || 0),
       status: sku.status || 'active',
       image_url: sku.image_url || null,
+      inventory_mode: sku.inventory_mode || 'independent',
     })),
   })
+  form.sku_inventory_mode = form.skus.length > 0 && form.skus.every(sku => sku.inventory_mode === 'shared_product')
+    ? 'shared_product'
+    : 'independent'
   saleRange.value = product.sale_start_at && product.sale_end_at ? [product.sale_start_at, product.sale_end_at] : null
   campingEventRange.value = form.ext_camping.event_start_date && form.ext_camping.event_end_date
     ? [form.ext_camping.event_start_date, form.ext_camping.event_end_date]
     : null
   specDefinitionsText.value = JSON.stringify(form.ext_shop.spec_definitions || [])
+  syncCampingAreaOption()
+  renderDescriptionEditor()
 }
 
 async function fetchDetail() {
@@ -429,6 +558,50 @@ function addImage() {
 
 function removeImage(index: number) {
   form.images.splice(index, 1)
+}
+
+function beforeProductImageUpload(file: File) {
+  if (!file.type.startsWith('image/')) {
+    ElMessage.error('请上传图片文件')
+    return false
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error('图片大小不能超过 10MB')
+    return false
+  }
+  return true
+}
+
+async function handleProductImageUpload(options: UploadRequestOptions) {
+  uploadingImage.value = true
+  try {
+    const res = await uploadCmsAsset(options.file as File)
+    const asset = res.data
+    if (asset.file_url) {
+      form.images.push({ url: asset.file_url, sort_order: form.images.length })
+      ElMessage.success('图片已上传')
+      options.onSuccess?.(asset)
+    }
+  } catch (error) {
+    options.onError?.(createUploadRequestError(error, options))
+    throw error
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+function syncCampingAreaOption() {
+  const area = (form.ext_camping.area || '').trim()
+  if (area && !campingAreaOptions.value.includes(area)) {
+    campingAreaOptions.value = [...campingAreaOptions.value, area]
+  }
+}
+
+function removeCampingArea(area: string) {
+  campingAreaOptions.value = campingAreaOptions.value.filter(item => item !== area)
+  if (form.ext_camping.area === area) {
+    form.ext_camping.area = ''
+  }
 }
 
 function addTimeSlot() {
@@ -446,11 +619,20 @@ function addSku() {
   form.skus.push({
     sku_code: '',
     spec_values: {},
-    spec_values_text: '{}',
+    spec_values_text: '',
     price: form.base_price,
     stock: 0,
     status: 'active',
     image_url: null,
+    inventory_mode: form.sku_inventory_mode,
+  })
+}
+
+function applySkuInventoryMode(mode: string | number | boolean | undefined) {
+  const normalized: SkuInventoryMode = mode === 'shared_product' ? 'shared_product' : 'independent'
+  form.sku_inventory_mode = normalized
+  form.skus.forEach(sku => {
+    sku.inventory_mode = normalized
   })
 }
 
@@ -477,13 +659,29 @@ function parseJsonArray(text: string, fallback: Array<Record<string, any>>) {
   }
 }
 
-function parseSkuSpec(row: EditableSku) {
-  try {
-    const parsed = JSON.parse(row.spec_values_text || '{}')
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}
-  } catch {
-    throw new Error(`SKU ${row.sku_code || '未命名'} 规格 JSON 格式错误`)
+function formatSkuSpecText(values: Record<string, any> | undefined | null) {
+  if (!values || typeof values !== 'object' || Array.isArray(values)) return ''
+  const entries = Object.entries(values)
+  if (entries.length === 0) return ''
+  const firstEntry = entries[0]
+  if (entries.length === 1 && firstEntry?.[0] === '规格') {
+    return String(firstEntry[1] ?? '')
   }
+  return JSON.stringify(values)
+}
+
+function parseSkuSpec(row: EditableSku) {
+  const raw = (row.spec_values_text || '').trim()
+  if (!raw) return {}
+  try {
+    const parsed = JSON.parse(raw)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed
+    }
+  } catch {
+    // 运营日常输入“一大一小”等普通文本时，按默认“规格”字段提交，避免被 JSON 细节阻塞。
+  }
+  return { '规格': raw }
 }
 
 function ensureSkuCode(row: EditableSku, index: number): string {
@@ -504,7 +702,7 @@ function buildProductPayload(): ProductCreateRequest {
     booking_mode: form.booking_mode,
     base_price: form.base_price,
     images: form.images.filter(image => image.url),
-    description: form.description,
+    description: sanitizeRichText(form.description),
     sale_start_at: form.sale_start_at,
     sale_end_at: form.sale_end_at,
     refund_deadline_type: form.refund_deadline_type,
@@ -523,6 +721,7 @@ function buildProductPayload(): ProductCreateRequest {
       stock: row.stock,
       status: row.status,
       image_url: row.image_url || null,
+      inventory_mode: row.inventory_mode || 'independent',
     })),
   }
 
@@ -536,6 +735,69 @@ function buildProductPayload(): ProductCreateRequest {
     }
   }
   return payload
+}
+
+function syncDescriptionFromEditor() {
+  const sanitized = sanitizeRichText(descriptionEditorRef.value?.innerHTML || '')
+  form.description = sanitized
+  if (descriptionEditorRef.value && descriptionEditorRef.value.innerHTML !== sanitized) {
+    descriptionEditorRef.value.innerHTML = sanitized
+  }
+}
+
+function renderDescriptionEditor() {
+  requestAnimationFrame(() => {
+    if (descriptionEditorRef.value && descriptionEditorRef.value.innerHTML !== safeDescriptionPreview.value) {
+      descriptionEditorRef.value.innerHTML = safeDescriptionPreview.value
+    }
+  })
+}
+
+function applyDescriptionCommand(command: RichTextFormatCommand, value?: string) {
+  descriptionEditorRef.value?.focus()
+  applyRichTextCommand(command, value)
+  syncDescriptionFromEditor()
+}
+
+async function promptRichTextValue(title: string, inputPlaceholder: string) {
+  const { value } = await ElMessageBox.prompt(title, '商品描述', {
+    confirmButtonText: '插入',
+    cancelButtonText: '取消',
+    inputPlaceholder,
+  })
+  return value
+}
+
+async function insertDescriptionImage() {
+  try {
+    const imageUrl = await promptRichTextValue('请输入图片 URL', 'https://...')
+    applyDescriptionCommand('image', imageUrl)
+  } catch {}
+}
+
+async function handleDescriptionImageUpload(options: UploadRequestOptions) {
+  uploadingRichImage.value = true
+  try {
+    const res = await uploadCmsAsset(options.file as File)
+    const asset = res.data
+    if (asset.file_url) {
+      applyDescriptionCommand('image', asset.file_url)
+      ElMessage.success('图片已上传并插入详情')
+      options.onSuccess?.(asset)
+    }
+  } catch (error) {
+    options.onError?.(createUploadRequestError(error, options))
+    throw error
+  } finally {
+    uploadingRichImage.value = false
+  }
+}
+
+async function insertDescriptionLink() {
+  try {
+    const link = await promptRichTextValue('请输入链接地址', 'https://...')
+    applyDescriptionCommand('link', link)
+  } catch {}
 }
 
 async function handleSubmit() {
@@ -564,7 +826,10 @@ async function handleSubmit() {
   }
 }
 
-onMounted(fetchDetail)
+onMounted(async () => {
+  await fetchDetail()
+  renderDescriptionEditor()
+})
 </script>
 
 <style lang="scss" scoped>
@@ -584,6 +849,13 @@ onMounted(fetchDetail)
   flex-wrap: wrap;
 }
 
+.form-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-text-placeholder);
+}
+
 .switch-grid {
   display: flex;
   gap: 18px;
@@ -597,11 +869,93 @@ onMounted(fetchDetail)
   width: 100%;
 }
 
+.product-image-upload {
+  align-self: flex-start;
+}
+
 .image-row {
   display: grid;
   grid-template-columns: minmax(180px, 1fr) 140px auto;
   gap: 10px;
   align-items: center;
+}
+
+.slot-capacity-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  span {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+  }
+}
+
+.area-editor {
+  width: 100%;
+
+  &__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+  }
+}
+
+.inventory-mode-editor {
+  width: 100%;
+}
+
+.sku-inventory-mode-select {
+  width: 100%;
+}
+
+.rich-editor {
+  width: 100%;
+  border: 1px solid var(--color-border-light);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+
+  &__toolbar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px;
+    border-bottom: 1px solid var(--color-border-light);
+    background: var(--color-bg);
+  }
+
+  &__upload {
+    display: inline-flex;
+  }
+
+  &__editable {
+    min-height: 220px;
+    padding: 14px;
+    line-height: 1.7;
+    outline: none;
+    overflow-y: auto;
+
+    :deep(img) {
+      max-width: 100%;
+      height: auto;
+    }
+  }
+
+  &__sync-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    opacity: 0;
+    pointer-events: none;
+    left: -9999px;
+  }
 }
 
 @media (max-width: 720px) {

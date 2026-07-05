@@ -1,4 +1,5 @@
 import unittest
+import inspect
 from datetime import date, datetime, timezone
 
 from sqlalchemy.dialects import postgresql
@@ -54,6 +55,16 @@ class OrderFilterQueryTest(unittest.TestCase):
         self.assertIn('"user".nickname ILIKE', sql)
         self.assertIn('"user".phone ILIKE', sql)
         self.assertIn("product.name ILIKE", sql)
+
+    def test_list_orders_counts_and_pages_by_distinct_order_id(self):
+        source = inspect.getsource(self.service.list_orders)
+
+        self.assertIn("with_only_columns(Order.id).order_by(None).distinct().subquery()", source)
+        self.assertIn("select(func.count()).select_from(distinct_order_ids)", source)
+        self.assertIn("select(distinct_order_ids.c.id)", source)
+        self.assertIn("id_query.offset(offset).limit(page_size)", source)
+        self.assertIn("Order.id.in_(order_ids)", source)
+        self.assertNotIn("select(func.count()).select_from(query.subquery())", source)
 
 
 if __name__ == "__main__":

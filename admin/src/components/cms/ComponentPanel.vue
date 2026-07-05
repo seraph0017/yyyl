@@ -59,6 +59,7 @@ const componentGroups: ComponentGroup[] = [
         defaultProps: {
           url: '',
           link: { type: 'none', target: '', title: '' },
+          hotspots: [],
           mode: 'widthFix',
           width: '100%',
         },
@@ -75,6 +76,12 @@ const componentGroups: ComponentGroup[] = [
           link: { type: 'none', target: '', title: '' },
           title_color: '#333333',
           desc_color: '#999999',
+          title_font_size: 32,
+          desc_font_size: 26,
+          title_font_family: 'system',
+          desc_font_family: 'system',
+          title_font_weight: '600',
+          desc_font_weight: '400',
         },
       },
       {

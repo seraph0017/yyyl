@@ -227,6 +227,19 @@
         </el-alert>
       </div>
     </el-dialog>
+
+    <el-dialog v-model="qrcodeDialogVisible" title="页面二维码" width="420px" destroy-on-close @closed="closeQrcodeDialog">
+      <div class="qrcode-preview" v-if="currentQrcode">
+        <img v-if="qrcodePreviewUrl" :src="qrcodePreviewUrl" alt="页面二维码" class="qrcode-preview__image" />
+        <el-skeleton v-else animated :rows="4" />
+        <div class="qrcode-preview__title">{{ currentQrcode.title }}</div>
+        <div class="qrcode-preview__meta">scene：{{ currentQrcode.scene }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="qrcodeDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :disabled="!currentQrcode" @click="downloadCurrentQrcode">下载透明底 PNG</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -236,8 +249,10 @@ import { useRouter } from 'vue-router'
 import { Search, Plus, Edit, Setting, Delete, Link, RefreshLeft, CopyDocument, Grid } from '@element-plus/icons-vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { getCmsPages, createCmsPage, updateCmsPage, deleteCmsPage, resetCmsPage } from '@/api/cms'
-import { createCmsPageQrcode } from '@/api/qrcode'
+import { createCmsPageQrcode, downloadQrcode } from '@/api/qrcode'
+import { downloadFile } from '@/utils'
 import type { CmsPage } from '@/types/cms'
+import type { Qrcode } from '@/types/qrcode'
 import dayjs from 'dayjs'
 
 const router = useRouter()
@@ -394,6 +409,10 @@ async function handleUpdateSetting() {
 // ---- 链接弹窗 ----
 const linkDialogVisible = ref(false)
 const linkTarget = ref<CmsPage | null>(null)
+const qrcodeDialogVisible = ref(false)
+const currentQrcode = ref<Qrcode | null>(null)
+const qrcodeBlob = ref<Blob | null>(null)
+const qrcodePreviewUrl = ref('')
 
 const miniappPath = computed(() => {
   if (!linkTarget.value) return ''
@@ -425,8 +444,34 @@ async function handleCreatePageQrcode(page: CmsPage) {
     ElMessage.warning('页面需启用并发布后才能生成二维码')
     return
   }
-  await createCmsPageQrcode(page.id)
-  ElMessage.success('页面二维码已生成，可在二维码管理中查看')
+  const res = await createCmsPageQrcode(page.id)
+  await openQrcodeDialog(res.data)
+  ElMessage.success('页面二维码已生成')
+}
+
+async function openQrcodeDialog(qrcode: Qrcode) {
+  closeQrcodeDialog()
+  currentQrcode.value = qrcode
+  qrcodeDialogVisible.value = true
+  const res = await downloadQrcode(qrcode.id)
+  qrcodeBlob.value = res.data as Blob
+  qrcodePreviewUrl.value = URL.createObjectURL(qrcodeBlob.value)
+}
+
+function closeQrcodeDialog() {
+  if (qrcodePreviewUrl.value) URL.revokeObjectURL(qrcodePreviewUrl.value)
+  qrcodePreviewUrl.value = ''
+  qrcodeBlob.value = null
+  currentQrcode.value = null
+}
+
+async function downloadCurrentQrcode() {
+  if (!currentQrcode.value) return
+  if (!qrcodeBlob.value) {
+    const res = await downloadQrcode(currentQrcode.value.id)
+    qrcodeBlob.value = res.data as Blob
+  }
+  downloadFile(qrcodeBlob.value, `${currentQrcode.value.short_code || currentQrcode.value.id}-transparent.png`)
 }
 
 // ---- 重置为默认 ----
@@ -522,6 +567,38 @@ onMounted(() => {
     border-radius: 3px;
     color: var(--el-text-color-primary);
     font-family: monospace;
+  }
+}
+
+.qrcode-preview {
+  text-align: center;
+
+  &__image {
+    width: 240px;
+    height: 240px;
+    object-fit: contain;
+    border: 1px solid var(--color-border-light);
+    border-radius: 12px;
+    background:
+      linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
+      linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
+      linear-gradient(-45deg, transparent 75%, #f3f4f6 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  }
+
+  &__title {
+    margin-top: 12px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  &__meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--color-text-placeholder);
+    word-break: break-all;
   }
 }
 </style>

@@ -50,6 +50,92 @@ class OrderRouteTest(unittest.IsolatedAsyncioTestCase):
         get_order_detail.assert_awaited_once_with(db, 12, user_id=7)
         model_validate.assert_called_once_with(order_detail)
 
+    async def test_seckill_order_reloads_order_detail_before_serializing(self):
+        db = object()
+        user = SimpleNamespace(id=7)
+        created_order = SimpleNamespace(id=12)
+        order_detail = SimpleNamespace(id=12, items=[])
+        body = SimpleNamespace(
+            product_id=1,
+            booking_date="2026-10-01",
+            quantity=2,
+            sku_id=3,
+            time_slot=None,
+            identity_ids=[4],
+            disclaimer_signed=True,
+        )
+
+        with (
+            patch.object(orders.order_service, "seckill_order", AsyncMock(return_value=created_order)) as seckill_order,
+            patch.object(orders.order_service, "get_order_detail", AsyncMock(return_value=order_detail)) as get_order_detail,
+            patch.object(orders.OrderResponse, "model_validate", return_value={"id": 12}) as model_validate,
+        ):
+            await orders.seckill_order(body, db=db, user=user)
+
+        seckill_order.assert_awaited_once_with(
+            db,
+            user,
+            product_id=1,
+            booking_date="2026-10-01",
+            quantity=2,
+            sku_id=3,
+            time_slot=None,
+            identity_ids=[4],
+            disclaimer_signed=True,
+        )
+        get_order_detail.assert_awaited_once_with(db, 12, user_id=7)
+        model_validate.assert_called_once_with(order_detail)
+
+    async def test_cancel_order_reloads_order_detail_before_serializing(self):
+        db = object()
+        user = SimpleNamespace(id=7)
+        cancelled_order = SimpleNamespace(id=12)
+        order_detail = SimpleNamespace(id=12, items=[])
+        body = SimpleNamespace(reason="行程变化")
+
+        with (
+            patch.object(orders.order_service, "cancel_order", AsyncMock(return_value=cancelled_order)) as cancel_order,
+            patch.object(orders.order_service, "get_order_detail", AsyncMock(return_value=order_detail)) as get_order_detail,
+            patch.object(orders.OrderResponse, "model_validate", return_value={"id": 12}) as model_validate,
+        ):
+            await orders.cancel_order(12, body=body, db=db, user=user)
+
+        cancel_order.assert_awaited_once_with(db, 12, 7, reason="行程变化")
+        get_order_detail.assert_awaited_once_with(db, 12, user_id=7)
+        model_validate.assert_called_once_with(order_detail)
+
+    async def test_update_shipping_reloads_order_detail_before_serializing(self):
+        db = object()
+        admin = SimpleNamespace(id=9, site_id=1, role=SimpleNamespace(role_code="admin"))
+        request = object()
+        body = SimpleNamespace(shipping_no="SF123", shipping_company="顺丰")
+        order_check = SimpleNamespace(id=12, site_id=1)
+        updated_order = SimpleNamespace(id=12)
+        order_detail = SimpleNamespace(id=12, items=[])
+
+        with (
+            patch.object(orders, "get_site_id", return_value=1),
+            patch.object(
+                orders.order_service,
+                "get_order_detail",
+                AsyncMock(side_effect=[order_check, order_detail]),
+            ) as get_order_detail,
+            patch.object(orders.order_service, "update_shipping", AsyncMock(return_value=updated_order)) as update_shipping,
+            patch.object(orders.OrderResponse, "model_validate", return_value={"id": 12}) as model_validate,
+        ):
+            await orders.update_shipping(12, body=body, request=request, db=db, admin=admin)
+
+        self.assertEqual(get_order_detail.await_args_list[0].args, (db, 12))
+        self.assertEqual(get_order_detail.await_args_list[1].args, (db, 12))
+        update_shipping.assert_awaited_once_with(
+            db,
+            12,
+            shipping_no="SF123",
+            shipping_company="顺丰",
+            operator_id=9,
+        )
+        model_validate.assert_called_once_with(order_detail)
+
     async def test_apply_refund_creates_refund_record_before_serializing(self):
         db = object()
         user = SimpleNamespace(id=7)

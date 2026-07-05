@@ -51,9 +51,71 @@
       <el-color-picker v-model="localProps.title_color" @change="emitChange" />
     </el-form-item>
 
+    <!-- 标题字号 -->
+    <el-form-item label="标题字号">
+      <el-input-number
+        v-model="localProps.title_font_size"
+        :min="22"
+        :max="48"
+        :step="2"
+        controls-position="right"
+        @change="emitChange"
+      />
+      <span class="form-tip">rpx</span>
+    </el-form-item>
+
+    <el-form-item label="标题字体">
+      <el-select v-model="localProps.title_font_family" @change="emitChange">
+        <el-option label="系统默认" value="system" />
+        <el-option label="宋体" value="serif" />
+        <el-option label="黑体" value="sans" />
+        <el-option label="圆体" value="rounded" />
+      </el-select>
+    </el-form-item>
+
+    <el-form-item label="标题字重">
+      <el-select v-model="localProps.title_font_weight" @change="emitChange">
+        <el-option label="常规" value="400" />
+        <el-option label="中等" value="500" />
+        <el-option label="加粗" value="600" />
+        <el-option label="特粗" value="700" />
+      </el-select>
+    </el-form-item>
+
     <!-- 描述颜色 -->
     <el-form-item label="描述颜色">
       <el-color-picker v-model="localProps.desc_color" @change="emitChange" />
+    </el-form-item>
+
+    <!-- 描述字号 -->
+    <el-form-item label="描述字号">
+      <el-input-number
+        v-model="localProps.desc_font_size"
+        :min="20"
+        :max="40"
+        :step="2"
+        controls-position="right"
+        @change="emitChange"
+      />
+      <span class="form-tip">rpx</span>
+    </el-form-item>
+
+    <el-form-item label="描述字体">
+      <el-select v-model="localProps.desc_font_family" @change="emitChange">
+        <el-option label="系统默认" value="system" />
+        <el-option label="宋体" value="serif" />
+        <el-option label="黑体" value="sans" />
+        <el-option label="圆体" value="rounded" />
+      </el-select>
+    </el-form-item>
+
+    <el-form-item label="描述字重">
+      <el-select v-model="localProps.desc_font_weight" @change="emitChange">
+        <el-option label="常规" value="400" />
+        <el-option label="中等" value="500" />
+        <el-option label="加粗" value="600" />
+        <el-option label="特粗" value="700" />
+      </el-select>
     </el-form-item>
 
     <AssetLibrary v-model:visible="assetVisible" file-type="image" @select="onAssetSelect" />
@@ -79,6 +141,12 @@ const localProps = reactive<ImageTextPropsConfig>({
   link: { type: 'none', target: '', title: '' },
   title_color: '#333333',
   desc_color: '#999999',
+  title_font_size: 32,
+  desc_font_size: 26,
+  title_font_family: 'system',
+  desc_font_family: 'system',
+  title_font_weight: '600',
+  desc_font_weight: '400',
 })
 
 const assetVisible = ref(false)
@@ -169,5 +237,11 @@ function clearLink() {
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+.form-tip {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
 }
 </style>

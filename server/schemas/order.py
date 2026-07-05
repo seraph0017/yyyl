@@ -103,6 +103,7 @@ class OrderQuoteItemResponse(BaseModel):
     sku_id: Optional[int] = Field(default=None, description="SKU ID")
     product_name: str = Field(description="商品名称")
     date: Optional[DateType] = Field(default=None, description="预约日期")
+    time_slot: Optional[str] = Field(default=None, description="场次")
     quantity: int = Field(description="数量")
     unit_price: Decimal = Field(description="单价")
     actual_price: Decimal = Field(description="小计")
@@ -135,6 +136,7 @@ class SeckillOrderCreateRequest(BaseModel):
     sku_id: Optional[int] = Field(default=None, description="SKU ID")
     quantity: int = Field(default=1, ge=1, description="数量")
     booking_date: date = Field(description="预约日期")
+    time_slot: Optional[str] = Field(default=None, max_length=20, description="场次")
     identity_ids: Optional[List[int]] = Field(default=None, description="出行人身份信息ID列表")
     disclaimer_signed: bool = Field(default=False, description="是否已签署免责声明")
 
@@ -215,8 +217,10 @@ class OrderItemResponse(BaseModel):
     # 关联显示字段（由 Service 层填充）
     product_name: Optional[str] = Field(default=None, description="商品名称")
     product_image: Optional[str] = Field(default=None, description="商品首图")
+    cover_image: Optional[str] = Field(default=None, description="商品封面图")
     sku_spec_values: Optional[Dict[str, Any]] = Field(default=None, description="SKU 规格值")
     identity_name: Optional[str] = Field(default=None, description="出行人姓名")
+    remark: Optional[str] = Field(default=None, description="订单项备注")
 
 
 class OrderResponse(BaseModel):
@@ -227,6 +231,9 @@ class OrderResponse(BaseModel):
     id: int = Field(description="订单ID")
     order_no: str = Field(description="订单号")
     user_id: int = Field(description="用户ID")
+    user_nickname: Optional[str] = Field(default=None, description="用户昵称")
+    user_phone: Optional[str] = Field(default=None, description="用户手机号")
+    user_phone_masked: Optional[str] = Field(default=None, description="脱敏用户手机号")
     parent_order_id: Optional[int] = Field(default=None, description="父订单ID")
     order_type: str = Field(description="订单类型")
     status: str = Field(description="订单状态")
@@ -318,9 +325,11 @@ class OrderListParams(BaseModel):
     payment_status: Optional[str] = Field(default=None, description="支付状态")
     user_id: Optional[int] = Field(default=None, description="用户ID（管理端）")
     product_id: Optional[int] = Field(default=None, description="商品ID")
+    sku_id: Optional[int] = Field(default=None, description="SKU ID")
     product_type: Optional[str] = Field(default=None, description="商品类型/品类")
     booking_date_start: Optional[date] = Field(default=None, description="预约日期开始")
     booking_date_end: Optional[date] = Field(default=None, description="预约日期结束")
+    time_slot: Optional[str] = Field(default=None, max_length=20, description="场次")
     payment_time_start: Optional[datetime] = Field(default=None, description="支付时间开始")
     payment_time_end: Optional[datetime] = Field(default=None, description="支付时间结束")
     amount_min: Optional[Decimal] = Field(default=None, ge=0, description="实付金额最小值")

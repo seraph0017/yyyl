@@ -13,18 +13,19 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from database import get_db
 from middleware.auth import get_current_user
+from models.inventory_pool import InventoryPool, InventoryPoolBinding
 from models.order import Cart, CartItem
 from models.product import Product, ProductStatus, SKU, SKUStatus
 from models.user import User
 from schemas.cart import CartAddItemRequest, CartCheckoutRequest
 from schemas.common import ResponseModel
-from services import order_service
+from services import inventory_pool_service, order_service
 
 router = APIRouter(prefix="/api/v1/cart", tags=["购物车"])
 
@@ -42,6 +43,36 @@ async def _get_or_create_cart(db: AsyncSession, user_id: int) -> Cart:
         db.add(cart)
         await db.flush()
     return cart
+
+
+async def _validate_cart_sku_stock(
+    db: AsyncSession,
+    *,
+    product: Product,
+    sku: SKU,
+    quantity: int,
+) -> None:
+    """校验购物车 SKU 库存；共享库存池命中时以库存池为事实源。"""
+    pool = await inventory_pool_service.get_bound_inventory_pool(
+        db,
+        site_id=product.site_id,
+        product_id=product.id,
+        sku_id=sku.id,
+    )
+    if pool:
+        try:
+            inventory_pool_service.validate_pool_availability(pool, required_quantity=quantity)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": 40004, "message": str(exc)},
+            ) from exc
+        return
+    if sku.stock < quantity:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": 40004, "message": f"库存不足，当前库存: {sku.stock}"},
+        )
 
 
 @router.get("/", summary="购物车列表")
@@ -80,6 +111,34 @@ async def list_cart_items(
         for s in sku_result.scalars().all():
             skus_map[s.id] = s
 
+    sku_pool_map: Dict[int, InventoryPool] = {}
+    if sku_ids and products_map:
+        expected_pool_code_by_sku: Dict[int, str] = {}
+        for sku_id, sku in skus_map.items():
+            product = products_map.get(sku.product_id)
+            if product:
+                expected_pool_code_by_sku[sku_id] = inventory_pool_service.get_product_sku_shared_pool_code(product.site_id, product.id)
+        sku_pool_conditions = [
+            and_(InventoryPoolBinding.sku_id == sku_id, InventoryPool.pool_code == pool_code)
+            for sku_id, pool_code in expected_pool_code_by_sku.items()
+        ]
+        pool_result = await db.execute(
+            select(InventoryPoolBinding.sku_id, InventoryPool)
+            .join(InventoryPool, InventoryPool.id == InventoryPoolBinding.inventory_pool_id)
+            .where(
+                or_(*sku_pool_conditions),
+                InventoryPoolBinding.status == "active",
+                InventoryPoolBinding.is_deleted.is_(False),
+                InventoryPool.status == "active",
+                InventoryPool.is_deleted.is_(False),
+            )
+            .order_by(InventoryPoolBinding.priority.asc(), InventoryPoolBinding.id.asc())
+        ) if sku_pool_conditions else None
+        if pool_result:
+            for sku_id, pool in pool_result.all():
+                if sku_id is not None and int(sku_id) not in sku_pool_map:
+                    sku_pool_map[int(sku_id)] = pool
+
     items_data = []
     total_count = 0
     total_price = Decimal("0")
@@ -91,8 +150,9 @@ async def list_cart_items(
         # 确定价格和库存状态
         if sku:
             price = sku.price
-            stock_available = sku.stock > 0
-            stock = sku.stock
+            pool = sku_pool_map.get(sku.id)
+            stock = int(pool.available) if pool else int(sku.stock)
+            stock_available = stock > 0
             image = sku.image_url or (product.images[0]["url"] if product and product.images else None)
         elif product:
             price = product.base_price
@@ -125,6 +185,7 @@ async def list_cart_items(
             "stock_available": stock_available,
             "stock": stock,
             "sku_spec_values": sku.spec_values if sku else None,
+            "shipping_required": bool(getattr(product.ext_shop, "shipping_required", False)) if product else False,
         })
 
     return ResponseModel.success(data={
@@ -227,11 +288,7 @@ async def add_cart_item(
                 status_code=400,
                 detail={"code": 40003, "message": "该规格已下架"},
             )
-        if sku.stock < quantity:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": 40004, "message": f"库存不足，当前库存: {sku.stock}"},
-            )
+        await _validate_cart_sku_stock(db, product=product, sku=sku, quantity=quantity)
 
     # 获取或创建购物车
     cart = await _get_or_create_cart(db, user.id)
@@ -252,11 +309,8 @@ async def add_cart_item(
         # 再次校验库存
         if sku_id:
             sku_obj = await db.get(SKU, sku_id)
-            if sku_obj and sku_obj.stock < new_quantity:
-                raise HTTPException(
-                    status_code=400,
-                    detail={"code": 40004, "message": f"库存不足，当前库存: {sku_obj.stock}"},
-                )
+            if sku_obj:
+                await _validate_cart_sku_stock(db, product=product, sku=sku_obj, quantity=new_quantity)
         existing_item.quantity = new_quantity
     else:
         new_item = CartItem(
@@ -301,11 +355,9 @@ async def update_cart_item(
     # 校验库存
     if cart_item.sku_id:
         sku = await db.get(SKU, cart_item.sku_id)
-        if sku and sku.stock < quantity:
-            raise HTTPException(
-                status_code=400,
-                detail={"code": 40004, "message": f"库存不足，当前库存: {sku.stock}"},
-            )
+        product = await db.get(Product, cart_item.product_id)
+        if sku and product:
+            await _validate_cart_sku_stock(db, product=product, sku=sku, quantity=quantity)
 
     cart_item.quantity = quantity
     await db.commit()
@@ -408,11 +460,7 @@ async def checkout(
                     status_code=400,
                     detail={"code": 40003, "message": f"商品「{product.name}」规格已失效"},
                 )
-            if sku.stock < item.quantity:
-                raise HTTPException(
-                    status_code=400,
-                    detail={"code": 40004, "message": f"商品「{product.name}」库存不足"},
-                )
+            await _validate_cart_sku_stock(db, product=product, sku=sku, quantity=item.quantity)
 
     # 按商品类型（order_type）分组拆单，并复用订单服务统一锁库存/计价/站点隔离。
     type_groups: Dict[str, List[CartItem]] = defaultdict(list)

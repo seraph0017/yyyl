@@ -5,8 +5,8 @@
       <div v-else class="image-placeholder">图片</div>
     </div>
     <div class="text-section">
-      <h3 class="card-title" :style="{ color: title_color || '#333333' }">{{ title || '标题' }}</h3>
-      <p class="card-desc" :style="{ color: desc_color || '#999999' }">{{ description || '描述文字' }}</p>
+      <h3 class="card-title" :style="{ color: title_color || '#333333', fontSize: previewFontSize(title_font_size, 32), fontFamily: previewFontFamily(title_font_family), fontWeight: title_font_weight || '600' }">{{ title || '标题' }}</h3>
+      <p class="card-desc" :style="{ color: desc_color || '#999999', fontSize: previewFontSize(desc_font_size, 26), fontFamily: previewFontFamily(desc_font_family), fontWeight: desc_font_weight || '400' }">{{ description || '描述文字' }}</p>
     </div>
   </div>
 </template>
@@ -22,7 +22,31 @@ defineProps<{
   link?: LinkConfig
   title_color?: string
   desc_color?: string
+  title_font_size?: number | string
+  desc_font_size?: number | string
+  title_font_family?: string
+  desc_font_family?: string
+  title_font_weight?: string
+  desc_font_weight?: string
 }>()
+
+function previewFontSize(value: number | string | undefined, fallbackRpx: number) {
+  if (typeof value === 'string' && value.trim()) {
+    return value.endsWith('rpx') ? `${Number.parseFloat(value) / 2}px` : value
+  }
+  const rpx = typeof value === 'number' && Number.isFinite(value) ? value : fallbackRpx
+  return `${rpx / 2}px`
+}
+
+function previewFontFamily(value: string | undefined) {
+  const map: Record<string, string> = {
+    system: 'inherit',
+    sans: 'Arial, "PingFang SC", "Microsoft YaHei", sans-serif',
+    serif: '"Songti SC", SimSun, serif',
+    rounded: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+  }
+  return map[value || 'system'] || value || 'inherit'
+}
 </script>
 
 <style lang="scss" scoped>

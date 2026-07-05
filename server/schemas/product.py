@@ -96,6 +96,27 @@ class SKUSchema(BaseModel):
     stock: int = Field(description="当前库存")
     status: str = Field(description="状态: active/inactive")
     image_url: Optional[str] = Field(default=None, description="SKU 图片")
+    inventory_mode: str = Field(default="independent", description="库存模式: independent/shared_product")
+    inventory_pool_id: Optional[int] = Field(default=None, description="命中的本商品共享库存池ID")
+    inventory_pool_available: Optional[int] = Field(default=None, description="本商品共享库存池当前可用库存")
+
+
+def _normalize_sku_code(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _normalize_sku_spec_values(value: Any) -> Dict[str, Any]:
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        return {"规格": text} if text else {}
+    return {"规格": str(value)}
 
 
 class SKUCreate(BaseModel):
@@ -103,12 +124,30 @@ class SKUCreate(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-    sku_code: str = Field(min_length=1, max_length=50, description="SKU 编码")
+    sku_code: Optional[str] = Field(default=None, max_length=50, description="SKU 编码；为空时后端自动生成")
     spec_values: Dict[str, Any] = Field(default_factory=dict, description="规格值")
     price: Decimal = Field(ge=0, description="价格")
     stock: int = Field(ge=0, description="库存")
     status: str = Field(default="active", description="状态")
     image_url: Optional[str] = Field(default=None, max_length=512, description="SKU 图片")
+    inventory_mode: str = Field(default="independent", description="库存模式: independent/shared_product")
+
+    @field_validator("inventory_mode")
+    @classmethod
+    def validate_inventory_mode(cls, v: str) -> str:
+        if v not in ("independent", "shared_product"):
+            raise ValueError("inventory_mode 必须为 independent 或 shared_product")
+        return v
+
+    @field_validator("sku_code", mode="before")
+    @classmethod
+    def validate_sku_code(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_sku_code(v)
+
+    @field_validator("spec_values", mode="before")
+    @classmethod
+    def validate_spec_values(cls, v: Any) -> Dict[str, Any]:
+        return _normalize_sku_spec_values(v)
 
 
 class SKUUpdate(BaseModel):
@@ -117,12 +156,32 @@ class SKUUpdate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     id: Optional[int] = Field(default=None, description="SKU ID（更新时传）")
-    sku_code: Optional[str] = Field(default=None, min_length=1, max_length=50, description="SKU 编码")
+    sku_code: Optional[str] = Field(default=None, max_length=50, description="SKU 编码")
     spec_values: Optional[Dict[str, Any]] = Field(default=None, description="规格值")
     price: Optional[Decimal] = Field(default=None, ge=0, description="价格")
     stock: Optional[int] = Field(default=None, ge=0, description="库存")
     status: Optional[str] = Field(default=None, description="状态")
     image_url: Optional[str] = Field(default=None, max_length=512, description="SKU 图片")
+    inventory_mode: Optional[str] = Field(default=None, description="库存模式: independent/shared_product")
+
+    @field_validator("inventory_mode")
+    @classmethod
+    def validate_inventory_mode(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ("independent", "shared_product"):
+            raise ValueError("inventory_mode 必须为 independent 或 shared_product")
+        return v
+
+    @field_validator("sku_code", mode="before")
+    @classmethod
+    def validate_sku_code(cls, v: Optional[str]) -> Optional[str]:
+        return _normalize_sku_code(v)
+
+    @field_validator("spec_values", mode="before")
+    @classmethod
+    def validate_spec_values(cls, v: Any) -> Optional[Dict[str, Any]]:
+        if v is None:
+            return None
+        return _normalize_sku_spec_values(v)
 
 
 # ---- 扩展表 Schemas ----
@@ -158,6 +217,7 @@ class ActivityExtSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     booking_unit: str = Field(default="person", description="预约单位: person/group")
+    meeting_point: Optional[str] = Field(default=None, description="集合地点")
     time_slots: List[Dict[str, Any]] = Field(default_factory=list, description="场次 [{start,end,capacity}]")
     event_date: Optional[DateField] = Field(default=None, description="特定活动日期")
 
@@ -249,6 +309,7 @@ class ProductCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100, description="商品名称")
     type: str = Field(description="商品类型")
     booking_mode: Optional[str] = Field(default=None, description="预约模式: by_position/by_quantity")
+    status: str = Field(default="draft", description="商品状态: draft/on_sale/off_sale")
     base_price: Decimal = Field(ge=0, description="基础价格")
     images: List[Dict[str, Any]] = Field(default_factory=list, description="商品图片 [{url, sort_order}]")
     description: Optional[str] = Field(default=None, description="富文本描述")
@@ -282,6 +343,13 @@ class ProductCreate(BaseModel):
         }
         if v not in allowed:
             raise ValueError(f"商品类型必须为 {allowed} 之一")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: str) -> str:
+        if v not in ("draft", "on_sale", "off_sale"):
+            raise ValueError("商品状态必须为 draft/on_sale/off_sale")
         return v
 
 
@@ -327,6 +395,13 @@ class ProductUpdate(BaseModel):
         }
         if v not in allowed:
             raise ValueError(f"商品类型必须为 {allowed} 之一")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ("draft", "on_sale", "off_sale"):
+            raise ValueError("商品状态必须为 draft/on_sale/off_sale")
         return v
 
 
@@ -472,6 +547,8 @@ class ProductSearchParams(BaseModel):
 
     keyword: Optional[str] = Field(default=None, max_length=50, description="搜索关键词")
     type: Optional[str] = Field(default=None, description="商品类型")
+    types: Optional[List[str]] = Field(default=None, description="商品类型列表")
+    ids: Optional[str] = Field(default=None, description="商品ID列表，逗号分隔，用于CMS手动商品")
     category: Optional[str] = Field(default=None, description="分类")
     status: Optional[str] = Field(default=None, description="商品状态")
     min_price: Optional[Decimal] = Field(default=None, ge=0, description="最低价")

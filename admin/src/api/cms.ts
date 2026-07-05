@@ -94,7 +94,14 @@ export function getCmsAssets(params: { page?: number; page_size?: number; file_t
 export function uploadCmsAsset(file: File) {
   const formData = new FormData()
   formData.append('file', file)
-  return post<{ data: CmsAsset }>('/admin/cms/assets/upload', formData)
+  return post<{ data: CmsAsset }>('/admin/cms/assets/upload', formData, {
+    // 覆盖全局默认 application/json；浏览器环境下 Axios 会让浏览器补 multipart boundary。
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export function exportCampsiteInfoAsset() {
+  return post<{ data: CmsAsset }>('/admin/cms/assets/export/campsites')
 }
 
 export function deleteCmsAsset(id: number, force?: boolean) {

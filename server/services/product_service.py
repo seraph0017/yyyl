@@ -36,6 +36,7 @@ from models.product import (
     ProductExtShop,
     SKU,
 )
+from models.inventory_pool import InventoryPool, InventoryPoolBinding
 from services import inventory_pool_service
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,8 @@ logger = logging.getLogger(__name__)
 # 排序字段白名单（防SQL注入）
 ALLOWED_SORT_FIELDS = {"id", "name", "base_price", "sort_order", "created_at", "updated_at"}
 NON_SKU_DETAIL_STOCK_FALLBACK = 999
+SKU_INVENTORY_INDEPENDENT = "independent"
+SKU_INVENTORY_SHARED_PRODUCT = "shared_product"
 
 
 async def list_products(
@@ -51,6 +54,8 @@ async def list_products(
     site_id: Optional[int] = None,
     keyword: Optional[str] = None,
     product_type: Optional[str] = None,
+    product_types: Optional[List[str]] = None,
+    product_ids: Optional[List[int]] = None,
     category: Optional[str] = None,
     product_status: Optional[str] = None,
     min_price: Optional[Decimal] = None,
@@ -68,6 +73,8 @@ async def list_products(
         site_id: 营地ID（SQL WHERE 过滤）
         keyword: 搜索关键词
         product_type: 商品类型筛选
+        product_types: 商品类型列表筛选
+        product_ids: 商品ID列表筛选
         category: 分类筛选
         product_status: 状态筛选（默认只返回 on_sale）
         min_price: 最低价
@@ -94,8 +101,12 @@ async def list_products(
                 Product.description.ilike(f"%{keyword}%"),
             )
         )
-    if product_type:
+    if product_types:
+        query = query.where(Product.type.in_(product_types))
+    elif product_type:
         query = query.where(Product.type == product_type)
+    if product_ids:
+        query = query.where(Product.id.in_(product_ids))
     if category:
         query = query.where(Product.category == category)
     if product_status:
@@ -166,6 +177,7 @@ async def get_product_detail(
         "skus",
         [sku for sku in (product.skus or []) if not getattr(sku, "is_deleted", False)],
     )
+    await annotate_product_sku_inventory_modes(db, product)
     return product
 
 
@@ -177,8 +189,92 @@ def resolve_product_detail_stock(product: Product) -> int:
         if getattr(sku, "status", None) == "active"
     ]
     if active_skus:
-        return sum(max(int(getattr(sku, "stock", 0) or 0), 0) for sku in active_skus)
+        total = 0
+        counted_pool_ids: set[int] = set()
+        for sku in active_skus:
+            pool_id = getattr(sku, "inventory_pool_id", None)
+            if getattr(sku, "inventory_mode", SKU_INVENTORY_INDEPENDENT) == SKU_INVENTORY_SHARED_PRODUCT and pool_id:
+                if pool_id in counted_pool_ids:
+                    continue
+                counted_pool_ids.add(pool_id)
+                total += max(int(getattr(sku, "inventory_pool_available", getattr(sku, "stock", 0)) or 0), 0)
+                continue
+            total += max(int(getattr(sku, "stock", 0) or 0), 0)
+        return total
     return NON_SKU_DETAIL_STOCK_FALLBACK
+
+
+def normalize_sku_inventory_mode(value: Optional[str]) -> str:
+    """归一化商品编辑器 SKU 库存模式。"""
+    if not value:
+        return SKU_INVENTORY_INDEPENDENT
+    if value not in {SKU_INVENTORY_INDEPENDENT, SKU_INVENTORY_SHARED_PRODUCT}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40001, "message": "SKU 库存模式必须为 independent 或 shared_product"},
+        )
+    return value
+
+
+def _normalize_sku_spec_values(value: Any) -> Dict[str, Any]:
+    """兼容运营输入普通规格文本，最终统一落库为 JSON 对象。"""
+    if value is None or value == "":
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        return {"规格": text} if text else {}
+    return {"规格": str(value)}
+
+
+def _ensure_sku_code(product: Product, sku_data: Dict[str, Any]) -> str:
+    sku_code = str(sku_data.get("sku_code") or "").strip()
+    if not sku_code:
+        sku_code = f"P{product.id}-{uuid.uuid4().hex[:10].upper()}"
+    sku_data["sku_code"] = sku_code
+    return sku_code
+
+
+def _product_sku_shared_pool_code(product: Product) -> str:
+    return inventory_pool_service.get_product_sku_shared_pool_code(product.site_id, product.id)
+
+
+async def annotate_product_sku_inventory_modes(db: AsyncSession, product: Product) -> None:
+    """为商品详情中的 SKU 标注是否命中本商品共享库存池。"""
+    sku_ids = [sku.id for sku in (getattr(product, "skus", []) or []) if getattr(sku, "id", None)]
+    if not sku_ids:
+        return
+
+    result = await db.execute(
+        select(InventoryPoolBinding.sku_id, InventoryPool.id, InventoryPool.available)
+        .join(InventoryPool, InventoryPool.id == InventoryPoolBinding.inventory_pool_id)
+        .where(
+            InventoryPool.site_id == product.site_id,
+            InventoryPool.pool_code == _product_sku_shared_pool_code(product),
+            InventoryPool.status == "active",
+            InventoryPool.is_deleted.is_(False),
+            InventoryPoolBinding.site_id == product.site_id,
+            InventoryPoolBinding.sku_id.in_(sku_ids),
+            InventoryPoolBinding.status == "active",
+            InventoryPoolBinding.is_deleted.is_(False),
+        )
+    )
+    shared_by_sku = {
+        int(sku_id): {"pool_id": int(pool_id), "available": int(available or 0)}
+        for sku_id, pool_id, available in result.all()
+        if sku_id is not None and pool_id is not None
+    }
+    for sku in product.skus or []:
+        info = shared_by_sku.get(sku.id)
+        if info:
+            setattr(sku, "inventory_mode", SKU_INVENTORY_SHARED_PRODUCT)
+            setattr(sku, "inventory_pool_id", info["pool_id"])
+            setattr(sku, "inventory_pool_available", info["available"])
+        else:
+            setattr(sku, "inventory_mode", SKU_INVENTORY_INDEPENDENT)
+            setattr(sku, "inventory_pool_id", None)
+            setattr(sku, "inventory_pool_available", None)
 
 
 async def create_product(
@@ -224,11 +320,23 @@ async def create_product(
         db.add(ext)
 
     # 创建SKU
-    for sku_data in skus_data:
+    created_sku_modes: Dict[int, str] = {}
+    pending_sku_modes: list[tuple[SKU, str]] = []
+    for raw_sku_data in skus_data:
+        sku_data = dict(raw_sku_data)
+        inventory_mode = normalize_sku_inventory_mode(sku_data.pop("inventory_mode", SKU_INVENTORY_INDEPENDENT))
+        _ensure_sku_code(product, sku_data)
+        sku_data["spec_values"] = _normalize_sku_spec_values(sku_data.get("spec_values"))
         sku = SKU(product_id=product.id, **sku_data)
         db.add(sku)
+        pending_sku_modes.append((sku, inventory_mode))
 
     await db.flush()
+    for sku, inventory_mode in pending_sku_modes:
+        created_sku_modes[sku.id] = inventory_mode
+    await _sync_product_sku_inventory_pool(db, product, created_sku_modes)
+    await db.flush()
+    await annotate_product_sku_inventory_modes(db, product)
     logger.info(f"[商品] 创建商品: id={product.id}, name={product.name}, operator={operator_id}")
 
     return product
@@ -269,9 +377,11 @@ async def update_product(
 
     await _upsert_product_extension(db, product, extension_payloads)
     if skus_data is not None:
-        await _sync_product_skus(db, product, skus_data)
+        sku_inventory_modes = await _sync_product_skus(db, product, skus_data)
+        await _sync_product_sku_inventory_pool(db, product, sku_inventory_modes)
 
     await db.flush()
+    await annotate_product_sku_inventory_modes(db, product)
     logger.info(f"[商品] 更新商品: id={product_id}, operator={operator_id}")
 
     return product
@@ -313,7 +423,7 @@ async def _sync_product_skus(
     db: AsyncSession,
     product: Product,
     skus_data: List[Dict[str, Any]],
-) -> None:
+) -> Dict[int, str]:
     """按编辑器提交的 SKU 清单同步：更新、创建、软删除遗漏项。"""
     existing = {
         sku.id: sku
@@ -321,9 +431,13 @@ async def _sync_product_skus(
         if not getattr(sku, "is_deleted", False)
     }
     seen_ids: set[int] = set()
+    desired_inventory_modes: Dict[int, str] = {}
+    pending_sku_modes: list[tuple[SKU, str]] = []
 
     for raw in skus_data:
         sku_data = dict(raw)
+        has_inventory_mode = "inventory_mode" in sku_data
+        inventory_mode = normalize_sku_inventory_mode(sku_data.pop("inventory_mode", None)) if has_inventory_mode else None
         sku_id = sku_data.pop("id", None)
         if sku_id:
             sku = existing.get(int(sku_id))
@@ -333,15 +447,20 @@ async def _sync_product_skus(
                     detail={"code": 40001, "message": "SKU 不属于当前商品"},
                 )
             seen_ids.add(sku.id)
+            if "sku_code" in sku_data:
+                sku_data["sku_code"] = _ensure_sku_code(product, sku_data)
+            if "spec_values" in sku_data:
+                sku_data["spec_values"] = _normalize_sku_spec_values(sku_data.get("spec_values"))
             for key, value in sku_data.items():
                 if value is not None and hasattr(sku, key):
                     setattr(sku, key, value)
+            if inventory_mode is not None:
+                desired_inventory_modes[sku.id] = inventory_mode
             continue
 
-        sku_code = sku_data.get("sku_code")
-        if not sku_code:
-            sku_code = f"P{product.id}-{uuid.uuid4().hex[:10].upper()}"
-            sku_data["sku_code"] = sku_code
+        sku_code = _ensure_sku_code(product, sku_data)
+        sku_data["spec_values"] = _normalize_sku_spec_values(sku_data.get("spec_values"))
+        inventory_mode = inventory_mode or SKU_INVENTORY_INDEPENDENT
         sku = SKU(
             product_id=product.id,
             sku_code=sku_code,
@@ -352,10 +471,170 @@ async def _sync_product_skus(
             image_url=sku_data.get("image_url"),
         )
         db.add(sku)
+        pending_sku_modes.append((sku, inventory_mode))
 
     for sku_id, sku in existing.items():
         if sku_id not in seen_ids:
             sku.is_deleted = True
+            desired_inventory_modes[sku.id] = SKU_INVENTORY_INDEPENDENT
+
+    await db.flush()
+    for sku, inventory_mode in pending_sku_modes:
+        desired_inventory_modes[sku.id] = inventory_mode
+    return desired_inventory_modes
+
+
+async def _sync_product_sku_inventory_pool(
+    db: AsyncSession,
+    product: Product,
+    desired_inventory_modes: Dict[int, str],
+) -> None:
+    """按 SKU 库存模式维护“本商品内共享”的私有库存池绑定。
+
+    shared_product 只会把当前商品下被选中的 SKU 绑定到一个 product-private pool；
+    independent 只会移除商品编辑器自己创建的 product-private pool 绑定；
+    显式跨商品/跨 SKU 共享池由库存池管理模块维护，商品编辑器保存时不能误删。
+    """
+    if not desired_inventory_modes:
+        return
+
+    sku_ids = set(desired_inventory_modes.keys())
+    result = await db.execute(
+        select(SKU).where(
+            SKU.product_id == product.id,
+            SKU.id.in_(sku_ids),
+            SKU.is_deleted.is_(False),
+        )
+    )
+    sku_by_id = {sku.id: sku for sku in result.scalars().all()}
+    shared_skus = [
+        sku_by_id[sku_id]
+        for sku_id, mode in desired_inventory_modes.items()
+        if mode == SKU_INVENTORY_SHARED_PRODUCT and sku_id in sku_by_id
+    ]
+    shared_sku_ids = {sku.id for sku in shared_skus}
+    private_pool_code = _product_sku_shared_pool_code(product)
+
+    external_bound_sku_ids: set[int] = set()
+    if shared_sku_ids:
+        external_binding_result = await db.execute(
+            select(InventoryPoolBinding.sku_id)
+            .join(InventoryPool, InventoryPool.id == InventoryPoolBinding.inventory_pool_id)
+            .where(
+                InventoryPoolBinding.site_id == product.site_id,
+                InventoryPoolBinding.sku_id.in_(shared_sku_ids),
+                InventoryPoolBinding.status == "active",
+                InventoryPoolBinding.is_deleted.is_(False),
+                InventoryPool.site_id == product.site_id,
+                InventoryPool.pool_code != private_pool_code,
+                InventoryPool.is_deleted.is_(False),
+            )
+        )
+        external_bound_sku_ids = set(external_binding_result.scalars().all())
+    private_shared_skus = [
+        sku for sku in shared_skus if sku.id not in external_bound_sku_ids
+    ]
+    private_shared_sku_ids = {sku.id for sku in private_shared_skus}
+
+    pool: Optional[InventoryPool] = None
+    if private_shared_skus:
+        pool = await _get_or_create_product_sku_shared_pool(db, product, private_shared_skus)
+
+    binding_result = await db.execute(
+        select(InventoryPoolBinding)
+        .join(InventoryPool, InventoryPool.id == InventoryPoolBinding.inventory_pool_id)
+        .where(
+            InventoryPoolBinding.site_id == product.site_id,
+            InventoryPoolBinding.sku_id.in_(sku_ids),
+            InventoryPoolBinding.is_deleted.is_(False),
+            InventoryPool.site_id == product.site_id,
+            InventoryPool.pool_code == _product_sku_shared_pool_code(product),
+            InventoryPool.is_deleted.is_(False),
+        )
+    )
+    bindings = list(binding_result.scalars().all())
+
+    for binding in bindings:
+        binding_sku_id = getattr(binding, "sku_id", None)
+        keep_product_private_binding = (
+            pool is not None
+            and binding_sku_id in private_shared_sku_ids
+            and binding.inventory_pool_id == pool.id
+            and binding.status == "active"
+            and binding.product_id is None
+        )
+        if keep_product_private_binding:
+            continue
+        # 商品编辑器只维护自己生成的 product-private pool 绑定；
+        # 跨商品/显式共享池由库存池管理模块维护，不能在商品编辑器保存时误删。
+        binding.status = "inactive"
+        binding.is_deleted = True
+
+    if pool is None:
+        return
+
+    active_bound_sku_ids = {
+        binding.sku_id
+        for binding in bindings
+        if not getattr(binding, "is_deleted", False)
+        and binding.status == "active"
+        and binding.inventory_pool_id == pool.id
+        and binding.sku_id in private_shared_sku_ids
+    }
+    for sku in private_shared_skus:
+        if sku.id in active_bound_sku_ids:
+            continue
+        db.add(
+            InventoryPoolBinding(
+                inventory_pool_id=pool.id,
+                site_id=product.site_id,
+                sku_id=sku.id,
+                priority=10,
+                status="active",
+            )
+        )
+
+
+async def _get_or_create_product_sku_shared_pool(
+    db: AsyncSession,
+    product: Product,
+    shared_skus: List[SKU],
+) -> InventoryPool:
+    """创建或更新当前商品私有 SKU 共享库存池。"""
+    pool_code = _product_sku_shared_pool_code(product)
+    result = await db.execute(
+        select(InventoryPool).where(
+            InventoryPool.site_id == product.site_id,
+            InventoryPool.pool_code == pool_code,
+            InventoryPool.is_deleted.is_(False),
+        )
+    )
+    pool = result.scalar_one_or_none()
+    requested_total = max((max(int(getattr(sku, "stock", 0) or 0), 0) for sku in shared_skus), default=0)
+    if pool is None:
+        pool = InventoryPool(
+            site_id=product.site_id,
+            pool_code=pool_code,
+            name=f"{product.name} SKU共享库存",
+            pool_type="generic",
+            total=requested_total,
+            available=requested_total,
+            locked=0,
+            sold=0,
+            status="active",
+        )
+        db.add(pool)
+        await db.flush()
+        return pool
+
+    locked = int(pool.locked or 0)
+    sold = int(pool.sold or 0)
+    safe_total = max(requested_total, locked + sold)
+    pool.name = f"{product.name} SKU共享库存"
+    pool.total = safe_total
+    pool.available = safe_total - locked - sold
+    pool.status = "active"
+    return pool
 
 
 async def update_product_status(
@@ -430,6 +709,7 @@ async def get_price_calendar(
     date_start: date,
     date_end: date,
     sku_id: Optional[int] = None,
+    time_slot: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """获取价格日历
 
@@ -487,8 +767,14 @@ async def get_price_calendar(
         Inventory.date <= date_end,
         Inventory.is_deleted.is_(False),
     )
-    if sku_id:
+    if sku_id is None:
+        inventory_query = inventory_query.where(Inventory.sku_id.is_(None))
+    else:
         inventory_query = inventory_query.where(Inventory.sku_id == sku_id)
+    if time_slot is None:
+        inventory_query = inventory_query.where(Inventory.time_slot.is_(None))
+    else:
+        inventory_query = inventory_query.where(Inventory.time_slot == time_slot)
     inv_result = await db.execute(inventory_query)
     inventory_map = {inv.date: inv for inv in inv_result.scalars().all()}
 

@@ -120,9 +120,11 @@ async def list_orders(
         keyword=params.keyword,
         payment_status=params.payment_status,
         product_id=params.product_id,
+        sku_id=params.sku_id,
         product_type=params.product_type,
         booking_date_start=params.booking_date_start,
         booking_date_end=params.booking_date_end,
+        time_slot=params.time_slot,
         payment_time_start=params.payment_time_start,
         payment_time_end=params.payment_time_end,
         amount_min=params.amount_min,
@@ -205,7 +207,8 @@ async def cancel_order(
     order = await order_service.cancel_order(
         db, order_id, user.id, reason=body.reason,
     )
-    result = OrderResponse.model_validate(order)
+    order_detail = await order_service.get_order_detail(db, order.id, user_id=user.id)
+    result = OrderResponse.model_validate(order_detail)
     return ResponseModel.success(data=result, message="订单已取消")
 
 
@@ -335,10 +338,12 @@ async def seckill_order(
         booking_date=body.booking_date,
         quantity=body.quantity,
         sku_id=body.sku_id,
+        time_slot=getattr(body, "time_slot", None),
         identity_ids=body.identity_ids,
         disclaimer_signed=body.disclaimer_signed,
     )
-    result = OrderResponse.model_validate(order)
+    order_detail = await order_service.get_order_detail(db, order.id, user_id=user.id)
+    result = OrderResponse.model_validate(order_detail)
     return ResponseModel.success(data=result, message="秒杀下单成功")
 
 
@@ -506,9 +511,11 @@ async def admin_list_orders(
         keyword=params.keyword,
         payment_status=params.payment_status,
         product_id=params.product_id,
+        sku_id=params.sku_id,
         product_type=params.product_type,
         booking_date_start=params.booking_date_start,
         booking_date_end=params.booking_date_end,
+        time_slot=params.time_slot,
         payment_time_start=params.payment_time_start,
         payment_time_end=params.payment_time_end,
         amount_min=params.amount_min,
@@ -603,7 +610,8 @@ async def update_shipping(
         shipping_company=body.shipping_company,
         operator_id=admin.id,
     )
-    result = OrderResponse.model_validate(order)
+    order_detail = await order_service.get_order_detail(db, order.id)
+    result = OrderResponse.model_validate(order_detail)
     return ResponseModel.success(data=result, message="物流信息已更新")
 
 

@@ -279,6 +279,23 @@ class Order(Base):
         back_populates="order", lazy="noload"
     )
 
+    @property
+    def user_nickname(self) -> Optional[str]:
+        user = self.__dict__.get("user")
+        return getattr(user, "nickname", None) if user else None
+
+    @property
+    def user_phone(self) -> Optional[str]:
+        user = self.__dict__.get("user")
+        return getattr(user, "phone", None) if user else None
+
+    @property
+    def user_phone_masked(self) -> Optional[str]:
+        phone = self.user_phone
+        if phone and len(phone) >= 11:
+            return f"{phone[:3]}****{phone[-4:]}"
+        return phone
+
 
 class TemporaryOrderSession(Base):
     """现场临时订单/收款会话。

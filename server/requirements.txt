@@ -18,3 +18,4 @@ python-dotenv==1.0.1
 nh3>=0.2.14
 Pillow>=10.0.0
 slowapi>=0.1.9
+openpyxl>=3.1.5

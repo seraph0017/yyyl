@@ -4,10 +4,30 @@ import type {
   PricingRule, DiscountRule, Inventory, InventoryUpdateRequest, InventoryBatchRequest,
   PaginatedResponse, CalendarQuery, CalendarItem
 } from '@/types'
+import type { InventoryBatchPayload, InventoryBatchResponse, InventoryCalendarQuery, InventoryCalendarResponse } from '@/types/inventory-pool'
 
 // 商品CRUD
+function serializeArrayParams(params: Record<string, unknown>) {
+  const search = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (Array.isArray(value)) {
+      value.forEach(item => {
+        if (item !== undefined && item !== null && item !== '') {
+          search.append(key, String(item))
+        }
+      })
+      return
+    }
+    search.append(key, String(value))
+  })
+  return search.toString()
+}
+
 export function getProducts(params: ProductSearchParams) {
-  return get<{ data: PaginatedResponse<Product> }>('/admin/products', params)
+  return get<{ data: PaginatedResponse<Product> }>('/admin/products', params, {
+    paramsSerializer: { serialize: serializeArrayParams },
+  })
 }
 
 export function getProductDetail(id: number) {
@@ -73,8 +93,8 @@ export function getInventoryList(params: { product_id?: number; start_date?: str
   return get<{ data: PaginatedResponse<Inventory> }>('/admin/inventory', params)
 }
 
-export function updateInventory(id: number, data: InventoryUpdateRequest) {
-  return put(`/admin/inventory/${id}`, data)
+export function updateInventory(id: number, data: InventoryUpdateRequest, confirmToken?: string) {
+  return put(`/admin/inventory/${id}`, data, confirmToken ? confirmHeaders(confirmToken) : undefined)
 }
 
 export function batchOpenInventory(data: InventoryBatchRequest) {
@@ -84,4 +104,35 @@ export function batchOpenInventory(data: InventoryBatchRequest) {
 // 营地日历
 export function getCalendarData(params: CalendarQuery) {
   return get<{ data: CalendarItem[] }>('/admin/calendar', params)
+}
+
+function confirmHeaders(confirmToken: string) {
+  return { headers: { 'X-Confirm-Token': confirmToken } }
+}
+
+function serializeInventoryArrayParams(params: Record<string, unknown>) {
+  const search = new URLSearchParams()
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (Array.isArray(value)) {
+      value.forEach(item => {
+        if (item !== undefined && item !== null && item !== '') {
+          search.append(key, String(item))
+        }
+      })
+      return
+    }
+    search.append(key, String(value))
+  })
+  return search.toString()
+}
+
+export function getInventoryCalendarData(params: InventoryCalendarQuery) {
+  return get<{ data: InventoryCalendarResponse }>('/admin/inventory/calendar', params, {
+    paramsSerializer: { serialize: serializeInventoryArrayParams },
+  })
+}
+
+export function batchUpdateInventory(data: InventoryBatchPayload, confirmToken: string) {
+  return post<{ data: InventoryBatchResponse }>('/admin/inventory/batch-upsert', data, confirmHeaders(confirmToken))
 }

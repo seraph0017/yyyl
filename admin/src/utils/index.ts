@@ -1,5 +1,18 @@
 // 某露营地 — 通用工具函数
 import dayjs from 'dayjs'
+import type { UploadRequestOptions } from 'element-plus'
+
+type UploadRequestError = Parameters<UploadRequestOptions['onError']>[0]
+
+// Element Plus 自定义上传失败回调需要 UploadAjaxError 形状
+export function createUploadRequestError(error: unknown, options: UploadRequestOptions): UploadRequestError {
+  const uploadError = error instanceof Error ? error : new Error(String(error))
+  return Object.assign(uploadError, {
+    status: 0,
+    method: options.method,
+    url: options.action,
+  })
+}
 
 // 格式化价格（分→元）
 export function formatPrice(price: number): string {

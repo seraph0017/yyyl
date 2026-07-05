@@ -7,7 +7,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import case, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.inventory_pool import InventoryPool, InventoryPoolBinding
@@ -15,6 +15,11 @@ from models.product import Product, SKU
 
 
 TARGET_FIELDS = ("product_id", "sku_id", "activity_session_id", "rental_asset_id")
+
+
+def get_product_sku_shared_pool_code(site_id: int, product_id: int) -> str:
+    """商品编辑器生成的“本商品 SKU 共享库存池”编码。"""
+    return f"site{site_id}-product{product_id}-sku-shared"
 
 
 def validate_pool_numbers(*, total: int, available: int, locked: int, sold: int) -> None:
@@ -78,7 +83,20 @@ def resolve_bound_inventory_pool(
     rental_asset_id: Optional[int] = None,
 ) -> Optional[Any]:
     """按显式 active 绑定解析库存池，优先级越小越靠前。"""
-    sorted_bindings = sorted(bindings, key=lambda item: (getattr(item, "priority", 100), getattr(item, "id", 0)))
+    sorted_bindings = sorted(
+        bindings,
+        key=lambda item: (
+            _binding_specificity_rank(
+                item,
+                product_id=product_id,
+                sku_id=sku_id,
+                activity_session_id=activity_session_id,
+                rental_asset_id=rental_asset_id,
+            ),
+            getattr(item, "priority", 100),
+            getattr(item, "id", 0),
+        ),
+    )
     for binding in sorted_bindings:
         if getattr(binding, "status", None) != "active":
             continue
@@ -106,7 +124,20 @@ def resolve_declared_inventory_pool(
     rental_asset_id: Optional[int] = None,
 ) -> Optional[Any]:
     """按未删除显式绑定解析库存池，不按启停状态回退到普通库存。"""
-    sorted_bindings = sorted(bindings, key=lambda item: (getattr(item, "priority", 100), getattr(item, "id", 0)))
+    sorted_bindings = sorted(
+        bindings,
+        key=lambda item: (
+            _binding_specificity_rank(
+                item,
+                product_id=product_id,
+                sku_id=sku_id,
+                activity_session_id=activity_session_id,
+                rental_asset_id=rental_asset_id,
+            ),
+            getattr(item, "priority", 100),
+            getattr(item, "id", 0),
+        ),
+    )
     for binding in sorted_bindings:
         if getattr(binding, "is_deleted", False):
             continue
@@ -122,6 +153,46 @@ def resolve_declared_inventory_pool(
         if rental_asset_id and getattr(binding, "rental_asset_id", None) == rental_asset_id:
             return pool
     return None
+
+
+def _binding_specificity_rank(
+    binding: Any,
+    *,
+    product_id: Optional[int],
+    sku_id: Optional[int] = None,
+    activity_session_id: Optional[int] = None,
+    rental_asset_id: Optional[int] = None,
+) -> int:
+    """绑定命中优先级：SKU/场次/租赁等具体售卖单元优先于商品级绑定。"""
+    if sku_id and getattr(binding, "sku_id", None) == sku_id:
+        return 0
+    if activity_session_id and getattr(binding, "activity_session_id", None) == activity_session_id:
+        return 0
+    if rental_asset_id and getattr(binding, "rental_asset_id", None) == rental_asset_id:
+        return 0
+    if product_id and getattr(binding, "product_id", None) == product_id:
+        return 10
+    return 100
+
+
+def _binding_specificity_case(
+    *,
+    product_id: Optional[int],
+    sku_id: Optional[int] = None,
+    activity_session_id: Optional[int] = None,
+    rental_asset_id: Optional[int] = None,
+):
+    """SQL 排序表达式：具体售卖单元绑定优先，最后再按 priority/id 排序。"""
+    whens = []
+    if sku_id:
+        whens.append((InventoryPoolBinding.sku_id == sku_id, 0))
+    if activity_session_id:
+        whens.append((InventoryPoolBinding.activity_session_id == activity_session_id, 0))
+    if rental_asset_id:
+        whens.append((InventoryPoolBinding.rental_asset_id == rental_asset_id, 0))
+    if product_id:
+        whens.append((InventoryPoolBinding.product_id == product_id, 10))
+    return case(*whens, else_=100)
 
 
 def validate_pool_availability(pool: Any, *, required_quantity: int) -> None:
@@ -215,7 +286,16 @@ async def get_bound_inventory_pool(
             InventoryPoolBinding.is_deleted.is_(False),
             or_(*target_conditions),
         )
-        .order_by(InventoryPoolBinding.priority.asc(), InventoryPoolBinding.id.asc())
+        .order_by(
+            _binding_specificity_case(
+                product_id=product_id,
+                sku_id=sku_id,
+                activity_session_id=activity_session_id,
+                rental_asset_id=rental_asset_id,
+            ).asc(),
+            InventoryPoolBinding.priority.asc(),
+            InventoryPoolBinding.id.asc(),
+        )
         .limit(1)
     )
     return result.scalar_one_or_none()
@@ -253,7 +333,16 @@ async def get_declared_inventory_pool(
             InventoryPoolBinding.is_deleted.is_(False),
             or_(*target_conditions),
         )
-        .order_by(InventoryPoolBinding.priority.asc(), InventoryPoolBinding.id.asc())
+        .order_by(
+            _binding_specificity_case(
+                product_id=product_id,
+                sku_id=sku_id,
+                activity_session_id=activity_session_id,
+                rental_asset_id=rental_asset_id,
+            ).asc(),
+            InventoryPoolBinding.priority.asc(),
+            InventoryPoolBinding.id.asc(),
+        )
         .limit(1)
     )
     return result.scalar_one_or_none()

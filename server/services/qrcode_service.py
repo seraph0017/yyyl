@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException, status
+from PIL import Image
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,6 +33,7 @@ WECHAT_API_BASE = "https://api.weixin.qq.com"
 QRCODE_ATTRIBUTION_TTL_SECONDS = 86400
 QRCODE_IMAGE_DIR = Path(__file__).resolve().parents[1] / "images" / "qrcodes"
 TEMPORARY_QRCODE_IMAGE_DIR = QRCODE_IMAGE_DIR / "temporary"
+TRANSPARENT_QRCODE_IMAGE_DIR = QRCODE_IMAGE_DIR / "transparent"
 
 
 class QrcodeServiceError(Exception):
@@ -74,6 +76,15 @@ async def create_or_reuse_qrcode(
         channel=body.channel,
     )
     if existing:
+        if generated_by and existing.image_url:
+            await cms_service.register_existing_asset(
+                db,
+                site_id=site_id,
+                file_url=existing.image_url,
+                file_name=Path(existing.image_url).name,
+                file_type="qrcode",
+                admin_id=generated_by,
+            )
         return existing
 
     await _validate_target_can_generate(
@@ -103,6 +114,15 @@ async def create_or_reuse_qrcode(
     await db.flush()
 
     qrcode.image_url = await _create_wechat_qrcode_image(site_id=site_id, scene=short_code)
+    if generated_by and qrcode.image_url:
+        await cms_service.register_existing_asset(
+            db,
+            site_id=site_id,
+            file_url=qrcode.image_url,
+            file_name=Path(qrcode.image_url).name,
+            file_type="qrcode",
+            admin_id=generated_by,
+        )
     await db.flush()
     if hasattr(db, "refresh"):
         await db.refresh(qrcode)
@@ -221,6 +241,7 @@ async def regenerate_qrcode(
     *,
     site_id: int,
     qrcode_id: int,
+    generated_by: Optional[int] = None,
 ) -> MiniProgramQRCode:
     """重新请求微信接口生成图片，保留 scene 与短码。"""
     qrcode = await get_qrcode(db, site_id=site_id, qrcode_id=qrcode_id)
@@ -230,7 +251,19 @@ async def regenerate_qrcode(
             detail={"code": "QRCODE_NOT_FOUND", "message": "小程序码不存在"},
         )
     qrcode.image_url = await _create_wechat_qrcode_image(site_id=site_id, scene=qrcode.scene)
+    archive_admin_id = generated_by or qrcode.generated_by
+    if archive_admin_id and qrcode.image_url:
+        await cms_service.register_existing_asset(
+            db,
+            site_id=site_id,
+            file_url=qrcode.image_url,
+            file_name=Path(qrcode.image_url).name,
+            file_type="qrcode",
+            admin_id=archive_admin_id,
+        )
     qrcode.generated_at = datetime.now(timezone.utc)
+    if generated_by:
+        qrcode.generated_by = generated_by
     await db.flush()
     return qrcode
 
@@ -336,6 +369,33 @@ async def get_qrcode_image_path(
             detail={"code": "QRCODE_IMAGE_NOT_FOUND", "message": "小程序码图片文件不存在"},
         )
     return image_path
+
+
+async def get_transparent_qrcode_image_path(
+    db: AsyncSession,
+    *,
+    site_id: int,
+    qrcode_id: int,
+) -> Path:
+    """返回透明底 PNG 小程序码路径；保留原始二维码源文件不变。"""
+    source_path = await get_qrcode_image_path(db, site_id=site_id, qrcode_id=qrcode_id)
+    output_dir = TRANSPARENT_QRCODE_IMAGE_DIR / str(site_id)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / source_path.name
+    if output_path.is_file() and output_path.stat().st_mtime >= source_path.stat().st_mtime:
+        return output_path
+
+    with Image.open(source_path) as image:
+        rgba = image.convert("RGBA")
+        pixels = []
+        for red, green, blue, alpha in rgba.getdata():
+            if red >= 248 and green >= 248 and blue >= 248:
+                pixels.append((red, green, blue, 0))
+            else:
+                pixels.append((red, green, blue, alpha))
+        rgba.putdata(pixels)
+        rgba.save(output_path, format="PNG")
+    return output_path
 
 
 def get_wechat_mini_program_config(site_id: int) -> WechatMiniProgramConfig:

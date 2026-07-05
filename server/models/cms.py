@@ -192,7 +192,7 @@ class CmsAsset(Base):
     )
     file_type: Mapped[str] = mapped_column(
         String(32), nullable=False,
-        comment="文件类型: image/video",
+        comment="文件类型: image/video/qrcode/export",
     )
     file_size: Mapped[int] = mapped_column(
         Integer, nullable=False,

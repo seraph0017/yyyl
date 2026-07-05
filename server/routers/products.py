@@ -59,6 +59,24 @@ def _ensure_admin_site_access(admin: AdminUser, site_id: int) -> None:
         )
 
 
+def _parse_product_ids(ids: str | None) -> list[int] | None:
+    if not ids:
+        return None
+    parsed: list[int] = []
+    for raw in str(ids).split(","):
+        value = raw.strip()
+        if not value:
+            continue
+        try:
+            parsed.append(int(value))
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={"code": 40001, "message": "商品ID列表格式错误"},
+            ) from exc
+    return parsed or None
+
+
 # ========== C端接口 ==========
 
 @router.get("/api/v1/products", summary="商品列表")
@@ -71,11 +89,14 @@ async def list_products(
 ):
     """C端商品列表，支持关键词搜索、类型/分类/价格筛选"""
     site_id = get_site_id(request)
+    params_product_ids = _parse_product_ids(params.ids)
     products, total = await product_service.list_products(
         db,
         site_id=site_id,
         keyword=params.keyword,
         product_type=params.type,
+        product_types=params.types,
+        product_ids=params_product_ids,
         category=params.category,
         product_status=params.status or "on_sale",
         min_price=params.min_price,
@@ -146,6 +167,7 @@ async def get_price_calendar(
     date_start: date = Query(..., description="起始日期"),
     date_end: date = Query(..., description="结束日期"),
     sku_id: Optional[int] = Query(None, description="SKU ID，用于 SKU 级共享库存绑定"),
+    time_slot: Optional[str] = Query(None, description="场次，用于活动库存维度"),
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
@@ -157,7 +179,7 @@ async def get_price_calendar(
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
     calendar = await product_service.get_price_calendar(
-        db, product_id, date_start, date_end, sku_id=sku_id,
+        db, product_id, date_start, date_end, sku_id=sku_id, time_slot=time_slot,
     )
     items = [PriceCalendarItem.model_validate(item) for item in calendar]
     return ResponseModel.success(data=items)
@@ -176,11 +198,14 @@ async def admin_list_products(
     """管理端商品列表，可查看所有状态的商品"""
     site_id = get_site_id(request)
     _ensure_admin_site_access(admin, site_id)
+    params_product_ids = _parse_product_ids(params.ids)
     products, total = await product_service.list_products(
         db,
         site_id=site_id,
         keyword=params.keyword,
         product_type=params.type,
+        product_types=params.types,
+        product_ids=params_product_ids,
         category=params.category,
         product_status=params.status,  # 管理端不默认过滤状态
         min_price=params.min_price,
@@ -211,7 +236,10 @@ async def create_product(
     data = body.model_dump(exclude_none=True)
     data["site_id"] = site_id
     product = await product_service.create_product(db, data, operator_id=admin.id)
-    detail = ProductDetail.model_validate(product)
+    product_detail = await product_service.get_product_detail(db, product.id)
+    detail = ProductDetail.model_validate(product_detail).model_copy(
+        update={"stock": product_service.resolve_product_detail_stock(product_detail)}
+    )
     return ResponseModel.success(data=detail, message="商品创建成功")
 
 
@@ -252,7 +280,9 @@ async def update_product(
         raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
     data = body.model_dump(exclude_none=True)
     product = await product_service.update_product(db, product_id, data, operator_id=admin.id)
-    detail = ProductDetail.model_validate(product)
+    detail = ProductDetail.model_validate(product).model_copy(
+        update={"stock": product_service.resolve_product_detail_stock(product)}
+    )
     return ResponseModel.success(data=detail, message="商品更新成功")
 
 

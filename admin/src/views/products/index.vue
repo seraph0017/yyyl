@@ -2,13 +2,16 @@
   <div class="page-container">
     <div class="card-box">
       <!-- 搜索栏 -->
-      <div class="flex-between mb-16">
+      <div class="flex-between mb-16 top-toolbar">
         <div class="search-bar">
           <el-input v-model="searchParams.keyword" placeholder="搜索商品名称" clearable style="width: 240px" @clear="handleSearch">
             <template #prefix><el-icon><Search /></el-icon></template>
           </el-input>
-          <el-select v-model="searchParams.category" placeholder="品类筛选" clearable style="width: 140px" @change="handleSearch">
-            <el-option v-for="(label, key) in categoryMap" :key="key" :label="label" :value="key" />
+          <el-select v-model="productGroupFilter" placeholder="商品类型" clearable style="width: 150px" @change="handleProductGroupFilterChange">
+            <el-option label="营位" value="campsite" />
+            <el-option label="活动" value="activity" />
+            <el-option label="租赁" value="rental" />
+            <el-option label="商品" value="product" />
           </el-select>
           <el-select v-model="searchParams.status" placeholder="状态" clearable style="width: 120px" @change="handleSearch">
             <el-option label="上架" value="on_sale" />
@@ -19,9 +22,22 @@
             <el-icon><Search /></el-icon>搜索
           </el-button>
         </div>
-        <el-button type="primary" @click="router.push('/products/create')">
-          <el-icon><Plus /></el-icon>新增商品
-        </el-button>
+        <div class="top-actions">
+          <el-segmented v-model="activeSegment" :options="segmentOptions" @change="handleSegmentChange" />
+          <el-button type="primary" @click="router.push('/products/create')">
+            <el-icon><Plus /></el-icon>新增商品
+          </el-button>
+        </div>
+      </div>
+
+      <div class="type-toolbar">
+        <el-radio-group v-model="quickType" size="small" @change="handleQuickTypeChange">
+          <el-radio-button label="">全部</el-radio-button>
+          <el-radio-button label="campsite">营位</el-radio-button>
+          <el-radio-button label="activity">活动</el-radio-button>
+          <el-radio-button label="rental">租赁</el-radio-button>
+          <el-radio-button label="product">商品</el-radio-button>
+        </el-radio-group>
       </div>
 
       <!-- 表格 -->
@@ -35,7 +51,10 @@
               </el-image>
               <div>
                 <div class="product-name">{{ row.name }}</div>
-                <el-tag size="small" type="info">{{ getCategoryName(row.category) }}</el-tag>
+                <div class="tag-row">
+                  <el-tag size="small" type="info">{{ getTypeName(row.type) }}</el-tag>
+                  <el-tag size="small" effect="plain">{{ getCategoryName(row.category) }}</el-tag>
+                </div>
               </div>
             </div>
           </template>
@@ -109,29 +128,68 @@
         />
       </div>
     </div>
+
+    <el-dialog v-model="qrcodePreviewVisible" title="商品二维码" width="420px" destroy-on-close @closed="closeQrcodePreview">
+      <div class="qrcode-preview" v-if="currentQrcode">
+        <img v-if="qrcodePreviewUrl" :src="qrcodePreviewUrl" alt="商品二维码" class="qrcode-preview__image" />
+        <el-skeleton v-else animated :rows="4" />
+        <div class="qrcode-preview__title">{{ currentQrcode.title }}</div>
+        <div class="qrcode-preview__meta">scene：{{ currentQrcode.scene }}</div>
+        <div class="qrcode-preview__meta">路径：{{ currentQrcode.path }}</div>
+      </div>
+      <template #footer>
+        <el-button @click="qrcodePreviewVisible = false">关闭</el-button>
+        <el-button type="primary" :disabled="!currentQrcode" @click="downloadCurrentQrcode">
+          下载透明底 PNG
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, reactive, onMounted, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Picture, Edit, Delete, Top, Bottom, Share } from '@element-plus/icons-vue'
 import { getProducts, updateProductStatus, deleteProduct } from '@/api/product'
-import { createQrcode } from '@/api/qrcode'
-import { formatDateTime, getCategoryName, categoryMap } from '@/utils'
+import { createQrcode, downloadQrcode } from '@/api/qrcode'
+import { downloadFile, formatDateTime, getCategoryName } from '@/utils'
 import type { Product, ProductSearchParams } from '@/types'
+import type { Qrcode } from '@/types/qrcode'
 
 const router = useRouter()
+const route = useRoute()
 const loading = ref(false)
 const tableData = ref<Product[]>([])
 const total = ref(0)
+const qrcodePreviewVisible = ref(false)
+const currentQrcode = ref<Qrcode | null>(null)
+const currentQrcodeBlob = ref<Blob | null>(null)
+const qrcodePreviewUrl = ref('')
+type ProductGroup = 'campsite' | 'activity' | 'rental' | 'product'
+const activeSegment = ref<'all' | ProductGroup>('all')
+const quickType = ref<ProductGroup | ''>('')
+const productGroupFilter = ref<ProductGroup | ''>('')
+const segmentOptions = [
+  { label: '全部', value: 'all' },
+  { label: '营位', value: 'campsite' },
+  { label: '活动', value: 'activity' },
+  { label: '租赁', value: 'rental' },
+  { label: '商品', value: 'product' },
+]
+const PRODUCT_GROUP_TYPES: Record<ProductGroup, ProductSearchParams['types']> = {
+  campsite: ['daily_camping', 'event_camping'],
+  activity: ['daily_activity', 'special_activity'],
+  rental: ['rental'],
+  product: ['shop', 'merchandise'],
+}
 
 const searchParams = reactive<ProductSearchParams>({
   page: 1,
   page_size: 20,
   keyword: '',
-  category: undefined,
+  type: undefined,
   status: undefined,
 })
 
@@ -155,6 +213,66 @@ function handleSearch() {
   fetchData()
 }
 
+function applyProductGroup(value?: unknown) {
+  const group = String(value || '') as ProductGroup
+  const nextTypes = PRODUCT_GROUP_TYPES[group]
+  if (!nextTypes) {
+    searchParams.type = undefined
+    delete searchParams.types
+    activeSegment.value = 'all'
+    quickType.value = ''
+    productGroupFilter.value = ''
+    return
+  }
+  searchParams.type = undefined
+  searchParams.types = nextTypes
+  activeSegment.value = group
+  quickType.value = group
+  productGroupFilter.value = group
+}
+
+function handleSegmentChange(value: string | number | boolean | undefined) {
+  const selected = String(value || 'all')
+  if (selected === 'all') {
+    searchParams.type = undefined
+    delete searchParams.types
+    activeSegment.value = 'all'
+    quickType.value = ''
+    productGroupFilter.value = ''
+  } else {
+    applyProductGroup(selected)
+  }
+  handleSearch()
+}
+
+function handleQuickTypeChange(value: string | number | boolean | undefined) {
+  const selected = String(value || '')
+  if (!selected) {
+    searchParams.type = undefined
+    delete searchParams.types
+    activeSegment.value = 'all'
+    quickType.value = ''
+    productGroupFilter.value = ''
+  } else {
+    applyProductGroup(selected)
+  }
+  handleSearch()
+}
+
+function handleProductGroupFilterChange(value: string | number | boolean | undefined) {
+  const selected = String(value || '')
+  if (!selected) {
+    searchParams.type = undefined
+    delete searchParams.types
+    activeSegment.value = 'all'
+    quickType.value = ''
+    productGroupFilter.value = ''
+  } else {
+    applyProductGroup(selected)
+  }
+  handleSearch()
+}
+
 function getProductCover(row: Product): string {
   const first = row.images?.[0]
   return (typeof first === 'string' ? first : first?.url) || row.cover_image || ''
@@ -163,6 +281,19 @@ function getProductCover(row: Product): string {
 function formatYuanAmount(value: number | string | null | undefined): string {
   const amount = Number(value || 0)
   return Number.isFinite(amount) ? amount.toFixed(2) : '0.00'
+}
+
+function getTypeName(type: string): string {
+  const map: Record<string, string> = {
+    daily_camping: '营位',
+    event_camping: '活动营位',
+    rental: '租赁',
+    daily_activity: '日常活动',
+    special_activity: '特定活动',
+    shop: '商品',
+    merchandise: '商品',
+  }
+  return map[type] || type
 }
 
 async function handleToggleStatus(row: Product) {
@@ -188,24 +319,80 @@ async function handleQrcode(row: Product) {
     confirmButtonText: '生成',
     cancelButtonText: '取消',
   })
-  await createQrcode({
-    target_type: row.category === 'activity' ? 'activity_product' : 'product',
+  const res = await createQrcode({
+    target_type: ['daily_activity', 'special_activity'].includes(row.type) ? 'activity_product' : 'product',
     target_key: String(row.id),
     title: row.name,
     channel: 'admin_product',
   })
-  ElMessage.success('商品二维码已生成，可在二维码管理中查看')
+  await openQrcodePreview(res.data)
+  ElMessage.success('商品二维码已生成')
 }
 
-onMounted(fetchData)
+async function openQrcodePreview(qrcode: Qrcode) {
+  closeQrcodePreview()
+  currentQrcode.value = qrcode
+  qrcodePreviewVisible.value = true
+  const res = await downloadQrcode(qrcode.id)
+  currentQrcodeBlob.value = res.data as Blob
+  qrcodePreviewUrl.value = URL.createObjectURL(currentQrcodeBlob.value)
+}
+
+function closeQrcodePreview() {
+  if (qrcodePreviewUrl.value) {
+    URL.revokeObjectURL(qrcodePreviewUrl.value)
+  }
+  qrcodePreviewUrl.value = ''
+  currentQrcodeBlob.value = null
+  currentQrcode.value = null
+}
+
+async function downloadCurrentQrcode() {
+  if (!currentQrcode.value) return
+  if (!currentQrcodeBlob.value) {
+    const res = await downloadQrcode(currentQrcode.value.id)
+    currentQrcodeBlob.value = res.data as Blob
+  }
+  downloadFile(currentQrcodeBlob.value, `${currentQrcode.value.short_code || currentQrcode.value.id}-transparent.png`)
+}
+
+watch(
+  () => route.query.product_group,
+  (group) => {
+    applyProductGroup(group)
+    handleSearch()
+  },
+)
+
+onMounted(() => {
+  applyProductGroup(route.query.product_group)
+  fetchData()
+})
 </script>
 
 <style lang="scss" scoped>
+.top-toolbar {
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .search-bar {
   display: flex;
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.type-toolbar {
+  margin-bottom: 16px;
 }
 
 .product-info {
@@ -240,6 +427,12 @@ onMounted(fetchData)
     color: var(--color-text);
     letter-spacing: 0.3px;
   }
+
+  .tag-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
 }
 
 .price {
@@ -254,6 +447,38 @@ onMounted(fetchData)
   margin-top: 20px;
   padding-top: 16px;
   border-top: 1px solid var(--color-border-light);
+}
+
+.qrcode-preview {
+  text-align: center;
+
+  &__image {
+    width: 240px;
+    height: 240px;
+    object-fit: contain;
+    border: 1px solid var(--color-border-light);
+    border-radius: 12px;
+    background:
+      linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
+      linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
+      linear-gradient(-45deg, transparent 75%, #f3f4f6 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  }
+
+  &__title {
+    margin-top: 12px;
+    font-weight: 700;
+    color: var(--color-text);
+  }
+
+  &__meta {
+    margin-top: 6px;
+    font-size: 12px;
+    color: var(--color-text-placeholder);
+    word-break: break-all;
+  }
 }
 
 @media (max-width: 720px) {

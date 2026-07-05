@@ -25,8 +25,24 @@
 
       <!-- 商品选择 -->
       <template v-if="localLink.type === 'product'">
-        <el-form-item label="商品ID">
-          <el-input v-model="localLink.target" placeholder="输入商品ID" />
+        <el-form-item label="选择商品">
+          <el-select
+            v-model="localLink.target"
+            filterable
+            remote
+            :remote-method="searchProducts"
+            :loading="productLoading"
+            placeholder="搜索并选择商品"
+            style="width: 100%"
+            @change="onProductChange"
+          >
+            <el-option
+              v-for="product in productOptions"
+              :key="product.id"
+              :label="product.name"
+              :value="String(product.id)"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="显示名称">
           <el-input v-model="localLink.title" placeholder="商品名称" />
@@ -45,8 +61,21 @@
 
       <!-- 商品分类 -->
       <template v-if="localLink.type === 'category'">
-        <el-form-item label="分类ID">
-          <el-input v-model="localLink.target" placeholder="输入分类ID" />
+        <el-form-item label="商品分类">
+          <el-select
+            v-model="localLink.target"
+            filterable
+            placeholder="选择商品分类"
+            style="width: 100%"
+            @change="onCategoryChange"
+          >
+            <el-option
+              v-for="category in categoryOptions"
+              :key="category.value"
+              :label="category.label"
+              :value="category.value"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="显示名称">
           <el-input v-model="localLink.title" placeholder="分类名称" />
@@ -55,8 +84,22 @@
 
       <!-- CMS 活动页 -->
       <template v-if="localLink.type === 'activity'">
-        <el-form-item label="页面ID">
-          <el-input v-model="localLink.target" placeholder="CMS页面ID" />
+        <el-form-item label="活动页">
+          <el-select
+            v-model="localLink.target"
+            filterable
+            :loading="pageLoading"
+            placeholder="选择 CMS 活动页"
+            style="width: 100%"
+            @change="onPageChange"
+          >
+            <el-option
+              v-for="page in pageOptions"
+              :key="page.page_code"
+              :label="`${page.title}（${page.page_code}）`"
+              :value="page.page_code"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="显示名称">
           <el-input v-model="localLink.title" placeholder="活动名称" />
@@ -100,8 +143,11 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
-import type { LinkConfig } from '@/types/cms'
+import { onMounted, reactive, ref, watch } from 'vue'
+import { getProducts } from '@/api/product'
+import { getCmsPages } from '@/api/cms'
+import type { CmsPage, LinkConfig } from '@/types/cms'
+import type { Product } from '@/types'
 
 const props = defineProps<{
   modelValue: LinkConfig
@@ -122,27 +168,57 @@ const localLink = reactive<LinkConfig>({
 // 小程序特有字段
 const miniAppId = ref('')
 const miniPath = ref('')
+const productLoading = ref(false)
+const productOptions = ref<Array<Pick<Product, 'id' | 'name'>>>([])
+const pageLoading = ref(false)
+const pageOptions = ref<Array<Pick<CmsPage, 'page_code' | 'title'>>>([])
+const categoryOptions = [
+  { label: '日常露营', value: 'daily_camping' },
+  { label: '活动露营', value: 'event_camping' },
+  { label: '装备租赁', value: 'equipment_rental' },
+  { label: '日常活动', value: 'daily_activity' },
+  { label: '特定活动', value: 'special_activity' },
+  { label: '小商店', value: 'camp_shop' },
+  { label: '周边商品', value: 'merchandise' },
+]
+
+function syncLocalLink(value?: LinkConfig) {
+  const nextValue = value || { type: 'none', target: '', title: '' }
+  Object.assign(localLink, nextValue)
+  if (nextValue.type === 'miniprogram' && nextValue.target) {
+    try {
+      const parsed = JSON.parse(nextValue.target)
+      miniAppId.value = parsed.appId || ''
+      miniPath.value = parsed.path || ''
+    } catch {
+      miniAppId.value = ''
+      miniPath.value = ''
+    }
+  } else {
+    miniAppId.value = ''
+    miniPath.value = ''
+  }
+}
 
 // 同步外部值
 watch(
   () => props.modelValue,
   (val) => {
-    if (val) {
-      Object.assign(localLink, val)
-      // 解析小程序配置
-      if (val.type === 'miniprogram' && val.target) {
-        try {
-          const parsed = JSON.parse(val.target)
-          miniAppId.value = parsed.appId || ''
-          miniPath.value = parsed.path || ''
-        } catch {
-          miniAppId.value = ''
-          miniPath.value = ''
-        }
-      }
-    }
+    syncLocalLink(val)
   },
   { immediate: true, deep: true }
+)
+
+watch(
+  () => props.visible,
+  (visible) => {
+    if (visible) {
+      syncLocalLink(props.modelValue)
+      if (props.modelValue?.type === 'activity' || pageOptions.value === undefined) {
+        fetchPages()
+      }
+    }
+  }
 )
 
 // 切换类型时重置
@@ -151,11 +227,67 @@ function onTypeChange() {
   localLink.title = ''
   miniAppId.value = ''
   miniPath.value = ''
+  if (localLink.type === 'activity') {
+    fetchPages()
+  }
 }
 
 // 更新小程序目标
 function updateMiniprogramTarget() {
   localLink.target = JSON.stringify({ appId: miniAppId.value, path: miniPath.value })
+}
+
+async function searchProducts(keyword = '') {
+  productLoading.value = true
+  try {
+    const res = await getProducts({
+      page: 1,
+      page_size: 50,
+      keyword: keyword || undefined,
+    })
+    productOptions.value = (res.data.list || []).map(product => ({
+      id: product.id,
+      name: product.name,
+    }))
+  } finally {
+    productLoading.value = false
+  }
+}
+
+async function fetchPages() {
+  pageLoading.value = true
+  try {
+    const res = await getCmsPages({ page: 1, page_size: 100 })
+    pageOptions.value = (res.data.list || [])
+      .filter(page => ['activity', 'promotion', 'custom', 'home'].includes(page.page_type))
+      .map(page => ({
+        page_code: page.page_code,
+        title: page.title,
+      }))
+  } finally {
+    pageLoading.value = false
+  }
+}
+
+function onProductChange(value: string) {
+  const selected = productOptions.value?.find(product => String(product.id) === String(value))
+  if (selected) {
+    localLink.title = selected.name
+  }
+}
+
+function onCategoryChange(value: string) {
+  const selected = categoryOptions.find(category => category.value === value)
+  if (selected) {
+    localLink.title = selected.label
+  }
+}
+
+function onPageChange(value: string) {
+  const selected = pageOptions.value?.find(page => page.page_code === value)
+  if (selected) {
+    localLink.title = selected.title
+  }
 }
 
 // URL 校验
@@ -178,6 +310,11 @@ function handleConfirm() {
   emit('update:modelValue', { ...localLink })
   emit('update:visible', false)
 }
+
+onMounted(() => {
+  searchProducts()
+  fetchPages()
+})
 </script>
 
 <style lang="scss" scoped>

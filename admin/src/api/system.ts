@@ -119,6 +119,10 @@ export function updateSettings(data: Record<string, any>) {
   return put('/admin/settings', data)
 }
 
+export function updateOperationPassword(data: { password: string; old_password?: string }) {
+  return put('/admin/admin-me/operation-password', data)
+}
+
 // 免责声明
 export function getDisclaimerTemplates() {
   return get<{ data: any[] }>('/admin/disclaimer-templates')

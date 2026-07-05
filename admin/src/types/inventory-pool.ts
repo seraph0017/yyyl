@@ -89,6 +89,7 @@ export interface InventoryCalendarRow {
   sku_id?: number | null
   sku_code?: string | null
   sku_name?: string | null
+  time_slot?: string | null
   inventory_source: InventorySource
   inventory_pool_id?: number | null
   inventory_pool_code?: string | null

@@ -88,7 +88,11 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 本地 v1.7 已按需求实现完成并生成 HTML 报告：二维码独立生成、自定义页面二维码、订单高级筛选与导出、资金 pending/available 结算、增强退款策略、Admin 财务与退款界面、小程序扫码归因。
 - v1.7 验证已通过：后端 35 个相关单测 OK，Admin \`npm run build\` OK，小程序 \`npm run type-check\`、\`build:wx:xijiao\`、\`build:wx:dalonggu\` OK。Admin 仅有 Vite 大 chunk 警告，小程序仅有 uni-app/Sass 既有弃用警告。
 - 本地 v1.8 已按用户要求直接实现代码，不再停留在 PRD：共享库存池支持显式跨商品/SKU 绑定；D5 按企业微信群机器人实现；订单报价、购物车结算、价格日历、退款库存幂等、Admin 高风险页面、小程序商品详情/确认页、小程序智能客服/知识库、现场临时订单/现场收款、统一商品管理完整编辑器、退款审批队列均已接入。
+- 2026-06-30 已继续按用户视频反馈补齐能落地的缺口（明确不含微信工作群助手）：Admin 统一商品管理筛选/营位跳转、营位日历库存与批量库存、商品富文本编辑与统一 XSS 净化；小程序手机号授权登录、订单列表/详情展示手机号、SKU 规格、日期、场次、人晚/人单和订单备注；后端订单响应补充用户与订单项展示字段，并修复订单列表按订单去重分页、出行人归属校验、订单写操作后重载详情。
 - v1.8 已完成三端 agent 最新复审均 APPROVED：后端复审 APPROVED 9.0，Admin 复审 APPROVED 9.1，小程序复审 APPROVED 9.3；三端 CRITICAL/HIGH 均为 0。后端退款权限、late SUCCESS 库存重锁、商品类型切换旧扩展清理、Admin 退款队列/现场收款/统一商品编辑器、小程序临时单错误态/员工现场收款触控/购物车免责声明确认闭环均已按 review 修复。
+- 2026-06-30 本轮三端分 agent 复审均 APPROVED：Admin 复审确认富文本链路统一走 \`sanitizeRichText()\` 且日历权限与后端一致；后端复审确认身份越权、写操作响应懒加载、订单列表 join 分页重复问题已关闭；小程序复审确认 SKU 类型收敛为 \`Record<string, unknown> | null\` 且展示路径类型安全。三端均无剩余 Critical/Required。
+- 2026-06-30 最终三端分 agent 确认均 APPROVED，微信助手/企业微信群助手按用户要求暂缓，不作为本轮阻断；未发现新的 Critical/Required。已补齐 3 个 Required：Admin 统一商品管理聚合筛选覆盖完整 concrete product types；小程序订单列表补手机号、支付时间、订单备注；后端购物车 add/update/checkout 对共享库存池 SKU 不再被静态 \`SKU.stock\` 误拦截。
+- 2026-07-01 已按用户要求上线 API 和 Admin 到 \`www.yyylcamp.com\`：当前生产 API 镜像为 \`yyyl-api:api-admin-20260701-0240-openpyxl\`，活跃容器 \`yyyl-api-blue\`，Nginx upstream 指向 \`127.0.0.1:8001\`，旧 \`yyyl-api-green\` 已停止保留用于回滚；Admin 静态资源已同步到 \`/www/server/nginx/html/\`，线上入口 JS 为 \`/assets/index-D8kfTnWB.js\`；生产数据库 Alembic 已迁移到 \`2b3c4d5e6f70\` (head)。本次源码备份 \`/opt/yyyl/backups/source-before-api-admin-20260701-20260701024040.tgz\`，Admin 静态目录备份 \`/opt/yyyl/backups/admin-html-before-api-admin-20260701-20260701024040.tgz\`。
 - v1.8 生产发布已执行：本地提交 \`df0e695 feat: 实现 v1.8 全量上线能力\` 已打包发布到生产，生产源码备份为 \`/opt/yyyl/backups/source-before-v18-20260627222038\`；API 镜像 \`yyyl-api:v1.8-df0e695\` 已蓝绿切到 \`yyyl-api-blue\` / \`127.0.0.1:8001\`，旧 \`yyyl-api-green\` 已停止；Admin 静态资源已发布到 \`/www/server/nginx/html/\`；生产数据库 Alembic 已迁移到 \`1a2b3c4d5e6f\` (head)。
 - 2026-06-28 22:14 已按用户要求重发服务端到 \`www.yyylcamp.com\`：复用生产镜像 \`yyyl-api:v1.8-df0e695\` 做 Podman 蓝绿切换，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，旧 \`yyyl-api-blue\` 已停止保留用于回滚。发布后 \`https://www.yyylcamp.com/health\` 与 \`/api/v1/products?page_size=1&status=on_sale\` 均返回 200。
 - v1.8 小程序双营地构建产物已重新生成并确认 AppID 为 \`wx98ecb419c0a6aeb7\`，构建目录包括 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`；2026-06-29 图片优化后已再次构建这两个目录，微信开发者工具上传发布仍待执行。
@@ -114,8 +118,15 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - 统一商品管理完整编辑器已接入：Admin 可编辑基础信息、详情、类型扩展、SKU、状态、SKU 图片和 JSON 规格，并在商品类型切换时清理旧扩展。
   - 购物车免责声明闭环已接入：购物车结算先弹免责声明确认，用户确认后才携带 \`disclaimer_signed=1\`；\`/cart/quote\` 和 \`/cart/checkout\` 默认未签署，确认页显式透传签署态，后端最终由 \`order_service.create_order\` 校验 \`require_disclaimer\`。
 - v1.8 最新验证：后端编译 \`python -m compileall -q models schemas routers services middleware tasks tests\` OK；后端全量 \`python -m unittest discover -s tests -p 'test_*.py' -v\` 231 tests OK；Admin \`node --test tests/v18-admin-contract.test.mjs\` 11/11 OK 且 \`npm run build\` OK；小程序 \`node --test tests/v18-product-flow.test.mjs\` 35/35 OK、\`npm run type-check\` OK、\`build:wx:xijiao\` 和 \`build:wx:dalonggu\` OK；\`git diff --check\` 和三份 HTML 解析 OK。
+- 2026-06-30 本轮复验：Admin \`node --test tests/v18-admin-contract.test.mjs\` 12/12 OK、\`npm run build\` OK；后端 \`python -m unittest tests/test_order_routes.py tests/test_order_schema.py tests/test_order_filters.py tests/test_v18_contracts.py -v\` 85 tests OK，订单服务/路由/schema/model \`py_compile\` OK；小程序 \`node --test tests/v18-product-flow.test.mjs\` 39/39 OK、\`npm run type-check\` OK、\`build:wx:xijiao\` 和 \`build:wx:dalonggu\` OK；\`git diff --check\` OK。Admin build 仅有既有 Vite 大 chunk 警告，小程序构建仅有 uni-app 更新提示和 Sass 弃用警告。
+- 2026-06-30 最终复验：Admin \`node --test tests/v18-admin-contract.test.mjs\` 14/14 OK、\`npm run build\` OK；后端 focused 回归 \`tests/test_v18_contracts.py tests/test_order_routes.py tests/test_order_schema.py tests/test_order_filters.py tests/test_order_service.py tests/test_admin_confirm_routes.py tests/test_member_unified_contract.py tests/test_temporary_order.py tests/test_inventory_calendar_service.py tests/test_order_export_service.py\` 共 149 tests OK；小程序 \`node --test tests/v18-product-flow.test.mjs\` 41/41 OK、\`npm run type-check\` OK、\`build:wx:xijiao\` 和 \`build:wx:dalonggu\` OK；\`git diff --check\` OK。Admin build 仅有既有 Vite 大 chunk 警告，小程序构建仅有 uni-app 更新提示和 Sass 弃用警告。
+- 2026-07-01 API/Admin 上线验证：发布前 Admin \`node --test tests/v18-admin-contract.test.mjs\` 14/14 OK 且 \`npm run build\` OK；后端 focused 回归 149 tests OK；\`git diff --check\` OK。生产发布时 Docker Hub 拉取 \`python:3.11-slim\` 仍超时，改用 \`yyyl-api:image-variants-4b92d69\` 离线派生镜像，并补入 \`openpyxl\` 后验证 \`from main import app\` 可加载 301 条路由。线上验证 \`https://www.yyylcamp.com/health\` 200、\`/api/v1/products?page_size=1&status=on_sale\` 200、Admin 首页 200、新 JS asset 200、\`alembic current\` 为 \`2b3c4d5e6f70 (head)\`。
 - 2026-06-29 图片优化复验：\`python -m py_compile server/utils/image_variants.py server/scripts/generate_image_variants.py server/services/cms_service.py\` OK；\`PYTHONPATH=server python -m unittest server.tests.test_image_variants -v\` OK；\`node --test uni-app/tests/v18-product-flow.test.mjs\` 37/37 OK；\`uni-app npm run type-check\`、\`build:wx:xijiao\`、\`build:wx:dalonggu\` OK；\`admin npm run build\` OK；\`git diff --check\` OK。
 - v1.8 生产上线审查 HTML：\`docs/v1.8_production_review.html\`，当前版本 \`v1.8-production-review-rev15\`。生产发布已按该版本代码执行，后续如继续迭代需另起增量版本或补充上线复盘。
+- 2026-07-01 已按用户要求生成 v1.8 功能实现与上线确认 HTML 报告：\`docs/v1.8_feature_deployment_report_20260701.html\`。报告结论：API/Admin 已上线生产并验证；小程序代码和构建已完成，但微信平台上传/审核/正式发布状态需微信开发者工具或公众平台确认；微信助手按用户要求暂缓，不作为本轮阻断。
+- 2026-07-06 已按 \`~/Downloads/新小程序需求及bug总结 (1).docx\` 完成本轮新小程序需求与 bug 修复：后端支持 SKU 编码自动生成、普通文本规格归一、商品创建后重载详情避免 \`MissingGreenlet\`、云文件导出/二维码源文件归档、透明底二维码下载、订单详情旧字段 500 修复、CMS/qrcode B 端跨营地 guard；Admin 补云文件页、二维码生成即预览/下载、商品封面/富文本图片上传、SKU 普通规格和本商品共享库存、图片热区链接、图文卡片字体族/字重、营地地图上传与圈选、隐藏独立营位/共享库存菜单；小程序补 CMS Image/Notice/Nav/Divider/ImageText 协议兼容、手动商品 ids、富文本相对图片 URL 解析、共享库存可售判断和 miniprogram target JSON 解析。
+- 2026-07-06 本轮三端只读复审已达标：Admin APPROVED 8.8/10，小程序 APPROVED 8.7/10，后端初审 8.0/10 后修复 CMS/qrcode 跨站 guard 和显式库存池绑定回归，复审 APPROVED 8.7/10；三端最终无 Critical/High。后端复审提出的 CMS 编辑锁归属校验、素材强制删除 role 判断、库存池注释也已补测修复。
+- 2026-07-06 本轮最终验证通过：后端 \`py_compile routers/cms.py routers/products.py routers/qrcodes.py schemas/product.py models/cms.py services/cms_service.py services/product_service.py services/qrcode_service.py services/inventory_pool_service.py\` OK；\`python -m unittest tests/test_v18_contracts.py -v\` 84 tests OK；Admin \`node --test tests/v18-admin-contract.test.mjs\` 15/15 OK 且 \`npm run build\` OK（仅 Vite 大 chunk 警告）；小程序 \`node --test tests/v18-product-flow.test.mjs\` 45/45 OK 且 \`npm run type-check\` OK；\`git diff --check\` OK；已运行 \`scripts/update-current.sh\`。本轮未执行生产发布。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -126,7 +137,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 4. 后续常规发布最好修复服务器 Docker Hub 拉取 \`python:3.11-slim\` 超时问题；2026-06-29 的图片优化发布采用基于既有镜像的离线派生方式。
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
 6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
-7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
+7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、营位日历批量库存、手机号授权登录、订单展示字段、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
 8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 \`/opt/yyyl/server/images/\`，仍需在当前活跃 API 容器执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐派生图。
 9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，最新构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
 10. GitHub \`origin/main\` 当前同步到 \`ad0a959 docs: 记录图片优化生产发布\`；如需回看图片优化业务变更，相关提交仍是 \`4b92d69 feat: 优化图片派生图加载链路\`。
@@ -155,6 +166,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-20260620135346.tgz\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
 - 生产镜像：
+  - \`yyyl-api:api-admin-20260701-0240-openpyxl\`：2026-07-01 API/Admin 上线镜像，基于 \`yyyl-api:image-variants-4b92d69\` 离线派生并补入 \`openpyxl\`；当前活跃容器 \`yyyl-api-blue\`，Nginx upstream 指向 \`127.0.0.1:8001\`，数据库版本 \`2b3c4d5e6f70\`。
   - \`yyyl-api:image-variants-4b92d69\`：图片派生图生产镜像，基于 \`localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628\` 离线派生，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`。
   - \`yyyl-api:v1.8-hotfix-qrcode-membership-20260628\`：二维码和会员卡接口热修镜像，发布图片优化前活跃于 \`yyyl-api-blue\`，当前已停止保留用于回滚。
   - \`yyyl-api:v1.8-df0e695\`：v1.8 全量上线镜像，当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，数据库版本 \`1a2b3c4d5e6f\`。
@@ -197,6 +209,13 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 订单与退款链路已接入共享库存：\`server/services/order_service.py\` 统一报价和库存锁定，\`server/routers/cart.py\` 复用订单库存锁定，\`server/services/refund_service.py\` 通过 \`RefundRecord.inventory_released\` 防重复释放。
 - v1.8 小程序商品详情、订单确认和购物车已改为后端报价/真实库存/真实 SKU 展示：\`uni-app/src/pages/product-detail/index.vue\`、\`uni-app/src/pages/order-confirm/index.vue\`、\`uni-app/src/pages/cart/index.vue\`。
 - v1.8 Admin 登录错误提示已修正为读取 FastAPI \`detail.message\`，相关文件：\`admin/src/utils/http-error.js\`、\`admin/src/utils/request.ts\`、\`admin/src/components/landing/LoginDialog.vue\`。
+- v1.8 Admin 本轮补齐富文本安全与编辑能力：统一封装 \`admin/src/utils/rich-text.ts::sanitizeRichText()\`，商品编辑器、CMS 富文本属性和 Landing 富文本渲染均走统一净化；商品描述支持加粗/斜体/标题/字号/文字色/背景色/分割线/图片/链接。
+- v1.8 后端订单响应本轮补齐展示字段并加固：\`OrderResponse\` 增加用户昵称/手机号/脱敏手机号；\`OrderItemResponse\` 增加首图、封面、SKU 规格、出行人姓名和备注；订单列表按 distinct order id 分页，避免一单多 item/ticket 导致 total 放大或 offset 跳单。
+- v1.8 小程序本轮补齐登录和订单展示：我的页登录入口必须走微信手机号授权，已登录但缺手机号时展示补授权；订单列表/详情展示商品图、SKU、日期、场次、人晚/人单、备注、手机号，并改用后端实际 \`payment_time\`。
+- v1.8 最终复审补齐统一商品聚合筛选：Admin \`ProductSearchParams\` 支持 \`types?: ProductType[]\`，商品列表 API 序列化数组参数，营位/活动/租赁/商品聚合入口分别映射完整 concrete product types，后端 product schema/router/service 接通 \`types -> product_types -> Product.type.in_(...)\`。
+- v1.8 最终复审补齐小程序订单列表关键信息：订单卡片展示手机号、支付时间、订单备注；手机号优先 \`user_phone_masked\`，支付时间使用后端 \`payment_time\`，备注为空展示 \`无备注\`。
+- v1.8 最终复审补齐后端购物车共享库存池校验：\`server/routers/cart.py\` 新增共享库存池优先的 SKU 库存校验 helper，\`add_cart_item()\`、\`update_cart_item()\`、\`checkout()\` 命中 active 显式共享池时走 \`validate_pool_availability()\`，未命中时才回退静态 \`sku.stock\`。
+- 后端订单导出服务依赖 \`openpyxl\`；2026-07-01 上线时已补入 \`server/requirements.txt\` 并在生产镜像内验证可导入，避免 \`services/order_export_service.py\` 启动导入失败。
 - v1.8 微信手机号授权登录已补齐真实服务：\`server/services/auth_service.py::phone_login()\`、\`_get_phone_number()\`、\`_get_wechat_access_token()\`；路由 \`server/routers/auth.py::phone_login()\` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：\`server/routers/admin.py::verify_operation_password()\` 使用 bcrypt \`verify_password()\`，返回短 TTL \`confirm_token\`；\`verify_confirm_code()\` 不再接受 hash 前缀。
 - 本地和远端 Git 提交：
@@ -264,6 +283,16 @@ PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unitte
 cd admin
 node --test tests/v18-admin-contract.test.mjs
 npm run build
+
+# v1.8 本轮订单响应/分页/身份归属回归
+cd server
+PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m unittest \\
+  tests/test_order_routes.py \\
+  tests/test_order_schema.py \\
+  tests/test_order_filters.py \\
+  tests/test_v18_contracts.py -v
+PYTHONPYCACHEPREFIX=/private/tmp/yyyl-pycache conda run -n yyyl python -m py_compile \\
+  services/order_service.py routers/orders.py schemas/order.py models/order.py
 
 # v1.8 小程序合同测试、类型检查与双营地构建
 cd uni-app

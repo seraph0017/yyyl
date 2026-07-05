@@ -8,6 +8,7 @@
 """
 
 import datetime as _dt
+import re
 from datetime import date, datetime
 
 DateType = _dt.date
@@ -331,6 +332,24 @@ class ConfirmVerifyPasswordRequest(BaseModel):
 
     password: str = Field(min_length=1, description="操作密码")
     action: str = Field(description="待确认操作标识")
+
+
+class OperationPasswordUpdateRequest(BaseModel):
+    """更新管理员操作密码请求"""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    password: str = Field(min_length=6, max_length=6, description="6位数字操作密码")
+    old_password: Optional[str] = Field(default=None, min_length=6, max_length=6, description="旧操作密码")
+
+    @field_validator("password", "old_password")
+    @classmethod
+    def validate_password(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if not re.fullmatch(r"[0-9]{6}", v):
+            raise ValueError("操作密码必须为6位数字")
+        return v
 
 
 class ConfirmResponse(BaseModel):
