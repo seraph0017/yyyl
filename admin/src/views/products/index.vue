@@ -333,18 +333,23 @@ async function openQrcodePreview(qrcode: Qrcode) {
   closeQrcodePreview()
   currentQrcode.value = qrcode
   qrcodePreviewVisible.value = true
-  const res = await downloadQrcode(qrcode.id)
-  currentQrcodeBlob.value = res.data as Blob
-  qrcodePreviewUrl.value = URL.createObjectURL(currentQrcodeBlob.value)
+  qrcodePreviewUrl.value = buildQrcodePreviewUrl(qrcode)
 }
 
 function closeQrcodePreview() {
-  if (qrcodePreviewUrl.value) {
+  if (qrcodePreviewUrl.value.startsWith('blob:')) {
     URL.revokeObjectURL(qrcodePreviewUrl.value)
   }
   qrcodePreviewUrl.value = ''
   currentQrcodeBlob.value = null
   currentQrcode.value = null
+}
+
+function buildQrcodePreviewUrl(qrcode: Qrcode): string {
+  if (!qrcode.image_url) return ''
+  const version = encodeURIComponent(qrcode.generated_at || qrcode.updated_at || qrcode.short_code || String(qrcode.id))
+  const separator = qrcode.image_url.includes('?') ? '&' : '?'
+  return `${qrcode.image_url}${separator}v=${version}`
 }
 
 async function downloadCurrentQrcode() {
@@ -458,13 +463,7 @@ onMounted(() => {
     object-fit: contain;
     border: 1px solid var(--color-border-light);
     border-radius: 12px;
-    background:
-      linear-gradient(45deg, #f3f4f6 25%, transparent 25%),
-      linear-gradient(-45deg, #f3f4f6 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #f3f4f6 75%),
-      linear-gradient(-45deg, transparent 75%, #f3f4f6 75%);
-    background-size: 20px 20px;
-    background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    background: #fff;
   }
 
   &__title {

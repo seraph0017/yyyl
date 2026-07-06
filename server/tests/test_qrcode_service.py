@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -63,6 +65,7 @@ class QrcodeServiceTest(unittest.IsolatedAsyncioTestCase):
             title="露营套餐",
             channel="poster",
             status="active",
+            image_url=None,
         )
         db = FakeDb()
         body = QrcodeCreateRequest(
@@ -125,7 +128,87 @@ class QrcodeServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.image_url, "/images/qrcodes/1/abc123.png")
         self.assertEqual(result.generated_by, 3)
         self.assertTrue(db.flushed)
-        create_image.assert_awaited_once_with(site_id=1, scene="abc123")
+        create_image.assert_awaited_once_with(
+            site_id=1,
+            scene="abc123",
+            path="/pages/category/index?category=tent",
+            target_type="category",
+        )
+
+    async def test_product_qrcode_image_uses_direct_path_for_release_compatibility(self):
+        calls = []
+
+        class FakeResponse:
+            content = b"\x89PNG\r\n"
+            headers = {"content-type": "image/png"}
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json):
+                calls.append((url, json))
+                return FakeResponse()
+
+        with TemporaryDirectory() as tmp:
+            with (
+                patch.object(self.service, "_get_wechat_access_token", AsyncMock(return_value="ACCESS")),
+                patch.object(self.service.httpx, "AsyncClient", return_value=FakeClient()),
+                patch.object(self.service, "QRCODE_IMAGE_DIR", Path(tmp)),
+            ):
+                image_url = await self.service._create_wechat_qrcode_image(
+                    site_id=1,
+                    scene="abc123",
+                    path="/pages/product-detail/index?id=18",
+                    target_type="product",
+                )
+
+        self.assertEqual(image_url, "/images/qrcodes/1/abc123.png")
+        self.assertEqual(len(calls), 1)
+        url, payload = calls[0]
+        self.assertIn("/wxa/getwxacode?", url)
+        self.assertEqual(payload["path"], "pages/product-detail/index?id=18")
+        self.assertNotIn("scene", payload)
+        self.assertNotIn("page", payload)
+
+    async def test_non_product_qrcode_image_keeps_scene_landing(self):
+        calls = []
+
+        class FakeResponse:
+            content = b"\x89PNG\r\n"
+            headers = {"content-type": "image/png"}
+
+        class FakeClient:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+            async def post(self, url, json):
+                calls.append((url, json))
+                return FakeResponse()
+
+        with TemporaryDirectory() as tmp:
+            with (
+                patch.object(self.service, "_get_wechat_access_token", AsyncMock(return_value="ACCESS")),
+                patch.object(self.service.httpx, "AsyncClient", return_value=FakeClient()),
+                patch.object(self.service, "QRCODE_IMAGE_DIR", Path(tmp)),
+            ):
+                await self.service._create_wechat_qrcode_image(
+                    site_id=1,
+                    scene="abc123",
+                    path="/pages/category/index?category=tent",
+                    target_type="category",
+                )
+
+        url, payload = calls[0]
+        self.assertIn("/wxa/getwxacodeunlimit?", url)
+        self.assertEqual(payload["scene"], "abc123")
+        self.assertEqual(payload["page"], "pages/qr/landing")
 
     async def test_create_or_reuse_qrcode_rejects_unpublished_cms_page(self):
         from schemas.qrcode import QrcodeCreateRequest

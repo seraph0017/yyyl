@@ -113,7 +113,12 @@ async def create_or_reuse_qrcode(
     db.add(qrcode)
     await db.flush()
 
-    qrcode.image_url = await _create_wechat_qrcode_image(site_id=site_id, scene=short_code)
+    qrcode.image_url = await _create_wechat_qrcode_image(
+        site_id=site_id,
+        scene=short_code,
+        path=path,
+        target_type=body.target_type,
+    )
     if generated_by and qrcode.image_url:
         await cms_service.register_existing_asset(
             db,
@@ -250,7 +255,12 @@ async def regenerate_qrcode(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "QRCODE_NOT_FOUND", "message": "小程序码不存在"},
         )
-    qrcode.image_url = await _create_wechat_qrcode_image(site_id=site_id, scene=qrcode.scene)
+    qrcode.image_url = await _create_wechat_qrcode_image(
+        site_id=site_id,
+        scene=qrcode.scene,
+        path=qrcode.path,
+        target_type=qrcode.target_type,
+    )
     archive_admin_id = generated_by or qrcode.generated_by
     if archive_admin_id and qrcode.image_url:
         await cms_service.register_existing_asset(
@@ -478,15 +488,37 @@ async def _find_qrcode_by_scene(
     return result.scalar_one_or_none()
 
 
-async def _create_wechat_qrcode_image(*, site_id: int, scene: str) -> str:
+def _should_use_direct_path_qrcode(target_type: Optional[str], path: Optional[str]) -> bool:
+    """商品码优先生成直达 path，避免依赖已发布小程序包含扫码 landing 页。"""
+    return bool(path) and target_type in {"product", "activity_product"}
+
+
+def _normalize_wechat_path(path: str) -> str:
+    return path.lstrip("/")
+
+
+async def _create_wechat_qrcode_image(
+    *,
+    site_id: int,
+    scene: str,
+    path: Optional[str] = None,
+    target_type: Optional[str] = None,
+) -> str:
     access_token = await _get_wechat_access_token(site_id)
-    payload = {
-        "scene": scene,
-        "page": "pages/qr/landing",
-        "check_path": False,
-        "env_version": "release",
-    }
-    url = f"{WECHAT_API_BASE}/wxa/getwxacodeunlimit?access_token={access_token}"
+    if _should_use_direct_path_qrcode(target_type, path):
+        payload = {
+            "path": _normalize_wechat_path(path or ""),
+            "env_version": "release",
+        }
+        url = f"{WECHAT_API_BASE}/wxa/getwxacode?access_token={access_token}"
+    else:
+        payload = {
+            "scene": scene,
+            "page": "pages/qr/landing",
+            "check_path": False,
+            "env_version": "release",
+        }
+        url = f"{WECHAT_API_BASE}/wxa/getwxacodeunlimit?access_token={access_token}"
     async with httpx.AsyncClient(timeout=15.0) as client:
         response = await client.post(url, json=payload)
     body = response.content
