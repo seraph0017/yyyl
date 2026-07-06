@@ -133,6 +133,12 @@ class V18InventoryPoolContractTest(unittest.TestCase):
         self.assertIn("_ensure_sku_code", create_source)
         self.assertIn("_normalize_sku_spec_values", create_source)
         self.assertIn("_sync_product_sku_inventory_pool", create_source)
+        self.assertIn('set_committed_value(product, "skus"', create_source)
+        self.assertLess(
+            create_source.index('set_committed_value(product, "skus"'),
+            create_source.index("await annotate_product_sku_inventory_modes(db, product)"),
+            "创建商品后必须先显式填充 product.skus，避免 async 懒加载触发 MissingGreenlet",
+        )
         self.assertIn("_sync_product_sku_inventory_pool", update_source)
         self.assertIn("_product_sku_shared_pool_code", pool_source)
         self.assertIn("InventoryPool.pool_code == _product_sku_shared_pool_code(product)", annotate_source)

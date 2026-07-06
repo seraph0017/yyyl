@@ -336,6 +336,7 @@ async def create_product(
         created_sku_modes[sku.id] = inventory_mode
     await _sync_product_sku_inventory_pool(db, product, created_sku_modes)
     await db.flush()
+    set_committed_value(product, "skus", [sku for sku, _ in pending_sku_modes])
     await annotate_product_sku_inventory_modes(db, product)
     logger.info(f"[商品] 创建商品: id={product.id}, name={product.name}, operator={operator_id}")
 
