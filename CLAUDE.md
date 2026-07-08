@@ -167,6 +167,7 @@ Production deployment standard:
 - **Language**: All code comments, commit messages, PRD, and docs are in Chinese.
 - **Soft delete**: All models use `is_deleted` flag, never hard delete.
 - **Async everywhere**: Backend uses async SQLAlchemy (`asyncpg`), async Redis. DB session via `get_db()` FastAPI dependency with auto commit/rollback.
+- **Async ORM write responses**: 写接口在 `flush()` / `commit()` 后不要直接 `Pydantic.model_validate(ORM对象)`，尤其 response 含 `created_at` / `updated_at` 或 relationship 时必须先 `db.refresh()`、按 ID 重新查询并 `selectinload()`，或返回显式 DTO/dict，避免 async SQLAlchemy `MissingGreenlet`。
 - **API docs**: Available at `/docs` (Swagger) and `/redoc` in development mode only (disabled when `DEBUG=false`).
 - **Environment config**: Backend reads from `server/.env` via pydantic-settings. Template at `server/.env.example`.
 - **Static files**: Product images served from `server/images/` mounted at `/images`.
