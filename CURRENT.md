@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-07-06 07:45:16 CST
+Last updated: 2026-07-08 13:38:59 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -72,6 +72,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-07-06 本轮三端只读复审已达标：Admin APPROVED 8.8/10，小程序 APPROVED 8.7/10，后端初审 8.0/10 后修复 CMS/qrcode 跨站 guard 和显式库存池绑定回归，复审 APPROVED 8.7/10；三端最终无 Critical/High。后端复审提出的 CMS 编辑锁归属校验、素材强制删除 role 判断、库存池注释也已补测修复。
 - 2026-07-06 本轮最终验证通过：后端 `py_compile routers/cms.py routers/products.py routers/qrcodes.py schemas/product.py models/cms.py services/cms_service.py services/product_service.py services/qrcode_service.py services/inventory_pool_service.py` OK；`python -m unittest tests/test_v18_contracts.py -v` 84 tests OK；Admin `node --test tests/v18-admin-contract.test.mjs` 15/15 OK 且 `npm run build` OK（仅 Vite 大 chunk 警告）；小程序 `node --test tests/v18-product-flow.test.mjs` 45/45 OK 且 `npm run type-check` OK；`git diff --check` OK；已运行 `scripts/update-current.sh`。
 - 2026-07-06 已按用户要求将本轮后端和 Admin 上线到 `www.yyylcamp.com`：本地提交 `715576f feat: 修复新小程序需求并准备后端Admin上线` 已推送 `origin/main` 并同步到生产 `/opt/yyyl/REVISION`；因生产机 Docker Hub 拉取 `python:3.11-slim` 仍超时，本次基于 `localhost/yyyl-api:api-admin-20260701-0240-openpyxl` 离线派生镜像 `yyyl-api:api-admin-20260706-0724-715576f`，API 蓝绿切到 `yyyl-api-green` / `127.0.0.1:8002`，旧 `yyyl-api-blue` 已停止保留用于回滚；Admin 静态资源已同步到 `/www/server/nginx/html/`，线上入口 JS 为 `/assets/index-wazgtEOT.js`；生产数据库 Alembic 为 `2b3c4d5e6f70 (head)`。本次源码备份 `/opt/yyyl/backups/source-before-api-admin-20260706-0724-715576f.tgz`，Admin 静态目录备份 `/opt/yyyl/backups/admin-html-before-api-admin-20260706-0724-715576f.tgz`。发布后验证 `https://www.yyylcamp.com/health` 200、`/api/v1/products?page_size=1&status=on_sale` 200、Admin 首页 200、新 JS asset 200、直连 `127.0.0.1:8002/health` 200；发布后检查新容器日志，未见 error/exception/traceback/critical/failed。
+- 2026-07-08 已修复线上 `https://www.yyylcamp.com/products/31/edit` 修改价格保存返回 `Internal server error`：生产日志确认 `PUT /api/v1/admin/products/31` 在 `routers/products.py::update_product` 写后直接 `ProductDetail.model_validate(product)` 时触发 async SQLAlchemy `MissingGreenlet`（字段 `updated_at` 懒加载/过期加载）。后端已新增 `_serialize_product_detail_after_write()`，商品 create/update 写操作统一重新 `get_product_detail()` 后再序列化；补充源码合同测试和行为测试，断言 update 序列化的是重载对象而不是写后 ORM。
+- 2026-07-08 本轮分 agent review 已完成：后端写操作序列化 review APPROVED、测试回归 review APPROVED，均无 Critical/High；按 Medium 建议补了行为级 mock 测试和 `assertNotIn("ProductDetail.model_validate(product)")` 回归保护。验证通过：`py_compile routers/products.py tests/test_v18_contracts.py` OK、`python -m unittest tests/test_v18_contracts.py -v` 86 tests OK、`git diff --check` OK。生产已离线派生镜像 `yyyl-api:product-update-hotfix-20260708-3b68a77` 并蓝绿切到 `yyyl-api-blue` / `127.0.0.1:8001`；线上 `health` 和商品列表 200，容器内商品 31 更新+重载序列化+rollback 探针 OK，发布后日志未见 `MissingGreenlet`/500。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -111,8 +113,11 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Admin 静态目录发布前备份：`/opt/yyyl/backups/admin-html-before-20260620135346.tgz`。
 - API 蓝绿容器：`yyyl-api-blue` / `yyyl-api-green`，端口 `8001` / `8002`。
 - 生产镜像：
-  - `yyyl-api:api-admin-20260706-0724-715576f`：2026-07-06 新小程序需求与 bug 修复的 API/Admin 上线镜像，基于 `localhost/yyyl-api:api-admin-20260701-0240-openpyxl` 离线派生；当前活跃容器 `yyyl-api-green`，Nginx upstream 指向 `127.0.0.1:8002`，数据库版本 `2b3c4d5e6f70`。
-  - `yyyl-api:api-admin-20260701-0240-openpyxl`：2026-07-01 API/Admin 上线镜像，基于 `yyyl-api:image-variants-4b92d69` 离线派生并补入 `openpyxl`；当前旧容器 `yyyl-api-blue` 已停止保留用于回滚，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:product-update-hotfix-20260708-3b68a77`：2026-07-08 商品更新保存 500 热修镜像，基于 `localhost/yyyl-api:qrcode-direct-hotfix-20260706-099592e` 离线派生并替换 `routers/products.py`；当前活跃容器 `yyyl-api-blue`，Nginx upstream 指向 `127.0.0.1:8001`，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:qrcode-direct-hotfix-20260706-099592e`：2026-07-06 商品二维码直达热修镜像，基于 `localhost/yyyl-api:product-create-hotfix-20260706-9764d90` 离线派生并替换 `services/qrcode_service.py`；已被后续版本替换，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:product-create-hotfix-20260706-9764d90`：2026-07-06 商品创建 500 热修镜像，基于 `localhost/yyyl-api:api-admin-20260706-0724-715576f` 离线派生并替换 `services/product_service.py`；已被后续版本替换，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:api-admin-20260706-0724-715576f`：2026-07-06 新小程序需求与 bug 修复的 API/Admin 上线镜像，基于 `localhost/yyyl-api:api-admin-20260701-0240-openpyxl` 离线派生；已被后续热修替换，数据库版本 `2b3c4d5e6f70`。
+  - `yyyl-api:api-admin-20260701-0240-openpyxl`：2026-07-01 API/Admin 上线镜像，基于 `yyyl-api:image-variants-4b92d69` 离线派生并补入 `openpyxl`；已被后续版本替换，数据库版本 `2b3c4d5e6f70`。
   - `yyyl-api:image-variants-4b92d69`：图片派生图生产镜像，基于 `localhost/yyyl-api:v1.8-hotfix-qrcode-membership-20260628` 离线派生，已被后续版本替换。
   - `yyyl-api:v1.8-hotfix-qrcode-membership-20260628`：二维码和会员卡接口热修镜像，发布图片优化前活跃于 `yyyl-api-blue`，当前已停止保留用于回滚。
   - `yyyl-api:v1.8-df0e695`：v1.8 全量上线镜像，已被后续版本替换，数据库版本 `1a2b3c4d5e6f`。
@@ -287,11 +292,12 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `.`
 - branch: `main`
 - upstream: `origin/main`
-- head: `d9f3678 docs: 同步后端Admin上线交接状态`
-- uncommitted changes: `26`
+- head: `3b68a77 fix: 修复商品更新写后序列化`
+- uncommitted changes: `27`
 - status sample:
 
 ```text
+ M CURRENT.md
  M scripts/update-current.sh
  M uni-app/src/components/cms/CmsDivider.vue
  M uni-app/src/components/cms/CmsImage.vue
