@@ -130,7 +130,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-07-06 已按用户要求将本轮后端和 Admin 上线到 \`www.yyylcamp.com\`：本地提交 \`715576f feat: 修复新小程序需求并准备后端Admin上线\` 已推送 \`origin/main\` 并同步到生产 \`/opt/yyyl/REVISION\`；因生产机 Docker Hub 拉取 \`python:3.11-slim\` 仍超时，本次基于 \`localhost/yyyl-api:api-admin-20260701-0240-openpyxl\` 离线派生镜像 \`yyyl-api:api-admin-20260706-0724-715576f\`，API 蓝绿切到 \`yyyl-api-green\` / \`127.0.0.1:8002\`，旧 \`yyyl-api-blue\` 已停止保留用于回滚；Admin 静态资源已同步到 \`/www/server/nginx/html/\`，线上入口 JS 为 \`/assets/index-wazgtEOT.js\`；生产数据库 Alembic 为 \`2b3c4d5e6f70 (head)\`。本次源码备份 \`/opt/yyyl/backups/source-before-api-admin-20260706-0724-715576f.tgz\`，Admin 静态目录备份 \`/opt/yyyl/backups/admin-html-before-api-admin-20260706-0724-715576f.tgz\`。发布后验证 \`https://www.yyylcamp.com/health\` 200、\`/api/v1/products?page_size=1&status=on_sale\` 200、Admin 首页 200、新 JS asset 200、直连 \`127.0.0.1:8002/health\` 200；发布后检查新容器日志，未见 error/exception/traceback/critical/failed。
 - 2026-07-08 已修复线上 \`https://www.yyylcamp.com/products/31/edit\` 修改价格保存返回 \`Internal server error\`：生产日志确认 \`PUT /api/v1/admin/products/31\` 在 \`routers/products.py::update_product\` 写后直接 \`ProductDetail.model_validate(product)\` 时触发 async SQLAlchemy \`MissingGreenlet\`（字段 \`updated_at\` 懒加载/过期加载）。后端已新增 \`_serialize_product_detail_after_write()\`，商品 create/update 写操作统一重新 \`get_product_detail()\` 后再序列化；补充源码合同测试和行为测试，断言 update 序列化的是重载对象而不是写后 ORM。
 - 2026-07-08 本轮分 agent review 已完成：后端写操作序列化 review APPROVED、测试回归 review APPROVED，均无 Critical/High；按 Medium 建议补了行为级 mock 测试和 \`assertNotIn("ProductDetail.model_validate(product)")\` 回归保护。验证通过：\`py_compile routers/products.py tests/test_v18_contracts.py\` OK、\`python -m unittest tests/test_v18_contracts.py -v\` 86 tests OK、\`git diff --check\` OK。生产已离线派生镜像 \`yyyl-api:product-update-hotfix-20260708-3b68a77\` 并蓝绿切到 \`yyyl-api-blue\` / \`127.0.0.1:8001\`；线上 \`health\` 和商品列表 200，容器内商品 31 更新+重载序列化+rollback 探针 OK，发布后日志未见 \`MissingGreenlet\`/500。
-- 2026-07-08 已继续审计并加固类似 async ORM 写后响应接口：高风险 relationship response 覆盖 \`routers/bundles.py\`、\`routers/camp_maps.py\`、\`routers/performance.py\`，中风险标量时间字段路径覆盖 \`routers/users.py\` 及 \`services/expense_service.py\`、\`qrcode_service.py\`、\`refund_service.py\`、\`order_export_service.py\`、\`finance_service.py\`、\`member_service.py\`。本地/远端提交 \`256d495 fix: 加固写后ORM序列化接口\` 与 \`5a1b72b docs: 同步ORM序列化加固状态\` 已推送 \`origin/main\`；验证通过：相关 \`py_compile\` OK、后端全量 \`python -m unittest discover -s tests -p 'test_*.py' -v\` 278 tests OK、\`git diff --check\` OK；实现 review 与测试 review 均 APPROVED。该预防性加固截至 2026-07-08 尚未发布线上 API。
+- 2026-07-08 已继续审计并加固类似 async ORM 写后响应接口：高风险 relationship response 覆盖 \`routers/bundles.py\`、\`routers/camp_maps.py\`、\`routers/performance.py\`，中风险标量时间字段路径覆盖 \`routers/users.py\` 及 \`services/expense_service.py\`、\`qrcode_service.py\`、\`refund_service.py\`、\`order_export_service.py\`、\`finance_service.py\`、\`member_service.py\`。本地/远端提交 \`256d495 fix: 加固写后ORM序列化接口\` 与 \`5a1b72b docs: 同步ORM序列化加固状态\` 已推送 \`origin/main\`；验证通过：相关 \`py_compile\` OK、后端全量 \`python -m unittest discover -s tests -p 'test_*.py' -v\` 278 tests OK、\`git diff --check\` OK；实现 review 与测试 review 均 APPROVED。
+- 2026-07-08 已将类似接口预防性 async ORM 序列化加固发布到生产：生产源码 \`/opt/yyyl/REVISION=412ac64\`，源码备份 \`/opt/yyyl/backups/server-before-api-orm-serialization-20260708-412ac64-20260708214708.tgz\`；因生产机仍无法拉取 Docker Hub \`python:3.11-slim\`，本次基于 \`localhost/yyyl-api:product-update-hotfix-20260708-3b68a77\` 离线派生 \`yyyl-api:api-orm-serialization-20260708-412ac64-r2\`，并修正 commit 镜像入口命令后蓝绿切到 \`yyyl-api-green\` / \`127.0.0.1:8002\`，旧 \`yyyl-api-blue\` 已停止保留用于回滚；公网 \`/health\` 与商品列表 200，容器内商品 31 更新+重载序列化+rollback 探针 OK，镜像内加固源码合同检查 OK，发布后日志未见 \`MissingGreenlet\`/Traceback/Exception/Critical。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -140,13 +141,12 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 3. 如出现支付请求失败，检查 \`services/wechat_pay_service.py\` 抛出的微信支付 API 返回码、商户证书序列号、公钥 ID、APIv3 密钥和用户 openid。
 4. 后续常规发布最好修复服务器 Docker Hub 拉取 \`python:3.11-slim\` 超时问题；2026-06-29 的图片优化发布采用基于既有镜像的离线派生方式。
 5. 修改生产相关代码后，优先补最小回归测试并运行相关后端单测，再发布。
-6. 如需让 2026-07-08 类似接口预防性 async ORM 序列化加固生效线上，还需基于最新 \`origin/main\` 发布 API；当前生产仍是商品更新单点热修镜像 \`yyyl-api:product-update-hotfix-20260708-3b68a77\`。
-7. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
-8. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、营位日历批量库存、手机号授权登录、订单展示字段、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
-9. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 \`/opt/yyyl/server/images/\`，仍需在当前活跃 API 容器执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐派生图。
-10. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，最新构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-11. 2026-07-06 后端/Admin 生产上线业务提交为 \`715576f feat: 修复新小程序需求并准备后端Admin上线\`；当前 Git head / upstream 以后文 Git Status Snapshot 为准。如需回看图片优化业务变更，相关提交仍是 \`4b92d69 feat: 优化图片派生图加载链路\`。
-12. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 \`certbot renew --dry-run\`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
+6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
+7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、营位日历批量库存、手机号授权登录、订单展示字段、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
+8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 \`/opt/yyyl/server/images/\`，仍需在当前活跃 API 容器执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐派生图。
+9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，最新构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
+10. 2026-07-06 后端/Admin 生产上线业务提交为 \`715576f feat: 修复新小程序需求并准备后端Admin上线\`；当前 Git head / upstream 以后文 Git Status Snapshot 为准。如需回看图片优化业务变更，相关提交仍是 \`4b92d69 feat: 优化图片派生图加载链路\`。
+11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 \`certbot renew --dry-run\`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
 
@@ -171,7 +171,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
   - Admin 静态目录发布前备份：\`/opt/yyyl/backups/admin-html-before-20260620135346.tgz\`。
 - API 蓝绿容器：\`yyyl-api-blue\` / \`yyyl-api-green\`，端口 \`8001\` / \`8002\`。
 - 生产镜像：
-  - \`yyyl-api:product-update-hotfix-20260708-3b68a77\`：2026-07-08 商品更新保存 500 热修镜像，基于 \`localhost/yyyl-api:qrcode-direct-hotfix-20260706-099592e\` 离线派生并替换 \`routers/products.py\`；当前活跃容器 \`yyyl-api-blue\`，Nginx upstream 指向 \`127.0.0.1:8001\`，数据库版本 \`2b3c4d5e6f70\`。
+  - \`yyyl-api:api-orm-serialization-20260708-412ac64-r2\`：2026-07-08 类似接口 async ORM 写后序列化预防性加固镜像，基于 \`localhost/yyyl-api:product-update-hotfix-20260708-3b68a77\` 离线派生并替换最新 \`/app\` 源码；当前活跃容器 \`yyyl-api-green\`，Nginx upstream 指向 \`127.0.0.1:8002\`，数据库版本 \`2b3c4d5e6f70\`。
+  - \`yyyl-api:product-update-hotfix-20260708-3b68a77\`：2026-07-08 商品更新保存 500 热修镜像，基于 \`localhost/yyyl-api:qrcode-direct-hotfix-20260706-099592e\` 离线派生并替换 \`routers/products.py\`；已被 \`yyyl-api:api-orm-serialization-20260708-412ac64-r2\` 替换，旧容器 \`yyyl-api-blue\` 已停止保留用于回滚，数据库版本 \`2b3c4d5e6f70\`。
   - \`yyyl-api:qrcode-direct-hotfix-20260706-099592e\`：2026-07-06 商品二维码直达热修镜像，基于 \`localhost/yyyl-api:product-create-hotfix-20260706-9764d90\` 离线派生并替换 \`services/qrcode_service.py\`；已被后续版本替换，数据库版本 \`2b3c4d5e6f70\`。
   - \`yyyl-api:product-create-hotfix-20260706-9764d90\`：2026-07-06 商品创建 500 热修镜像，基于 \`localhost/yyyl-api:api-admin-20260706-0724-715576f\` 离线派生并替换 \`services/product_service.py\`；已被后续版本替换，数据库版本 \`2b3c4d5e6f70\`。
   - \`yyyl-api:api-admin-20260706-0724-715576f\`：2026-07-06 新小程序需求与 bug 修复的 API/Admin 上线镜像，基于 \`localhost/yyyl-api:api-admin-20260701-0240-openpyxl\` 离线派生；已被后续热修替换，数据库版本 \`2b3c4d5e6f70\`。
@@ -229,6 +230,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 微信手机号授权登录已补齐真实服务：\`server/services/auth_service.py::phone_login()\`、\`_get_phone_number()\`、\`_get_wechat_access_token()\`；路由 \`server/routers/auth.py::phone_login()\` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：\`server/routers/admin.py::verify_operation_password()\` 使用 bcrypt \`verify_password()\`，返回短 TTL \`confirm_token\`；\`verify_confirm_code()\` 不再接受 hash 前缀。
 - 本地和远端 Git 提交：
+  - \`412ac64 docs: 补充异步ORM写响应规则\`
   - \`5a1b72b docs: 同步ORM序列化加固状态\`
   - \`256d495 fix: 加固写后ORM序列化接口\`
   - \`715576f feat: 修复新小程序需求并准备后端Admin上线\`
