@@ -95,6 +95,8 @@ async def create_refund_record(
         order.refund_status = "pending"
 
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(refund)
     return refund
 
 
@@ -218,6 +220,8 @@ async def approve_refund(
     refund.approved_by = approved_by
     refund.approved_at = datetime.now(timezone.utc)
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(refund)
     return refund
 
 
@@ -239,6 +243,8 @@ async def reject_refund(
     refund.reason = f"{refund.reason}\n拒绝原因: {reason}"
     order.refund_status = "rejected"
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(refund)
     return refund
 
 

@@ -38,6 +38,20 @@ from services import bundle_service
 router = APIRouter(tags=["搭配售卖"])
 
 
+async def _serialize_bundle_config_after_write(
+    db: AsyncSession,
+    config_id: int,
+    site_id: int,
+) -> BundleConfigResponse:
+    """写操作后重新加载搭配组合和搭配项，避免 async ORM 懒加载触发 MissingGreenlet。"""
+    config_detail = await bundle_service.get_bundle_config(
+        db,
+        config_id=config_id,
+        site_id=site_id,
+    )
+    return BundleConfigResponse.model_validate(config_detail)
+
+
 # ========== C端接口 ==========
 
 
@@ -128,8 +142,9 @@ async def create_bundle_config(
         data=body.model_dump(),
         site_id=site_id,
     )
+    created_config_id = config.id
     await db.commit()
-    result = BundleConfigResponse.model_validate(config)
+    result = await _serialize_bundle_config_after_write(db, created_config_id, site_id)
     return ResponseModel.success(data=result, message="搭配组合创建成功")
 
 
@@ -149,8 +164,9 @@ async def update_bundle_config(
         data=body.model_dump(exclude_unset=True),
         site_id=site_id,
     )
+    updated_config_id = config.id
     await db.commit()
-    result = BundleConfigResponse.model_validate(config)
+    result = await _serialize_bundle_config_after_write(db, updated_config_id, site_id)
     return ResponseModel.success(data=result, message="搭配组合更新成功")
 
 

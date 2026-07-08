@@ -54,6 +54,8 @@ async def create_order_export_task(
         task.status = "pending"
         task.row_count = total
         await db.flush()
+        if hasattr(db, "refresh"):
+            await db.refresh(task)
         return task
 
     task.status = "processing"
@@ -80,6 +82,8 @@ async def create_order_export_task(
         task.status = "failed"
         task.error_message = str(exc)[:500]
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(task)
     return task
 
 

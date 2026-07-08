@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, with_loader_criteria
 
 from models.bundle import BundleConfig, BundleItem
 from models.order import Order, OrderItem
@@ -262,6 +262,38 @@ async def delete_bundle_config(
 
     await db.flush()
     logger.info(f"[搭配] 删除组合: config_id={config_id}")
+
+
+async def get_bundle_config(
+    db: AsyncSession,
+    config_id: int,
+    site_id: int = 1,
+) -> BundleConfig:
+    """获取搭配组合详情，显式加载未删除搭配项。"""
+    result = await db.execute(
+        select(BundleConfig)
+        .options(
+            selectinload(BundleConfig.items),
+            with_loader_criteria(
+                BundleItem,
+                BundleItem.is_deleted.is_(False),
+                include_aliases=True,
+            ),
+        )
+        .where(
+            BundleConfig.id == config_id,
+            BundleConfig.site_id == site_id,
+            BundleConfig.is_deleted.is_(False),
+        )
+        .execution_options(populate_existing=True)
+    )
+    config = result.scalar_one_or_none()
+    if config is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": 40401, "message": "搭配组合不存在"},
+        )
+    return config
 
 
 async def list_bundle_configs(

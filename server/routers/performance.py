@@ -161,8 +161,14 @@ async def calculate_performance(
         period_start=body.period_start,
         period_end=body.period_end,
     )
+    record_ids = [record.id for record in records]
     await db.commit()
-    items = [PerformanceRecordResponse.model_validate(r) for r in records]
+    reloaded_records = await performance_service.get_performance_records_by_ids(
+        db,
+        record_ids=record_ids,
+        site_id=site_id,
+    )
+    items = [PerformanceRecordResponse.model_validate(r) for r in reloaded_records]
     return ResponseModel.success(
         data=items,
         message=f"绩效计算完成，共 {len(items)} 名员工",

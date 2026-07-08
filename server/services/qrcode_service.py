@@ -238,6 +238,8 @@ async def update_qrcode_status(
         )
     qrcode.status = status_value
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(qrcode)
     return qrcode
 
 
@@ -275,6 +277,8 @@ async def regenerate_qrcode(
     if generated_by:
         qrcode.generated_by = generated_by
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(qrcode)
     return qrcode
 
 

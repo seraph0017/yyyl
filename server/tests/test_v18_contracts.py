@@ -739,6 +739,100 @@ class V18ProductDetailContractTest(unittest.TestCase):
         self.assertEqual(response.data, {"id": 31, "stock": 7})
 
 
+class AsyncOrmWriteSerializationContractTest(unittest.TestCase):
+    def test_bundle_admin_writes_reload_config_before_serializing(self):
+        from routers import bundles
+
+        module_source = inspect.getsource(bundles)
+        self.assertIn("_serialize_bundle_config_after_write", module_source)
+        self.assertIn("bundle_service.get_bundle_config", module_source)
+
+        for route in [bundles.create_bundle_config, bundles.update_bundle_config]:
+            with self.subTest(route=route.__name__):
+                source = inspect.getsource(route)
+                self.assertIn("_serialize_bundle_config_after_write", source)
+                self.assertNotIn("BundleConfigResponse.model_validate(config)", source)
+
+    def test_camp_map_admin_writes_reload_before_serializing(self):
+        from routers import camp_maps
+
+        module_source = inspect.getsource(camp_maps)
+        self.assertIn("_serialize_camp_map_after_write", module_source)
+        self.assertIn("_serialize_mini_game_after_write", module_source)
+        self.assertIn("camp_map_service.get_camp_map", module_source)
+        self.assertIn("game_service.get_mini_game", module_source)
+
+        expectations = [
+            (camp_maps.create_camp_map, "CampMapResponse.model_validate(camp_map)"),
+            (camp_maps.update_camp_map, "CampMapResponse.model_validate(camp_map)"),
+            (camp_maps.create_game, "MiniGameResponse.model_validate(game)"),
+            (camp_maps.update_game, "MiniGameResponse.model_validate(game)"),
+        ]
+        for route, unsafe_call in expectations:
+            with self.subTest(route=route.__name__):
+                source = inspect.getsource(route)
+                self.assertIn("_serialize_", source)
+                self.assertNotIn(unsafe_call, source)
+
+    def test_performance_calculate_reloads_records_with_details_before_serializing(self):
+        from routers import performance
+        from services import performance_service
+
+        route_source = inspect.getsource(performance.calculate_performance)
+        service_source = inspect.getsource(performance_service)
+
+        self.assertIn("get_performance_records_by_ids", service_source)
+        self.assertIn("record_ids = [record.id for record in records]", route_source)
+        self.assertIn("get_performance_records_by_ids", route_source)
+        self.assertNotIn("PerformanceRecordResponse.model_validate(r) for r in records", route_source)
+
+    def test_simple_orm_write_services_refresh_returned_models_before_serializing(self):
+        from services import (
+            expense_service,
+            finance_service,
+            member_service,
+            order_export_service,
+            qrcode_service,
+            refund_service,
+        )
+
+        expectations = [
+            (expense_service.create_expense_request, "await db.refresh(expense)"),
+            (expense_service.approve_expense, "await db.refresh(expense)"),
+            (expense_service.mark_expense_paid, "await db.refresh(expense)"),
+            (finance_service.withdraw, "await db.refresh(tx)"),
+            (finance_service.return_deposit, "await db.refresh(deposit)"),
+            (member_service.activate_times_card, "await db.refresh(times_card)"),
+            (qrcode_service.update_qrcode_status, "await db.refresh(qrcode)"),
+            (qrcode_service.regenerate_qrcode, "await db.refresh(qrcode)"),
+            (refund_service.create_refund_record, "await db.refresh(refund)"),
+            (refund_service.approve_refund, "await db.refresh(refund)"),
+            (refund_service.reject_refund, "await db.refresh(refund)"),
+            (order_export_service.create_order_export_task, "await db.refresh(task)"),
+        ]
+
+        for func, expected in expectations:
+            with self.subTest(func=func.__name__):
+                source = inspect.getsource(func)
+                self.assertIn(expected, source)
+
+    def test_user_write_routes_refresh_before_serializing(self):
+        from routers import users
+
+        expectations = [
+            (users.update_user_info, "await db.refresh(user)"),
+            (users.create_identity, "await db.refresh(identity)"),
+            (users.update_identity, "await db.refresh(identity)"),
+            (users.create_address, "await db.refresh(address)"),
+            (users.update_address, "await db.refresh(address)"),
+        ]
+
+        for route, expected in expectations:
+            with self.subTest(route=route.__name__):
+                source = inspect.getsource(route)
+                self.assertIn(expected, source)
+
+
 class V18MapAnalyticsContractTest(unittest.TestCase):
     def test_camp_map_zone_supports_link_and_click_count(self):
         from models.camp_map import CampMapZone

@@ -47,6 +47,34 @@ from services import camp_map_service, game_service
 router = APIRouter(tags=["营地地图"])
 
 
+async def _serialize_camp_map_after_write(
+    db: AsyncSession,
+    map_id: int,
+    site_id: int,
+) -> CampMapResponse:
+    """写操作后重新加载地图和区域，避免 async ORM 懒加载触发 MissingGreenlet。"""
+    camp_map_detail = await camp_map_service.get_camp_map(
+        db,
+        map_id=map_id,
+        site_id=site_id,
+    )
+    return CampMapResponse.model_validate(camp_map_detail)
+
+
+async def _serialize_mini_game_after_write(
+    db: AsyncSession,
+    game_id: int,
+    site_id: int,
+) -> MiniGameResponse:
+    """写操作后重新加载小游戏，避免读取过期时间字段触发 MissingGreenlet。"""
+    game_detail = await game_service.get_mini_game(
+        db,
+        game_id=game_id,
+        site_id=site_id,
+    )
+    return MiniGameResponse.model_validate(game_detail)
+
+
 # ========== C端接口：地图 ==========
 
 
@@ -131,8 +159,9 @@ async def record_page_view(
         page_title=body.page_title,
         user_id=user.id if user else None,
     )
+    data = PageViewStatResponse.model_validate(stat)
     await db.commit()
-    return ResponseModel.success(data=PageViewStatResponse.model_validate(stat))
+    return ResponseModel.success(data=data)
 
 
 # ========== C端接口：游戏 ==========
@@ -218,8 +247,9 @@ async def create_camp_map(
         data=body.model_dump(exclude={"site_id"}),
         site_id=site_id,
     )
+    created_map_id = camp_map.id
     await db.commit()
-    result = CampMapResponse.model_validate(camp_map)
+    result = await _serialize_camp_map_after_write(db, created_map_id, site_id)
     return ResponseModel.success(data=result, message="地图创建成功")
 
 
@@ -239,8 +269,9 @@ async def update_camp_map(
         data=body.model_dump(exclude_unset=True),
         site_id=site_id,
     )
+    updated_map_id = camp_map.id
     await db.commit()
-    result = CampMapResponse.model_validate(camp_map)
+    result = await _serialize_camp_map_after_write(db, updated_map_id, site_id)
     return ResponseModel.success(data=result, message="地图更新成功")
 
 
@@ -276,8 +307,8 @@ async def create_camp_map_zone(
         data=body.model_dump(mode="json"),
         site_id=site_id,
     )
-    await db.commit()
     result = CampMapZoneResponse.model_validate(zone)
+    await db.commit()
     return ResponseModel.success(data=result, message="区域添加成功")
 
 
@@ -297,8 +328,8 @@ async def update_camp_map_zone(
         data=body.model_dump(exclude_unset=True, mode="json"),
         site_id=site_id,
     )
-    await db.commit()
     result = CampMapZoneResponse.model_validate(zone)
+    await db.commit()
     return ResponseModel.success(data=result, message="区域更新成功")
 
 
@@ -399,8 +430,9 @@ async def create_game(
         data=body.model_dump(exclude={"site_id"}),
         site_id=site_id,
     )
+    created_game_id = game.id
     await db.commit()
-    result = MiniGameResponse.model_validate(game)
+    result = await _serialize_mini_game_after_write(db, created_game_id, site_id)
     return ResponseModel.success(data=result, message="游戏创建成功")
 
 
@@ -420,8 +452,9 @@ async def update_game(
         data=body.model_dump(exclude_unset=True),
         site_id=site_id,
     )
+    updated_game_id = game.id
     await db.commit()
-    result = MiniGameResponse.model_validate(game)
+    result = await _serialize_mini_game_after_write(db, updated_game_id, site_id)
     return ResponseModel.success(data=result, message="游戏更新成功")
 
 

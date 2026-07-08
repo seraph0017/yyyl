@@ -166,6 +166,8 @@ async def create_expense_request(
     )
     db.add(expense)
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(expense)
 
     logger.info(
         f"[报销] 提交申请: id={expense.id}, user={user_id}, "
@@ -257,6 +259,8 @@ async def approve_expense(
     expense.review_remark = review_remark
 
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(expense)
     logger.info(
         f"[报销] 审批: id={expense_id}, approved={approved}, "
         f"reviewer={admin_id}"
@@ -307,6 +311,8 @@ async def mark_expense_paid(
     expense.paid_by = admin_id
 
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(expense)
     logger.info(f"[报销] 标记打款: id={expense_id}, paid_by={admin_id}")
     return expense
 

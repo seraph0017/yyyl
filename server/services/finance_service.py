@@ -227,6 +227,8 @@ async def withdraw(
     )
     db.add(tx)
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(tx)
 
     logger.info(f"[财务] 提现: amount={amount}, operator={operator_id}")
 
@@ -338,5 +340,7 @@ async def return_deposit(
             db.add(deduct_tx)
 
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(deposit)
     logger.info(f"[财务] 押金退还: deposit_id={deposit_id}, return={return_amount}")
     return deposit

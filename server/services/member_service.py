@@ -752,6 +752,8 @@ async def activate_times_card(
     code_record.used_at = now
 
     await db.flush()
+    if hasattr(db, "refresh"):
+        await db.refresh(times_card)
     logger.info(f"[会员] 次数卡激活: user={user_id}, card_id={times_card.id}")
     return times_card
 

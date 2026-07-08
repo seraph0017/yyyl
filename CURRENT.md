@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-07-08 13:38:59 CST
+Last updated: 2026-07-08 16:48:24 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -292,13 +292,25 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `.`
 - branch: `main`
 - upstream: `origin/main`
-- head: `3b68a77 fix: 修复商品更新写后序列化`
-- uncommitted changes: `27`
+- head: `99c20ed docs: 同步商品更新热修状态`
+- uncommitted changes: `39`
 - status sample:
 
 ```text
  M CURRENT.md
- M scripts/update-current.sh
+ M server/routers/bundles.py
+ M server/routers/camp_maps.py
+ M server/routers/performance.py
+ M server/routers/users.py
+ M server/services/bundle_service.py
+ M server/services/expense_service.py
+ M server/services/finance_service.py
+ M server/services/member_service.py
+ M server/services/order_export_service.py
+ M server/services/performance_service.py
+ M server/services/qrcode_service.py
+ M server/services/refund_service.py
+ M server/tests/test_v18_contracts.py
  M uni-app/src/components/cms/CmsDivider.vue
  M uni-app/src/components/cms/CmsImage.vue
  M uni-app/src/components/cms/CmsImageText.vue

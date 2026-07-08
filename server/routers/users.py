@@ -58,6 +58,7 @@ async def update_user_info(
     if body.avatar_url is not None:
         user.avatar_url = body.avatar_url
     await db.flush()
+    await db.refresh(user)
     result = UserInfo.model_validate(user)
     return ResponseModel.success(data=result, message="用户信息已更新")
 
@@ -107,6 +108,7 @@ async def create_identity(
     )
     db.add(identity)
     await db.flush()
+    await db.refresh(identity)
     result = UserIdentityResponse.model_validate(identity)
     return ResponseModel.success(data=result, message="身份信息已添加")
 
@@ -139,6 +141,7 @@ async def update_identity(
         identity.is_default = body.is_default
 
     await db.flush()
+    await db.refresh(identity)
     result = UserIdentityResponse.model_validate(identity)
     return ResponseModel.success(data=result, message="身份信息已更新")
 
@@ -198,6 +201,7 @@ async def create_address(
     )
     db.add(address)
     await db.flush()
+    await db.refresh(address)
     result = UserAddressResponse.model_validate(address)
     return ResponseModel.success(data=result, message="地址已添加")
 
@@ -231,6 +235,7 @@ async def update_address(
         address.is_default = body.is_default
 
     await db.flush()
+    await db.refresh(address)
     result = UserAddressResponse.model_validate(address)
     return ResponseModel.success(data=result, message="地址已更新")
 

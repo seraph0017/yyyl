@@ -18,7 +18,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, with_loader_criteria
 
 from models.admin import AdminUser
 from models.finance import FinanceTransaction
@@ -364,6 +364,37 @@ async def list_performance_records(
     records = list(result.scalars().unique().all())
 
     return records, total
+
+
+async def get_performance_records_by_ids(
+    db: AsyncSession,
+    record_ids: List[int],
+    site_id: int = 1,
+) -> List[PerformanceRecord]:
+    """按 ID 重新加载绩效记录及未删除明细，供写操作响应序列化使用。"""
+    if not record_ids:
+        return []
+
+    result = await db.execute(
+        select(PerformanceRecord)
+        .options(
+            selectinload(PerformanceRecord.details),
+            with_loader_criteria(
+                PerformanceDetail,
+                PerformanceDetail.is_deleted.is_(False),
+                include_aliases=True,
+            ),
+        )
+        .where(
+            PerformanceRecord.id.in_(record_ids),
+            PerformanceRecord.site_id == site_id,
+            PerformanceRecord.is_deleted.is_(False),
+        )
+        .execution_options(populate_existing=True)
+    )
+    records = list(result.scalars().unique().all())
+    record_map = {record.id: record for record in records}
+    return [record_map[record_id] for record_id in record_ids if record_id in record_map]
 
 
 async def get_performance_ranking(
