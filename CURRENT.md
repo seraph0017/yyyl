@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-07-08 21:58:11 CST
+Last updated: 2026-07-08 22:14:03 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -174,6 +174,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - v1.8 微信手机号授权登录已补齐真实服务：`server/services/auth_service.py::phone_login()`、`_get_phone_number()`、`_get_wechat_access_token()`；路由 `server/routers/auth.py::phone_login()` 已移除 TODO，调用服务层。
 - v1.8 高危操作二次确认已加固：`server/routers/admin.py::verify_operation_password()` 使用 bcrypt `verify_password()`，返回短 TTL `confirm_token`；`verify_confirm_code()` 不再接受 hash 前缀。
 - 本地和远端 Git 提交：
+  - `6f33e93 docs: 记录异步ORM加固上线`
   - `412ac64 docs: 补充异步ORM写响应规则`
   - `5a1b72b docs: 同步ORM序列化加固状态`
   - `256d495 fix: 加固写后ORM序列化接口`
@@ -308,7 +309,7 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `.`
 - branch: `main`
 - upstream: `origin/main`
-- head: `412ac64 docs: 补充异步ORM写响应规则`
+- head: `6f33e93 docs: 记录异步ORM加固上线`
 - uncommitted changes: `26`
 - status sample:
 
