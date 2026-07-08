@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 
 class V18InventoryPoolContractTest(unittest.TestCase):
@@ -669,12 +669,74 @@ class V18ProductDetailContractTest(unittest.TestCase):
     def test_admin_product_create_reloads_detail_before_serializing(self):
         from routers import products
 
+        module_source = inspect.getsource(products)
         source = inspect.getsource(products.create_product)
 
         self.assertIn("product_service.create_product", source)
-        self.assertIn("product_service.get_product_detail", source)
-        self.assertIn("ProductDetail.model_validate(product_detail)", source)
-        self.assertIn("resolve_product_detail_stock(product_detail)", source)
+        self.assertIn("_serialize_product_detail_after_write", module_source)
+        self.assertIn("detail = await _serialize_product_detail_after_write(db, product.id)", source)
+        self.assertNotIn("ProductDetail.model_validate(product)", source)
+        self.assertNotIn("resolve_product_detail_stock(product)", source)
+        self.assertIn("product_service.get_product_detail", module_source)
+        self.assertIn("ProductDetail.model_validate(product_detail)", module_source)
+        self.assertIn("resolve_product_detail_stock(product_detail)", module_source)
+
+    def test_admin_product_update_reloads_detail_before_serializing(self):
+        from routers import products
+
+        module_source = inspect.getsource(products)
+        source = inspect.getsource(products.update_product)
+
+        self.assertIn("product_service.update_product", source)
+        self.assertIn("_serialize_product_detail_after_write", module_source)
+        self.assertIn("detail = await _serialize_product_detail_after_write(db, product.id)", source)
+        self.assertNotIn("ProductDetail.model_validate(product)", source)
+        self.assertNotIn("resolve_product_detail_stock(product)", source)
+        self.assertIn("product_service.get_product_detail", module_source)
+        self.assertIn("ProductDetail.model_validate(product_detail)", module_source)
+        self.assertIn("resolve_product_detail_stock(product_detail)", module_source)
+
+    def test_admin_product_update_serializes_reloaded_product_not_write_result(self):
+        from routers import products
+
+        db = object()
+        request = SimpleNamespace(headers={"X-Site-Id": "1"})
+        admin = SimpleNamespace(id=8, site_id=1, role=SimpleNamespace(role_code="admin"))
+        body = SimpleNamespace(model_dump=lambda exclude_none=True: {"base_price": Decimal("9.90")})
+        existing_product = SimpleNamespace(id=31, site_id=1)
+        write_result_product = SimpleNamespace(id=31, site_id=1)
+        reloaded_product = SimpleNamespace(id=31, site_id=1)
+        detail_model = SimpleNamespace(model_copy=Mock(return_value={"id": 31, "stock": 7}))
+
+        get_detail = AsyncMock(side_effect=[existing_product, reloaded_product])
+        update_product = AsyncMock(return_value=write_result_product)
+
+        with patch.object(products.product_service, "get_product_detail", get_detail), \
+             patch.object(products.product_service, "update_product", update_product), \
+             patch.object(products.product_service, "resolve_product_detail_stock", return_value=7) as resolve_stock, \
+             patch.object(products.ProductDetail, "model_validate", return_value=detail_model) as model_validate:
+            response = asyncio.run(
+                products.update_product(
+                    product_id=31,
+                    body=body,
+                    request=request,
+                    db=db,
+                    admin=admin,
+                )
+            )
+
+        update_product.assert_awaited_once_with(
+            db,
+            31,
+            {"base_price": Decimal("9.90")},
+            operator_id=8,
+        )
+        self.assertEqual(get_detail.await_args_list[0].args, (db, 31))
+        self.assertEqual(get_detail.await_args_list[1].args, (db, 31))
+        model_validate.assert_called_once_with(reloaded_product)
+        resolve_stock.assert_called_once_with(reloaded_product)
+        detail_model.model_copy.assert_called_once_with(update={"stock": 7})
+        self.assertEqual(response.data, {"id": 31, "stock": 7})
 
 
 class V18MapAnalyticsContractTest(unittest.TestCase):

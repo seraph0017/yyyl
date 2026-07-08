@@ -77,6 +77,14 @@ def _parse_product_ids(ids: str | None) -> list[int] | None:
     return parsed or None
 
 
+async def _serialize_product_detail_after_write(db: AsyncSession, product_id: int) -> ProductDetail:
+    """写操作后重新加载完整详情再序列化，避免 async ORM 过期/懒加载触发 MissingGreenlet。"""
+    product_detail = await product_service.get_product_detail(db, product_id)
+    return ProductDetail.model_validate(product_detail).model_copy(
+        update={"stock": product_service.resolve_product_detail_stock(product_detail)}
+    )
+
+
 # ========== C端接口 ==========
 
 @router.get("/api/v1/products", summary="商品列表")
@@ -236,10 +244,7 @@ async def create_product(
     data = body.model_dump(exclude_none=True)
     data["site_id"] = site_id
     product = await product_service.create_product(db, data, operator_id=admin.id)
-    product_detail = await product_service.get_product_detail(db, product.id)
-    detail = ProductDetail.model_validate(product_detail).model_copy(
-        update={"stock": product_service.resolve_product_detail_stock(product_detail)}
-    )
+    detail = await _serialize_product_detail_after_write(db, product.id)
     return ResponseModel.success(data=detail, message="商品创建成功")
 
 
@@ -280,9 +285,7 @@ async def update_product(
         raise HTTPException(status_code=404, detail={"code": 40401, "message": "商品不存在"})
     data = body.model_dump(exclude_none=True)
     product = await product_service.update_product(db, product_id, data, operator_id=admin.id)
-    detail = ProductDetail.model_validate(product).model_copy(
-        update={"stock": product_service.resolve_product_detail_stock(product)}
-    )
+    detail = await _serialize_product_detail_after_write(db, product.id)
     return ResponseModel.success(data=detail, message="商品更新成功")
 
 
