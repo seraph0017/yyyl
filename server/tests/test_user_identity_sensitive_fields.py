@@ -34,6 +34,17 @@ class UserIdentitySensitiveFieldsTest(unittest.TestCase):
         self.assertEqual(response.id_card_masked, mask_id_card(normalized_id_card))
         self.assertEqual(response.phone, "138****8000")
 
+    def test_user_identity_constructor_accepts_virtual_id_card_keyword(self):
+        identity = UserIdentity(
+            user_id=1,
+            name="李四",
+            id_card="110101199001011234",
+            phone="13800138000",
+        )
+
+        self.assertIsNotNone(identity.id_card_encrypted)
+        self.assertEqual(identity.id_card, "110101199001011234")
+
     def test_clearing_id_card_clears_encrypted_and_hash_values(self):
         identity = UserIdentity(user_id=1, id_card="110101199001011234")
 

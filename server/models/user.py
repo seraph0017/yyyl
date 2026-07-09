@@ -216,6 +216,13 @@ class UserIdentity(Base):
         comment="默认出行人"
     )
 
+    def __init__(self, **kwargs):
+        """兼容 id_card 虚拟字段构造，避免路由创建出行人时报无效关键字。"""
+        id_card = kwargs.pop("id_card", None)
+        super().__init__(**kwargs)
+        if id_card is not None:
+            self.id_card = id_card
+
     @property
     def id_card(self) -> Optional[str]:
         """身份证明文虚拟字段，仅用于当前请求内写入/展示脱敏值。"""
