@@ -1,6 +1,6 @@
 # Current Project State
 
-Last updated: 2026-07-09 21:45:32 CST
+Last updated: 2026-07-09 21:59:57 CST
 
 <!--
 This file is the durable handoff snapshot for agents working in this repo.
@@ -80,6 +80,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-07-09 本轮验证：先补失败回归 `tests/test_user_identity_sensitive_fields.py::test_user_identity_encrypted_columns_have_alembic_migration`，确认缺迁移失败；补迁移后 `conda run -n yyyl python -m unittest tests/test_user_identity_sensitive_fields.py tests/test_v18_contracts.py -v` 96 tests OK；`cd uni-app && node --test tests/v18-product-flow.test.mjs` 48/48 OK；`conda run -n yyyl python -m py_compile alembic/versions/4d5e6f708192_v1_9_encrypt_user_identity_id_card.py` OK；`conda run -n yyyl alembic heads` 为单一 head `4d5e6f708192`。
 - 2026-07-09 已完成 `~/Downloads/新小程序需求及bug总结7月9日.docx` 全量开发与 bug 修复闭环：日期类商品必选日期、活动场次传递、出行人保存脱敏字段处理和身份证加密迁移、商品日历批量范围/离散日期/库存/价格调整、孤品库存固定 1、拍下即锁库存、GIF/伪装 GIF 拒绝、上传图片压缩、商品详情富文本/免责声明/商品介绍显示修复、营位成人包含人数和儿童免费年龄展示、高风险确认范围收敛到财务出账/敏感导出/批量删除类操作。
 - 2026-07-09 最终验证与分 agent 复审已达标：后端 focused 回归 `tests/test_admin_confirm_routes.py tests/test_user_identity_sensitive_fields.py tests/test_v18_contracts.py tests/test_temporary_order.py tests/test_inventory_calendar_service.py tests/test_image_variants.py -v` 共 150 tests OK；Admin `node --test tests/v18-admin-contract.test.mjs` 15/15 OK 且 `npm run build` OK（仅 Vite 大 chunk 警告）；小程序 `node --test tests/v18-product-flow.test.mjs` 48/48 OK 且 `npm run type-check` OK；`git diff --check` OK；三端只读复审均 APPROVED：后端 9.0/10、Admin 9.0/10、小程序 9.2/10，均无 Critical/High。
+- 2026-07-09 已将本轮后端和 Admin 上线到 `www.yyylcamp.com`：业务提交 `604fff2 fix: 修复7月9日小程序需求和下单问题` 已推送后，通过干净 `git archive` 同步到生产并清理历史 macOS `._*` 资源叉文件；生产数据库 Alembic 已升级到 `4d5e6f708192 (head)`。上线后发现出行人创建仍因 SQLAlchemy 构造器不接受虚拟字段 `id_card` 报错，已补热修提交 `8b6a130 fix: 兼容出行人身份证虚拟字段构造` 并重新发布 API。当前活跃 API 容器为 `yyyl-api-green` / `127.0.0.1:8002`，镜像 `yyyl-api:july9-identity-hotfix-20260709-8b6a130`；旧 `yyyl-api-blue` 已停止保留用于回滚，镜像 `yyyl-api:july9-orderfix-20260709-604fff2`。Admin 静态资源已发布到 `/www/server/nginx/html/`，线上 `/health`、商品列表和 Admin 首页均 200，发布后日志未见新的 `invalid keyword`/Traceback/Critical。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -313,51 +314,17 @@ ssh -i ~/.ssh/yyyl.pem -p 58422 root@49.235.185.226 \
 - path: `.`
 - branch: `main`
 - upstream: `origin/main`
-- head: `790b24c docs: 同步上线后交接快照`
-- uncommitted changes: `67`
+- head: `8b6a130 fix: 兼容出行人身份证虚拟字段构造`
+- uncommitted changes: `6`
 - status sample:
 
 ```text
- M CURRENT.md
- M admin/src/api/enterprise-wechat.ts
- M admin/src/api/expense.ts
- M admin/src/api/finance.ts
- M admin/src/api/inventory-pool.ts
- M admin/src/api/order.ts
- M admin/src/api/product.ts
- M admin/src/layout/index.vue
- M admin/src/router/index.ts
- M admin/src/types/index.ts
- M admin/src/types/inventory-pool.ts
- M admin/src/views/calendar/index.vue
- M admin/src/views/enterprise-wechat/index.vue
- M admin/src/views/expense/index.vue
- M admin/src/views/inventory-pools/index.vue
- M admin/src/views/orders/index.vue
- M admin/src/views/products/edit.vue
- M admin/src/views/system/settings.vue
- M admin/tests/v18-admin-contract.test.mjs
  M scripts/update-current.sh
- M server/models/product.py
- M server/models/user.py
- M server/routers/admin.py
- M server/routers/expenses.py
- M server/routers/finance.py
- M server/routers/orders.py
- M server/schemas/product.py
- M server/services/cms_service.py
- M server/services/finance_service.py
- M server/services/inventory_calendar_service.py
- M server/services/order_service.py
- M server/services/product_service.py
- M server/tests/test_admin_confirm_routes.py
- M server/tests/test_image_variants.py
- M server/tests/test_inventory_calendar_service.py
- M server/tests/test_temporary_order.py
- M server/tests/test_v18_contracts.py
- M server/utils/image_variants.py
- M uni-app/src/components/cms/CmsDivider.vue
- M uni-app/src/components/cms/CmsImage.vue
+?? findings.md
+?? output/
+?? progress.md
+?? task_plan.md
+?? tmp/
 ```
 
 ## Operating Rule
