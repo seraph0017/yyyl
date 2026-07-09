@@ -21,7 +21,7 @@
 
 - 生产 API 当前使用 `yyyl-api-blue` / `yyyl-api-green` 蓝绿方式；2026-07-09 最新后端/Admin 热修提交为 `8b6a130`（业务修复基于 `604fff2`），活跃容器是 `yyyl-api-green`，镜像为 `yyyl-api:july9-identity-hotfix-20260709-8b6a130`，Nginx upstream 指向 `127.0.0.1:8002`，数据库迁移为 `4d5e6f708192 (head)`。
 - Admin 静态资源部署在 `/www/server/nginx/html/`；2026-07-09 已随本轮下单/出行人修复发布。
-- 西郊小程序构建产物已于 2026-07-09 22:02 重新生成到 `uni-app/dist/build/mp-weixin-xijiao`，仍需在微信开发者工具上传；大聋谷如需同步发布，先重新构建 `uni-app/dist/build/mp-weixin-dalonggu`。
+- 西郊小程序构建产物已于 2026-07-09 22:02 重新生成到 `uni-app/dist/build/mp-weixin-xijiao`，并已由用户确认上传；审核/发布状态以微信小程序后台为准。大聋谷如需同步发布，先重新构建 `uni-app/dist/build/mp-weixin-dalonggu`。
 - 生产证书目录是 `/opt/yyyl/secure/wechat-pay`，容器需要只读挂载。
 - 生产 PostgreSQL/Redis 仍在 Docker 网络内，Podman API 容器使用 host 网络并通过 `--add-host postgresql:<docker-ip> --add-host redis:<docker-ip>` 解析。
 - 生产测试阶段已将商品、SKU、日期定价统一压到 `0.01` 元，便于验证完整支付流程。
