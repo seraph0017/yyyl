@@ -137,6 +137,7 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 - 2026-07-09 已完成 \`~/Downloads/新小程序需求及bug总结7月9日.docx\` 全量开发与 bug 修复闭环：日期类商品必选日期、活动场次传递、出行人保存脱敏字段处理和身份证加密迁移、商品日历批量范围/离散日期/库存/价格调整、孤品库存固定 1、拍下即锁库存、GIF/伪装 GIF 拒绝、上传图片压缩、商品详情富文本/免责声明/商品介绍显示修复、营位成人包含人数和儿童免费年龄展示、高风险确认范围收敛到财务出账/敏感导出/批量删除类操作。
 - 2026-07-09 最终验证与分 agent 复审已达标：后端 focused 回归 \`tests/test_admin_confirm_routes.py tests/test_user_identity_sensitive_fields.py tests/test_v18_contracts.py tests/test_temporary_order.py tests/test_inventory_calendar_service.py tests/test_image_variants.py -v\` 共 150 tests OK；Admin \`node --test tests/v18-admin-contract.test.mjs\` 15/15 OK 且 \`npm run build\` OK（仅 Vite 大 chunk 警告）；小程序 \`node --test tests/v18-product-flow.test.mjs\` 48/48 OK 且 \`npm run type-check\` OK；\`git diff --check\` OK；三端只读复审均 APPROVED：后端 9.0/10、Admin 9.0/10、小程序 9.2/10，均无 Critical/High。
 - 2026-07-09 已将本轮后端和 Admin 上线到 \`www.yyylcamp.com\`：业务提交 \`604fff2 fix: 修复7月9日小程序需求和下单问题\` 已推送后，通过干净 \`git archive\` 同步到生产并清理历史 macOS \`._*\` 资源叉文件；生产数据库 Alembic 已升级到 \`4d5e6f708192 (head)\`。上线后发现出行人创建仍因 SQLAlchemy 构造器不接受虚拟字段 \`id_card\` 报错，已补热修提交 \`8b6a130 fix: 兼容出行人身份证虚拟字段构造\` 并重新发布 API。当前活跃 API 容器为 \`yyyl-api-green\` / \`127.0.0.1:8002\`，镜像 \`yyyl-api:july9-identity-hotfix-20260709-8b6a130\`；旧 \`yyyl-api-blue\` 已停止保留用于回滚，镜像 \`yyyl-api:july9-orderfix-20260709-604fff2\`。Admin 静态资源已发布到 \`/www/server/nginx/html/\`，线上 \`/health\`、商品列表和 Admin 首页均 200，发布后日志未见新的 \`invalid keyword\`/Traceback/Critical。
+- 2026-07-09 22:02 已重新构建西郊小程序：\`cd uni-app && npm run build:wx:xijiao\` 成功，产物目录为 \`uni-app/dist/build/mp-weixin-xijiao\`；构建仅有 Sass deprecation warning，不影响上传。小程序上传仍需通过微信开发者工具完成。
 - 本地仍有若干历史未跟踪文件和输出目录。除非用户明确要求，不要清理或回滚它们。
 
 ## Practical Next Steps
@@ -149,8 +150,8 @@ Do not store secrets, DSNs with credentials, private keys, tokens, or passwords.
 6. 生产启用真实天气前，在 \`/opt/yyyl/server/.env\` 配置 \`CAIYUN_API_TOKEN\`；不要把 token 写入仓库或文档。
 7. v1.8 生产 API/Admin 已发布，后续重点做真实业务 smoke：共享库存池联动、退款库存幂等、现场收款、统一商品编辑器、营位日历批量库存、手机号授权登录、订单展示字段、购物车免责声明、智能客服知识库、企业微信群机器人日志脱敏和跨营地权限隔离。
 8. 图片优化生产 API/Admin 已发布；后续如通过 SSH、SFTP 或脚本手工放图到 \`/opt/yyyl/server/images/\`，仍需在当前活跃 API 容器执行 \`cd /app && python scripts/generate_image_variants.py --images-root /app/images\` 补齐派生图。
-9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，最新构建产物位于 \`uni-app/dist/build/mp-weixin-xijiao\` 和 \`uni-app/dist/build/mp-weixin-dalonggu\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
-10. 2026-07-06 后端/Admin 生产上线业务提交为 \`715576f feat: 修复新小程序需求并准备后端Admin上线\`；当前 Git head / upstream 以后文 Git Status Snapshot 为准。如需回看图片优化业务变更，相关提交仍是 \`4b92d69 feat: 优化图片派生图加载链路\`。
+9. 小程序上传仍待完成：本地微信开发者工具 CLI 位于 \`/Applications/wechatwebdevtools.app/Contents/MacOS/cli\`，西郊最新构建产物已于 2026-07-09 22:02 生成到 \`uni-app/dist/build/mp-weixin-xijiao\`，AppID 为 \`wx98ecb419c0a6aeb7\`。如需上传大聋谷，先执行 \`cd uni-app && npm run build:wx:dalonggu\` 重新生成 \`uni-app/dist/build/mp-weixin-dalonggu\`。如 CLI 要求登录/端口，需要用户打开并登录微信开发者工具。
+10. 2026-07-09 后端/Admin 生产上线业务提交为 \`604fff2 fix: 修复7月9日小程序需求和下单问题\`，当前生产热修提交为 \`8b6a130 fix: 兼容出行人身份证虚拟字段构造\`；当前 Git head / upstream 以后文 Git Status Snapshot 为准。如需回看图片优化业务变更，相关提交仍是 \`4b92d69 feat: 优化图片派生图加载链路\`。
 11. SSL 自动续期已配置，但建议在 2026-09-25 到期前复验 \`certbot renew --dry-run\`；若再次在二次校验阶段超时，检查腾讯云安全组/宝塔防火墙/线路策略对公网 TCP 80 的可达性。
 
 ## Production State
