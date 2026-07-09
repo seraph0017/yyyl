@@ -7,6 +7,8 @@ export type InventoryPoolBindingTargetType = 'product' | 'sku' | 'unsupported'
 export type InventorySource = 'inventory' | 'inventory_pool'
 export type InventoryCalendarSourceFilter = 'all' | InventorySource
 export type InventoryBatchMode = 'set_total' | 'adjust_total' | 'open' | 'close'
+export type InventoryBatchContent = 'inventory' | 'price' | 'both'
+export type InventoryBatchPriceMode = 'set_total' | 'adjust_total'
 export type InventoryPoolAdjustMode = 'set_total' | 'adjust_total' | 'set_status'
 
 export interface InventoryPool {
@@ -136,8 +138,12 @@ export interface InventoryBatchPayload {
   weekdays?: number[]
   time_slot?: string | null
   mode: InventoryBatchMode
+  adjust_inventory?: boolean
   total?: number
   delta?: number
+  price_mode?: InventoryBatchPriceMode
+  price_total?: number
+  price_delta?: number
   status?: 'open' | 'closed'
   create_missing?: boolean
   remark?: string
@@ -148,6 +154,8 @@ export interface InventoryBatchResponse {
   created_count: number
   updated_count: number
   skipped_count: number
+  price_created_count?: number
+  price_updated_count?: number
   errors: Array<{ product_id: number; sku_id?: number | null; date: string; message: string }>
 }
 

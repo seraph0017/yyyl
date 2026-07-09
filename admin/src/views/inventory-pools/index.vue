@@ -100,7 +100,7 @@
       </div>
         </el-tab-pane>
 
-        <el-tab-pane label="库存日历" name="calendar">
+        <el-tab-pane label="商品日历" name="calendar">
           <div class="calendar-toolbar">
             <div class="filter-bar">
               <el-date-picker
@@ -110,6 +110,7 @@
                 start-placeholder="开始日期"
                 end-placeholder="结束日期"
                 value-format="YYYY-MM-DD"
+                :shortcuts="batchDateShortcuts"
               />
               <el-select v-model="calendarSource" style="width: 150px">
                 <el-option label="全部来源" value="all" />
@@ -162,7 +163,7 @@
             <el-table-column label="商品 / SKU" fixed min-width="230">
               <template #default="{ row }">
                 <div class="calendar-row-title">{{ row.product_name }}</div>
-                <div class="text-secondary">{{ row.sku_name || row.sku_code || '商品库存' }}</div>
+                <div class="text-secondary">{{ formatCalendarRowSub(row) }}</div>
                 <el-tag size="small" :type="row.inventory_source === 'inventory_pool' ? 'warning' : 'success'" effect="plain">
                   {{ row.inventory_source === 'inventory_pool' ? '共享库存' : '普通库存' }}
                 </el-tag>
@@ -172,6 +173,8 @@
               v-for="day in calendarDates"
               :key="day"
               :label="formatCalendarColumn(day)"
+              :label-class-name="isToday(day) ? 'calendar-column--today' : ''"
+              :class-name="isToday(day) ? 'calendar-column--today' : ''"
               min-width="128"
               align="center"
             >
@@ -182,6 +185,7 @@
                   :class="[
                     row.cells[day].inventory_source === 'inventory_pool' ? 'calendar-cell--pool' : 'calendar-cell--inventory',
                     row.cells[day].status === 'closed' ? 'calendar-cell--closed' : '',
+                    isToday(day) ? 'calendar-cell--today' : '',
                   ]"
                   type="button"
                   @click="openCalendarCell(row.cells[day])"
@@ -364,47 +368,26 @@
       </template>
     </el-dialog>
 
-    <el-drawer v-model="batchDrawerVisible" title="批量调整库存" :size="batchDrawerSize" @closed="resetBatchForm">
+    <el-drawer v-model="batchDrawerVisible" title="批量调整商品日历" :size="batchDrawerSize" @closed="resetBatchForm">
       <el-form ref="batchFormRef" :model="batchForm" :rules="batchRules" label-width="104px">
-        <el-form-item label="调整目标" prop="target_type">
-          <el-radio-group v-model="batchTargetType" @change="clearBatchTarget">
-            <el-radio-button label="product">商品</el-radio-button>
-            <el-radio-button label="sku">SKU</el-radio-button>
+        <el-form-item label="调整目标">
+          <el-select v-model="batchForm.row_keys" multiple collapse-tags collapse-tags-tooltip filterable placeholder="请选择商品 / SKU 行" style="width: 100%">
+            <el-option
+              v-for="row in calendarRows"
+              :key="row.row_key"
+              :label="formatBatchTargetLabel(row)"
+              :value="row.row_key"
+            />
+          </el-select>
+          <div class="form-tip">可多选当前商品日历中的商品或 SKU 行；共享库存行仅支持批量调价，库存请在共享库存池中调整。</div>
+        </el-form-item>
+        <el-form-item label="日期" prop="date_range">
+          <el-radio-group v-model="batchDateMode" class="date-mode-toggle">
+            <el-radio-button label="range">日期范围</el-radio-button>
+            <el-radio-button label="dates">多选日期</el-radio-button>
           </el-radio-group>
-        </el-form-item>
-        <el-form-item label="商品" required>
-          <el-select
-            v-model="batchProductId"
-            filterable
-            remote
-            clearable
-            reserve-keyword
-            :remote-method="searchProducts"
-            :loading="productSearchLoading"
-            placeholder="搜索商品名称后选择"
-            style="width: 100%"
-            @change="handleBatchProductChange"
-          >
-            <el-option
-              v-for="item in productOptions"
-              :key="item.id"
-              :label="`${item.name} #${item.id}`"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="SKU" v-if="batchTargetType === 'sku'" required>
-          <el-select v-model="batchSkuId" clearable placeholder="请选择商品下的 SKU" style="width: 100%">
-            <el-option
-              v-for="item in batchSkuOptions"
-              :key="item.id"
-              :label="`${item.sku_name} #${item.id}`"
-              :value="item.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="日期范围" prop="date_range">
           <el-date-picker
+            v-if="batchDateMode === 'range'"
             v-model="batchDateRange"
             type="daterange"
             range-separator="至"
@@ -412,33 +395,65 @@
             end-placeholder="结束日期"
             value-format="YYYY-MM-DD"
             style="width: 100%"
+            :shortcuts="batchDateShortcuts"
+          />
+          <el-date-picker
+            v-else
+            v-model="batchSelectedDates"
+            type="dates"
+            placeholder="请选择一个或多个日期"
+            value-format="YYYY-MM-DD"
+            style="width: 100%"
           />
         </el-form-item>
-        <el-form-item label="星期">
+        <el-form-item v-if="batchDateMode === 'range'" label="星期">
           <el-checkbox-group v-model="batchForm.weekdays">
             <el-checkbox-button v-for="item in weekdayOptions" :key="item.value" :label="item.value">{{ item.label }}</el-checkbox-button>
           </el-checkbox-group>
         </el-form-item>
-        <el-form-item label="模式" prop="mode">
-          <el-radio-group v-model="batchForm.mode">
-            <el-radio-button label="set_total">设总量</el-radio-button>
-            <el-radio-button label="adjust_total">增减</el-radio-button>
-            <el-radio-button label="open">开启</el-radio-button>
-            <el-radio-button label="close">关闭</el-radio-button>
+        <el-form-item label="调整内容">
+          <el-radio-group v-model="batchForm.content">
+            <el-radio-button label="inventory">库存</el-radio-button>
+            <el-radio-button label="price">价格</el-radio-button>
+            <el-radio-button label="both">库存+价格</el-radio-button>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="batchForm.mode === 'set_total'" label="总库存">
-          <el-input-number v-model="batchForm.total" :min="0" controls-position="right" />
-        </el-form-item>
-        <el-form-item v-if="batchForm.mode === 'adjust_total'" label="调整量">
-          <el-input-number v-model="batchForm.delta" controls-position="right" />
-        </el-form-item>
-        <el-form-item v-if="batchForm.mode === 'set_total'" label="状态">
-          <el-radio-group v-model="batchForm.status">
-            <el-radio-button label="open">开启</el-radio-button>
-            <el-radio-button label="closed">关闭</el-radio-button>
-          </el-radio-group>
-        </el-form-item>
+        <template v-if="batchForm.content !== 'price'">
+          <el-form-item label="库存模式" prop="mode">
+            <el-radio-group v-model="batchForm.mode">
+              <el-radio-button label="set_total">设总量</el-radio-button>
+              <el-radio-button label="adjust_total">增减</el-radio-button>
+              <el-radio-button label="open">开启</el-radio-button>
+              <el-radio-button label="close">关闭</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="batchForm.mode === 'set_total'" label="总库存">
+            <el-input-number v-model="batchForm.total" :min="0" controls-position="right" />
+          </el-form-item>
+          <el-form-item v-if="batchForm.mode === 'adjust_total'" label="调整量">
+            <el-input-number v-model="batchForm.delta" controls-position="right" />
+          </el-form-item>
+          <el-form-item v-if="batchForm.mode === 'set_total'" label="状态">
+            <el-radio-group v-model="batchForm.status">
+              <el-radio-button label="open">开启</el-radio-button>
+              <el-radio-button label="closed">关闭</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+        </template>
+        <template v-if="batchForm.content !== 'inventory'">
+          <el-form-item label="价格模式">
+            <el-radio-group v-model="batchForm.price_mode">
+              <el-radio-button label="set_total">总价</el-radio-button>
+              <el-radio-button label="adjust_total">增减</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="batchForm.price_mode === 'set_total'" label="目标总价">
+            <el-input-number v-model="batchForm.price_total" :min="0" :precision="2" controls-position="right" />
+          </el-form-item>
+          <el-form-item v-if="batchForm.price_mode === 'adjust_total'" label="价格增减">
+            <el-input-number v-model="batchForm.price_delta" :precision="2" controls-position="right" />
+          </el-form-item>
+        </template>
         <el-form-item label="备注">
           <el-input v-model.trim="batchForm.remark" type="textarea" :rows="3" maxlength="120" show-word-limit />
         </el-form-item>
@@ -515,10 +530,10 @@ import {
 } from '@/api/inventory-pool'
 import { getProductDetail, getProducts } from '@/api/product'
 import { formatDateTime } from '@/utils'
-import { requestHighRiskConfirm } from '@/utils/high-risk-confirm'
 import type { Product, ProductSKU } from '@/types'
 import type {
   InventoryPool,
+  InventoryBatchContent,
   InventoryBatchPayload,
   InventoryCalendarCell,
   InventoryCalendarRow,
@@ -609,21 +624,22 @@ const calendarSkuOptions = computed<ProductSKU[]>(() => calendarProduct.value?.s
 const batchDrawerVisible = ref(false)
 const savingBatch = ref(false)
 const batchFormRef = ref<FormInstance>()
-const batchTargetType = ref<'product' | 'sku'>('product')
-const batchProductId = ref<number | undefined>()
-const batchSkuId = ref<number | undefined>()
+const batchDateMode = ref<'range' | 'dates'>('range')
 const batchDateRange = ref<[string, string]>([formatDate(today), formatDate(addDays(today, 13))])
-const batchForm = reactive<InventoryBatchPayload>({
-  mode: 'set_total',
+const batchSelectedDates = ref<string[]>([])
+const batchForm = reactive({
+  row_keys: [] as string[],
+  content: 'inventory' as InventoryBatchContent,
+  mode: 'set_total' as 'set_total' | 'adjust_total' | 'open' | 'close',
   total: 0,
   delta: 0,
-  status: 'open',
-  create_missing: true,
-  weekdays: [],
+  status: 'open' as 'open' | 'closed',
+  price_mode: 'set_total' as 'set_total' | 'adjust_total',
+  price_total: 0,
+  price_delta: 0,
+  weekdays: [] as number[],
   remark: '',
 })
-const batchProduct = computed(() => productOptions.value.find(item => item.id === batchProductId.value))
-const batchSkuOptions = computed<ProductSKU[]>(() => batchProduct.value?.skus || [])
 
 const calendarCellDrawerVisible = ref(false)
 const selectedCalendarCell = ref<InventoryCalendarCell | null>(null)
@@ -663,11 +679,11 @@ const calendarDates = computed(() => {
 const calendarRows = computed<CalendarTableRow[]>(() => {
   const rows = new Map<string, CalendarTableRow>()
   calendarRawRows.value.forEach(row => {
-    const rowKey = `${row.product_id}:${row.sku_id || 0}:${row.inventory_source}`
+    const rowKey = `${row.product_id}:${row.sku_id || 0}:${row.time_slot || ''}:${row.inventory_source}`
     rows.set(rowKey, { ...row, row_key: rowKey, cells: {} })
   })
   calendarCells.value.forEach(cell => {
-    const rowKey = `${cell.product_id}:${cell.sku_id || 0}:${cell.inventory_source}`
+    const rowKey = `${cell.product_id}:${cell.sku_id || 0}:${cell.time_slot || ''}:${cell.inventory_source}`
     if (!rows.has(rowKey)) {
       rows.set(rowKey, {
         row_key: rowKey,
@@ -676,6 +692,7 @@ const calendarRows = computed<CalendarTableRow[]>(() => {
         sku_id: cell.sku_id,
         sku_code: cell.sku_code,
         sku_name: cell.sku_name,
+        time_slot: cell.time_slot || null,
         inventory_source: cell.inventory_source,
         inventory_pool_id: cell.inventory_pool_id,
         inventory_pool_code: cell.inventory_pool_code,
@@ -732,9 +749,45 @@ function formatDate(value: Date) {
   return `${year}-${month}-${day}`
 }
 
+const batchDateShortcuts = [
+  { text: '最近一个月', value: () => buildRecentRange(1, 'month') },
+  { text: '最近三个月', value: () => buildRecentRange(3, 'month') },
+  { text: '最近半年', value: () => buildRecentRange(6, 'month') },
+  { text: '最近一年', value: () => buildRecentRange(1, 'year') },
+]
+
+function isToday(value: string): boolean {
+  return value === formatDate(new Date())
+}
+
+function buildRecentRange(amount: number, unit: 'month' | 'year'): [Date, Date] {
+  const start = new Date()
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  if (unit === 'month') {
+    end.setMonth(end.getMonth() + amount)
+  } else {
+    end.setFullYear(end.getFullYear() + amount)
+  }
+  end.setDate(end.getDate() - 1)
+  return [start, end]
+}
+
 function formatCalendarColumn(value: string) {
   const day = new Date(`${value}T00:00:00`)
-  return `${day.getMonth() + 1}/${day.getDate()}`
+  const label = `${day.getMonth() + 1}/${day.getDate()}`
+  return isToday(value) ? `今天 ${label}` : label
+}
+
+function formatCalendarRowSub(row: CalendarTableRow): string {
+  const parts = [row.sku_name || row.sku_code, row.time_slot ? `场次 ${row.time_slot}` : ''].filter(Boolean)
+  return parts.join(' · ') || '商品库存'
+}
+
+function formatBatchTargetLabel(row: CalendarTableRow): string {
+  const suffix = formatCalendarRowSub(row)
+  const source = row.inventory_source === 'inventory_pool' ? '共享库存' : '普通库存'
+  return `${row.product_name} #${row.product_id}${suffix ? ` · ${suffix}` : ''} · ${source}`
 }
 
 function handleTabChange(name: string | number) {
@@ -774,7 +827,7 @@ async function fetchPools() {
 
 async function fetchCalendar() {
   if (!calendarDateRange.value?.[0] || !calendarDateRange.value?.[1]) {
-    ElMessage.error('请选择库存日历日期范围')
+    ElMessage.error('请选择商品日历日期范围')
     return
   }
   calendarLoading.value = true
@@ -862,18 +915,17 @@ async function savePool() {
       sold: 0,
       status: 'active' as const,
     }
-  let confirmToken = ''
   try {
-    confirmToken = await requestHighRiskConfirm(action, quantityChange, payload)
+    await ElMessageBox.confirm(quantityChange, '共享库存保存确认', { type: 'warning' })
   } catch {
     return
   }
   savingPool.value = true
   try {
     if (editingPool.value) {
-      await updateInventoryPool(editingPool.value.id, payload, confirmToken)
+      await updateInventoryPool(editingPool.value.id, payload)
     } else {
-      await createInventoryPool(payload as InventoryPoolPayload, confirmToken)
+      await createInventoryPool(payload as InventoryPoolPayload)
     }
     ElMessage.success('库存池已保存')
     poolDialogVisible.value = false
@@ -894,18 +946,8 @@ async function togglePoolStatus(row: InventoryPool) {
   } catch {
     return
   }
-  let confirmToken = ''
   const payload: InventoryPoolAdjustPayload = { mode: 'set_status', status }
-  try {
-    confirmToken = await requestHighRiskConfirm(
-      `inventory_pool:adjust:${row.id}`,
-      `确认${status === 'active' ? '启用' : '停用'}库存池「${row.name}」？该操作会影响所有显式绑定商品/SKU。`,
-      payload,
-    )
-  } catch {
-    return
-  }
-  await adjustInventoryPool(row.id, payload, confirmToken)
+  await adjustInventoryPool(row.id, payload)
   ElMessage.success(status === 'active' ? '库存池已启用' : '库存池已停用')
   fetchPools()
 }
@@ -1036,13 +1078,6 @@ async function handleCalendarProductChange() {
   }
 }
 
-async function handleBatchProductChange() {
-  batchSkuId.value = undefined
-  if (batchProductId.value) {
-    await loadSelectedProductDetail(batchProductId.value)
-  }
-}
-
 async function loadSelectedProductDetail(productId: number) {
   const current = productOptions.value.find(item => item.id === productId)
   if (current?.skus && current.skus.length > 0) return
@@ -1096,25 +1131,13 @@ async function saveBinding() {
   } catch {
     return
   }
-  const action = editingBinding.value
-    ? `inventory_pool_binding:update:${editingBinding.value.id}`
-    : `inventory_pool_binding:create:${selectedPool.value.id}`
-  let confirmToken = ''
-  try {
-    confirmToken = await requestHighRiskConfirm(
-      action,
-      `确认保存共享库存绑定「${targetLabel}」？保存后该目标会共用库存池库存。`,
-      payload,
-    )
-  } catch {
-    return
-  }
+
   savingBinding.value = true
   try {
     if (editingBinding.value) {
-      await updateInventoryPoolBinding(editingBinding.value.id, payload, confirmToken)
+      await updateInventoryPoolBinding(editingBinding.value.id, payload)
     } else {
-      await createInventoryPoolBinding(selectedPool.value.id, payload, confirmToken)
+      await createInventoryPoolBinding(selectedPool.value.id, payload)
     }
     ElMessage.success('绑定关系已保存')
     bindingDialogVisible.value = false
@@ -1136,17 +1159,7 @@ async function toggleBindingStatus(row: InventoryPoolBinding) {
   } catch {
     return
   }
-  let confirmToken = ''
-  try {
-    confirmToken = await requestHighRiskConfirm(
-      `inventory_pool_binding:update:${row.id}`,
-      `确认${status === 'active' ? '启用' : '停用'}该共享库存绑定？`,
-      { status },
-    )
-  } catch {
-    return
-  }
-  await updateInventoryPoolBinding(row.id, { status }, confirmToken)
+  await updateInventoryPoolBinding(row.id, { status })
   ElMessage.success(status === 'active' ? '绑定已启用' : '绑定已停用')
   fetchBindings()
   fetchPools()
@@ -1154,79 +1167,128 @@ async function toggleBindingStatus(row: InventoryPoolBinding) {
 
 function openBatchDrawer() {
   batchDrawerVisible.value = true
-  batchTargetType.value = calendarSkuId.value ? 'sku' : 'product'
-  batchProductId.value = calendarProductId.value
-  batchSkuId.value = calendarSkuId.value
+  batchDateMode.value = 'range'
   batchDateRange.value = [...calendarDateRange.value]
-  if (batchProductId.value) {
-    loadSelectedProductDetail(batchProductId.value)
-  }
+  batchSelectedDates.value = []
+  batchForm.row_keys = calendarRows.value
+    .filter(row => {
+      if (calendarProductId.value && row.product_id !== calendarProductId.value) return false
+      if (calendarSkuId.value && row.sku_id !== calendarSkuId.value) return false
+      return true
+    })
+    .map(row => row.row_key)
 }
 
 function resetBatchForm() {
-  batchTargetType.value = 'product'
-  batchProductId.value = undefined
-  batchSkuId.value = undefined
+  batchDateMode.value = 'range'
   batchDateRange.value = [...calendarDateRange.value]
+  batchSelectedDates.value = []
   Object.assign(batchForm, {
+    row_keys: [],
+    content: 'inventory',
     mode: 'set_total',
     total: 0,
     delta: 0,
     status: 'open',
-    create_missing: true,
+    price_mode: 'set_total',
+    price_total: 0,
+    price_delta: 0,
     weekdays: [],
     remark: '',
   })
   batchFormRef.value?.clearValidate()
 }
 
-function clearBatchTarget() {
-  batchProductId.value = undefined
-  batchSkuId.value = undefined
-}
-
 function buildBatchPayload(): InventoryBatchPayload | null {
-  if (!batchProductId.value && batchTargetType.value === 'product') {
-    ElMessage.error('请选择要调整的商品')
+  const selectedTargets = calendarRows.value.filter(row => batchForm.row_keys.includes(row.row_key))
+  if (!selectedTargets.length) {
+    ElMessage.error('请选择要调整的商品 / SKU 行')
     return null
   }
-  if (batchTargetType.value === 'sku' && !batchSkuId.value) {
-    ElMessage.error('请选择要调整的 SKU')
-    return null
-  }
-  if (!batchDateRange.value?.[0] || !batchDateRange.value?.[1]) {
+  if (batchDateMode.value === 'range' && (!batchDateRange.value?.[0] || !batchDateRange.value?.[1])) {
     ElMessage.error('请选择日期范围')
     return null
   }
+  if (batchDateMode.value === 'dates' && batchSelectedDates.value.length === 0) {
+    ElMessage.error('请选择需要调整的日期')
+    return null
+  }
+  const hasSharedTargets = selectedTargets.some(row => row.inventory_source === 'inventory_pool')
+  if (batchForm.content !== 'price' && hasSharedTargets) {
+    ElMessage.error('共享库存行请在库存池中调整库存；如需批量改价请选择“价格”')
+    return null
+  }
+  const skuIds = Array.from(new Set(selectedTargets.map(row => row.sku_id).filter((id): id is number => !!id)))
+  const hasSkuTargets = skuIds.length > 0
+  const hasProductLevelTargets = selectedTargets.some(row => !row.sku_id)
+  if (hasSkuTargets && hasProductLevelTargets) {
+    ElMessage.error('商品级行和 SKU 行不能混选，请分开批量调整')
+    return null
+  }
+  if (batchForm.content !== 'inventory' && hasSkuTargets) {
+    ElMessage.error('SKU 价格优先，批量调价请选择商品级行')
+    return null
+  }
+  const timeSlots = Array.from(new Set(selectedTargets.map(row => row.time_slot || '').filter(Boolean)))
+  if (timeSlots.length > 1) {
+    ElMessage.error('多选批量调整暂不支持混合多个活动场次')
+    return null
+  }
   const batchPayload: InventoryBatchPayload = {
-    date_start: batchDateRange.value[0],
-    date_end: batchDateRange.value[1],
-    mode: batchForm.mode,
+    product_ids: Array.from(new Set(selectedTargets.map(row => row.product_id))),
+    mode: batchForm.content === 'price' ? 'open' : batchForm.mode,
+    adjust_inventory: batchForm.content !== 'price',
     create_missing: true,
   }
-  if (batchForm.weekdays?.length) {
+  if (batchDateMode.value === 'dates') {
+    batchPayload.dates = [...batchSelectedDates.value]
+  } else {
+    batchPayload.date_start = batchDateRange.value[0]
+    batchPayload.date_end = batchDateRange.value[1]
+  }
+  if (batchDateMode.value === 'range' && batchForm.weekdays?.length) {
     batchPayload.weekdays = [...batchForm.weekdays]
+  }
+  if (hasSkuTargets) {
+    batchPayload.sku_ids = skuIds
+  }
+  if (timeSlots[0]) {
+    batchPayload.time_slot = timeSlots[0]
   }
   const remark = batchForm.remark?.trim()
   if (remark) {
     batchPayload.remark = remark
   }
-  if (batchTargetType.value === 'sku') {
-    batchPayload.sku_ids = [batchSkuId.value!]
-  } else {
-    batchPayload.product_ids = [batchProductId.value!]
+  if (batchForm.content !== 'price') {
+    if (batchForm.mode === 'adjust_total') {
+      batchPayload.delta = batchForm.delta || 0
+    } else if (batchForm.mode === 'set_total') {
+      batchPayload.total = batchForm.total || 0
+      batchPayload.status = batchForm.status
+    } else if (batchForm.mode === 'open') {
+      batchPayload.status = 'open'
+    } else if (batchForm.mode === 'close') {
+      batchPayload.status = 'closed'
+    }
   }
-  if (batchForm.mode === 'adjust_total') {
-    batchPayload.delta = batchForm.delta || 0
-  } else if (batchForm.mode === 'set_total') {
-    batchPayload.total = batchForm.total || 0
-    batchPayload.status = batchForm.status
-  } else if (batchForm.mode === 'open') {
-    batchPayload.status = 'open'
-  } else if (batchForm.mode === 'close') {
-    batchPayload.status = 'closed'
+  if (batchForm.content !== 'inventory') {
+    batchPayload.price_mode = batchForm.price_mode
+    if (batchForm.price_mode === 'set_total') {
+      batchPayload.price_total = batchForm.price_total || 0
+    } else {
+      batchPayload.price_delta = batchForm.price_delta || 0
+    }
   }
   return batchPayload
+}
+
+function getBatchDateSummary(): string {
+  if (batchDateMode.value === 'dates') {
+    const sortedDates = [...batchSelectedDates.value].sort()
+    if (sortedDates.length <= 3) return sortedDates.join('、')
+    return `${sortedDates.slice(0, 3).join('、')} 等 ${sortedDates.length} 天`
+  }
+  return `${batchDateRange.value[0]} 至 ${batchDateRange.value[1]}`
 }
 
 async function saveBatchInventory() {
@@ -1235,19 +1297,18 @@ async function saveBatchInventory() {
   const batchPayload = buildBatchPayload()
   if (!batchPayload) return
   const batchFormPayload = { ...batchPayload }
-  let confirmToken = ''
   try {
-    confirmToken = await requestHighRiskConfirm('inventory:batch-upsert',
-      `确认批量调整 ${batchDateRange.value[0]} 至 ${batchDateRange.value[1]} 的库存日历？`,
-      batchFormPayload,
-    )
+    await ElMessageBox.confirm(`确认批量调整 ${getBatchDateSummary()} 的商品日历？`, '商品日历批量调整确认', { type: 'warning' })
   } catch {
     return
   }
   savingBatch.value = true
   try {
-    const res = await batchUpdateInventoryCalendar(batchFormPayload, confirmToken)
-    ElMessage.success(`已创建 ${res.data.created_count} 条，更新 ${res.data.updated_count} 条`)
+    const res = await batchUpdateInventoryCalendar(batchFormPayload)
+    const priceText = res.data.price_created_count || res.data.price_updated_count
+      ? `，价格新增 ${res.data.price_created_count || 0} 条、更新 ${res.data.price_updated_count || 0} 条`
+      : ''
+    ElMessage.success(`库存创建 ${res.data.created_count} 条、更新 ${res.data.updated_count} 条${priceText}`)
     batchDrawerVisible.value = false
     fetchCalendar()
     fetchPools()
@@ -1289,19 +1350,14 @@ async function savePoolAdjust() {
   if (poolAdjustForm.mode === 'adjust_total') {
     payload.delta = poolAdjustForm.delta || 0
   }
-  let confirmToken = ''
   try {
-    confirmToken = await requestHighRiskConfirm(
-      `inventory_pool:adjust:${selectedCalendarPool.id}`,
-      `确认调整共享库存池「${selectedCalendarPool.name || selectedCalendarPool.pool_code}」？`,
-      payload,
-    )
+    await ElMessageBox.confirm(`确认调整共享库存池「${selectedCalendarPool.name || selectedCalendarPool.pool_code}」？`, '共享库存调整确认', { type: 'warning' })
   } catch {
     return
   }
   savingPoolAdjust.value = true
   try {
-    await adjustInventoryPool(selectedCalendarPool.id, payload, confirmToken)
+    await adjustInventoryPool(selectedCalendarPool.id, payload)
     ElMessage.success('共享库存池已调整')
     calendarCellDrawerVisible.value = false
     fetchCalendar()
@@ -1512,6 +1568,17 @@ onMounted(() => {
     background: rgba(154, 160, 166, 0.09);
     color: var(--color-text-secondary);
   }
+
+  &--today {
+    border-color: #4080ff;
+    box-shadow: inset 0 0 0 1px rgba(64, 128, 255, 0.32);
+  }
+}
+
+:deep(.calendar-column--today) {
+  background: #e8f3ff !important;
+  color: #1d4ed8;
+  font-weight: 700;
 }
 
 .cell-detail {

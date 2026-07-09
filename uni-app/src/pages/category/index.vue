@@ -159,6 +159,8 @@ function mapProductItem(item: Record<string, unknown>): IProduct {
     has_disclaimer: true,
     identity_mode: 'optional',
     deposit_amount: 0,
+    ext_shop: item.ext_shop as IProduct['ext_shop'],
+    ext_activity: item.ext_activity as IProduct['ext_activity'],
   }
 }
 

@@ -2,10 +2,10 @@
   <view
     class="cms-divider"
     :style="{
-      borderTopStyle: data.line_style || 'solid',
+      borderTopStyle: data.line_style || data.style || 'solid',
       borderTopColor: data.color || 'rgba(42, 37, 32, 0.08)',
-      marginLeft: (data.margin_horizontal || 28) + 'rpx',
-      marginRight: (data.margin_horizontal || 28) + 'rpx',
+      marginLeft: (data.margin_horizontal ?? data.margin ?? 28) + 'rpx',
+      marginRight: (data.margin_horizontal ?? data.margin ?? 28) + 'rpx',
     }"
   />
 </template>

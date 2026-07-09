@@ -54,6 +54,16 @@ class ImageVariantsTest(unittest.TestCase):
             remove_image_variants(source, images_root=images_root)
             self.assertFalse(thumb.exists())
 
+    def test_disguised_gif_is_rejected_by_content_format(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            source = Path(tmpdir) / "fake.jpg"
+            Image.new("RGB", (20, 20), color=(10, 80, 50)).save(source, format="GIF")
+
+            with self.assertRaises(ImageVariantError) as ctx:
+                inspect_image_size(source)
+
+            self.assertIn("GIF", str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,8 +8,13 @@ import QrCode from 'qrcode-reader'
 
 const productDetailPath = new URL('../src/pages/product-detail/index.vue', import.meta.url)
 const orderConfirmPath = new URL('../src/pages/order-confirm/index.vue', import.meta.url)
+const identityPath = new URL('../src/pages/identity/index.vue', import.meta.url)
+const addressPath = new URL('../src/pages/address/index.vue', import.meta.url)
+const orderPath = new URL('../src/pages/order/index.vue', import.meta.url)
+const orderDetailPath = new URL('../src/pages/order-detail/index.vue', import.meta.url)
 const cartPath = new URL('../src/pages/cart/index.vue', import.meta.url)
 const memberPath = new URL('../src/pages/member/index.vue', import.meta.url)
+const minePath = new URL('../src/pages/mine/index.vue', import.meta.url)
 const authPath = new URL('../src/utils/auth.ts', import.meta.url)
 const typesPath = new URL('../src/types/index.ts', import.meta.url)
 const campMapPath = new URL('../src/pages-sub/product/camp-map/index.vue', import.meta.url)
@@ -22,6 +27,15 @@ const customerServicePath = new URL('../src/pages/customer-service/index.vue', i
 const defaultHomePagePath = new URL('../src/components/default-home-page/index.vue', import.meta.url)
 const weatherCardPath = new URL('../src/components/weather-card/index.vue', import.meta.url)
 const requestUtilPath = new URL('../src/utils/request.ts', import.meta.url)
+const productRulesPath = new URL('../src/utils/product-rules.ts', import.meta.url)
+const cmsImagePath = new URL('../src/components/cms/CmsImage.vue', import.meta.url)
+const cmsImageTextPath = new URL('../src/components/cms/CmsImageText.vue', import.meta.url)
+const cmsProductListPath = new URL('../src/components/cms/CmsProductList.vue', import.meta.url)
+const cmsNoticePath = new URL('../src/components/cms/CmsNotice.vue', import.meta.url)
+const cmsNavPath = new URL('../src/components/cms/CmsNav.vue', import.meta.url)
+const cmsDividerPath = new URL('../src/components/cms/CmsDivider.vue', import.meta.url)
+const cmsLinkPath = new URL('../src/utils/cms-link.ts', import.meta.url)
+const cmsTypesPath = new URL('../src/types/cms.ts', import.meta.url)
 
 test('product detail no longer uses fake calendar stock or fixed camping prices', async () => {
   const source = await readFile(productDetailPath, 'utf8')
@@ -32,6 +46,17 @@ test('product detail no longer uses fake calendar stock or fixed camping prices'
   assert.match(source, /selectedSkuId\.value \? \{ sku_id: selectedSkuId\.value \} : \{\}/, '价格日历请求应携带已选 SKU，支持 SKU 级共享库存')
   assert.match(source, /validateSelectedDateRange/, '商品详情页应逐日校验选择范围内库存')
   assert.match(source, /getCalendarPriceForDate/, '商品详情页合计价应基于价格日历映射')
+})
+
+test('product detail can resolve legacy product qrcode scene directly', async () => {
+  const source = await readFile(productDetailPath, 'utf8')
+
+  assert.match(source, /options\?\.scene/, '商品详情页应识别小程序码 scene 参数')
+  assert.match(source, /safeDecodeQrcodeScene/, '商品详情页应安全解码 scene')
+  assert.match(source, /resolveQrcode\(scene\)/, '旧码直达商品详情页时应调用二维码解析接口')
+  assert.match(source, /saveQrcodeAttribution\(data\)/, '扫码进入商品详情仍应保存来源归因')
+  assert.match(source, /data\.target_type === 'product' \|\| data\.target_type === 'activity_product'/, '商品二维码应按目标类型加载商品')
+  assert.match(source, /await loadProduct\(productId\)/, '解析到商品 ID 后应直接加载对应商品，而不是回退默认商品')
 })
 
 test('order confirm must call backend quote before submit', async () => {
@@ -115,14 +140,25 @@ test('product detail uses product-aware price unit and has stable sku option sty
 
 test('camping sku selection is driven by calendar stock instead of static sku stock', async () => {
   const source = await readFile(productDetailPath, 'utf8')
+  const types = await readFile(typesPath, 'utf8')
+  const orderConfirmSource = await readFile(orderConfirmPath, 'utf8')
 
   assert.match(source, /isSkuOptionDisabled/, '商品详情应集中判断 SKU 是否禁用')
   assert.match(source, /sku\.status !== 'active'/, '下架 SKU 应禁用，避免选中后价格日历静默失败')
-  assert.match(source, /isRetailProduct\(product\.value\?\.category\)[\s\S]*sku\.stock <= 0/, '仅零售商品应按 SKU 静态库存禁用规格')
+  assert.match(source, /getSkuAvailableStock\(sku,\s*product\.value \|\| undefined\) <= 0/, 'SKU 禁用应优先使用当前可用库存')
   assert.match(source, /isSkuOptionDisabled\(sku\)/, '模板和点击逻辑应复用 SKU 禁用判断')
   assert.match(source, /selectedSku\.value && isSkuOptionDisabled\(selectedSku\.value\)/, '立即预定前应拦截售罄或停用 SKU')
   assert.match(source, /isRetailProduct\(p\.category\) && p\.stock <= 0/, '零售商品售罄时不应进入下单链路')
   assert.doesNotMatch(source, /!sku \|\| sku\.stock <= 0/, '营位商品不应因静态 SKU stock=0 阻止切换规格')
+  assert.match(types, /inventory_mode\?:\s*'independent' \| 'shared_product' \| string/, '小程序 SKU 类型应声明库存模式')
+  assert.match(types, /inventory_pool_id\?:\s*number \| null/, '小程序 SKU 类型应声明共享库存池 ID')
+  assert.match(types, /inventory_pool_available\?:\s*number \| null/, '小程序 SKU 类型应声明共享池可用库存')
+  assert.match(source, /inventory_mode:\s*sku\.inventory_mode \|\| 'independent'/, '商品详情应保留后端 SKU 库存模式')
+  assert.match(source, /inventory_pool_available:\s*sku\.inventory_pool_available \?\? null/, '商品详情应保留共享池可用库存')
+  assert.match(source, /function getSkuAvailableStock/, '商品详情应集中计算 SKU 当前可用库存')
+  assert.match(source, /inventory_pool_available \?\? fallbackProduct\?\.stock \?\? sku\.stock/, '共享 SKU 应优先使用共享池库存，缺失时才回退')
+  assert.match(orderConfirmSource, /resolveSkuAvailableStock\(selectedSku,\s*Number\(raw\.stock \|\| 0\)\)/, '订单确认页直购应使用共享 SKU 可用库存')
+  assert.match(orderConfirmSource, /sku\.inventory_mode === 'shared_product' \|\| sku\.inventory_pool_id/, '订单确认页应识别共享库存 SKU')
 })
 
 test('order confirm submit disables request-layer toast for quote and submit errors', async () => {
@@ -134,6 +170,33 @@ test('order confirm submit disables request-layer toast for quote and submit err
   assert.match(source, /encodeURIComponent\(orderDetail\.order_no \|\| checkout\.order_no\)/, '购物车单订单支付跳转应编码订单号')
   assert.match(source, /encodeURIComponent\(result\.order_no\)/, '直购支付跳转应编码订单号')
   assert.match(source, /p && isRetailProduct\(p\.category\) && p\.stock <= 0/, '订单确认页提交前应兜底拦截售罄零售商品')
+})
+
+test('date booking products must choose a date before next step and submit', async () => {
+  const productSource = await readFile(productDetailPath, 'utf8')
+  const confirmSource = await readFile(orderConfirmPath, 'utf8')
+  const rulesSource = await readFile(productRulesPath, 'utf8')
+
+  assert.match(rulesSource, /category === 'equipment_rental'/, '装备租赁也属于必须选择日期的预订商品')
+  const onBookBody = productSource.slice(productSource.indexOf('function onBook()'), productSource.indexOf('/** 联系客服 */'))
+  assert.match(onBookBody, /isDateBookingProduct\(p\.category\) && selectedDates\.value\.length === 0[\s\S]*请先选择日期/, '详情页下一步前必须先选择日期')
+  assert.ok(onBookBody.indexOf('selectedDates.value.length === 0') < onBookBody.indexOf('uni.navigateTo'), '日期必选校验必须发生在跳转订单确认页之前')
+  assert.match(confirmSource, /isDateBookingProduct\(p\.category\) && dates\.value\.length === 0[\s\S]*请选择预约日期/, '确认页提交前必须兜底校验预约日期')
+  assert.match(confirmSource, /isDateBookingProduct\(product\.value\.category\) && dates\.value\.length === 0[\s\S]*return null/, '报价前无日期时不应调用报价接口')
+})
+
+test('identity form handles masked server fields without resubmitting asterisks', async () => {
+  const identitySource = await readFile(identityPath, 'utf8')
+  const confirmSource = await readFile(orderConfirmPath, 'utf8')
+
+  assert.match(identitySource, /id_card_masked/, '出行人列表应消费后端身份证脱敏字段')
+  assert.match(identitySource, /formData\.id_card = isMaskedValue\(item\.id_card\) \? '' : \(item\.id_card \|\| ''\)/, '编辑时不应把带星号的身份证回填提交')
+  assert.match(identitySource, /请重新输入完整身份证号/, '编辑脱敏身份证时应提示重新输入完整号码')
+  assert.match(identitySource, /if \(!editingId\.value \|\| formData\.id_card\)/, '新增出行人必须填写身份证；编辑时未重填身份证不应阻塞保存')
+  assert.match(identitySource, /if \(formData\.id_card\) payload\.id_card = formData\.id_card/, '编辑出行人时只有重新输入完整身份证才提交 id_card')
+  assert.match(identitySource, /if \(formData\.phone\) payload\.phone = formData\.phone/, '编辑出行人时只有重新输入完整手机号才提交 phone')
+  assert.match(confirmSource, /id_card_masked/, '订单确认页选择出行人时应展示后端脱敏身份证')
+  assert.match(confirmSource, /await loadIdentities\(\)/, '从出行人页返回订单确认页后应刷新出行人列表')
 })
 
 test('order confirm initial quote errors are shown once with backend message', async () => {
@@ -159,6 +222,47 @@ test('direct order confirm shows real product image and sku spec instead of camp
   assert.match(source, /directProductImage/, '直购确认页应展示商品或 SKU 图片')
   assert.match(source, /selectedSkuLabel/, '直购确认页应展示已选 SKU 规格')
   assert.match(source, /resolveProductImage|resolveImageUrl/, '直购确认页应解析后端商品图片')
+})
+
+test('activity booking selects time slot and submits it through quote and order payload', async () => {
+  const productSource = await readFile(productDetailPath, 'utf8')
+  const confirmSource = await readFile(orderConfirmPath, 'utf8')
+
+  assert.match(productSource, /isActivityProduct/, '商品详情应识别活动类商品')
+  assert.match(productSource, /isDateBookingProduct/, '活动和营位应共用日期预订判断')
+  assert.match(productSource, /v-if="isDateBookingProduct\(product\.category\)"/, '活动商品也应展示日期选择')
+  assert.match(productSource, /if \(isDateBookingProduct\(p\.category\)\)[\s\S]*loadPriceCalendarForCurrentMonth/, '活动商品也应加载价格库存日历')
+  assert.match(productSource, /isDateBookingProduct\(p\.category\) && selectedDates\.value\.length === 0/, '活动下单前应要求选择预约日期')
+  assert.match(productSource, /const dateQuery = isDateBookingProduct\(p\.category\) \? selectedDates\.value\.join\(','\) : ''/, '活动跳转确认页时应携带预约日期')
+  assert.match(productSource, /activitySlotOptions/, '商品详情应将活动 time_slots 映射成可选场次')
+  assert.match(productSource, /selectedActivitySlot/, '商品详情应维护已选活动场次')
+  assert.match(productSource, /请选择预约时间/, '活动有多个场次时应要求用户选择预约时间')
+  assert.match(productSource, /time_slot=\$\{encodeURIComponent\(selectedActivitySlot\.value\)\}/, '跳转确认页时应携带编码后的 time_slot')
+
+  assert.match(confirmSource, /activityTimeSlot/, '订单确认页应维护直购活动场次')
+  assert.match(confirmSource, /options\?\.time_slot/, '订单确认页应读取详情页传入的 time_slot')
+  assert.match(confirmSource, /预约时间：\{\{ activityTimeSlot \}\}/, '订单确认页应展示活动预约时间')
+  assert.match(confirmSource, /dates:\s*isDateBookingProduct\(p\.category\) \? dates\.value : \[\]/, '订单确认页应给活动和营位提交预约日期')
+  assert.match(confirmSource, /if \(!isDateBookingProduct\(p\.category\)\)[\s\S]*dates\.value = \[\]/, '订单确认页加载活动商品后不应清空详情页传入的预约日期')
+  assert.doesNotMatch(confirmSource, /if \(!isCampsiteProduct\(p\.category\)\)[\s\S]{0,80}dates\.value = \[\]/, '订单确认页不应把活动商品当作无日期商品清空 dates')
+  assert.match(confirmSource, /item\.time_slot = activityTimeSlot\.value/, '报价和提交订单 payload 应携带活动 time_slot')
+  assert.match(productSource, /isActivityProduct\(product\.value\?\.category\)[\s\S]*selectedDates\.value = \[date\]/, '活动商品日历应支持单日选择，而不是住宿离店范围')
+  assert.match(productSource, /isActivityProduct\(product\.category\) && selectedDates\.length > 0/, '活动商品日期区域应展示单日活动日期')
+  assert.match(productSource, /if \(!isActivityProduct\(product\.value\?\.category\) && checkInDate\.value && !checkOutDate\.value\)/, '活动单日选择后确认日历不应再要求离店日期')
+  assert.match(productSource, /isActivityProduct\(p\.category\) && selectedActivitySlot\.value \? \{ time_slot: selectedActivitySlot\.value \} : \{\}/, '活动价格库存日历请求应携带已选场次')
+  assert.match(productSource, /const monthKey = `\$\{year\}-\$\{String\(month\)\.padStart\(2, '0'\)\}:\$\{selectedSkuId\.value \|\| 0\}:\$\{selectedActivitySlot\.value \|\| ''\}`/, '价格日历缓存应按 SKU 和活动场次隔离')
+  assert.match(productSource, /async function onSelectActivitySlot\(slot: string\)[\s\S]*selectedDates\.value = \[\][\s\S]*loadedCalendarMonths\.value = \{\}[\s\S]*priceCalendarMap\.value = \{\}[\s\S]*await loadPriceCalendarForCurrentMonth\(true\)/, '切换活动场次应清空旧日期并重载该场次库存日历')
+})
+
+test('address selection and save flow are miniapp-safe', async () => {
+  const confirmSource = await readFile(orderConfirmPath, 'utf8')
+  const addressSource = await readFile(addressPath, 'utf8')
+
+  assert.doesNotMatch(confirmSource, /URLSearchParams/, '微信小程序地址选择不应依赖浏览器 URLSearchParams')
+  assert.match(confirmSource, /url:\s*'\/pages\/address\/index\?action=select'/, '选择地址应使用固定小程序页面参数')
+  assert.match(addressSource, /getOpenerEventChannel\?\.\(\)\.emit\?\.\('select', item\)/, '地址页应通过 event channel 回传所选地址')
+  assert.match(addressSource, /if \(saving\.value\) return/, '地址保存应防止重复提交')
+  assert.match(addressSource, /手机号已脱敏，修改需重新输入完整手机号/, '编辑脱敏手机号时应有明确提示')
 })
 
 test('cart and cart checkout show backend sku specs for multi-sku items', async () => {
@@ -199,10 +303,44 @@ test('phone authorization prompt switches to mine tab page', async () => {
   assert.doesNotMatch(auth, /uni\.navigateTo\(\{\s*url:\s*'\/pages\/mine\/index'/, 'auth.requireLogin 不应 navigateTo tabBar 页面')
 })
 
+test('mine page requires phone authorization for login and missing phone binding', async () => {
+  const source = await readFile(minePath, 'utf8')
+
+  assert.match(source, /open-type="getPhoneNumber"/, '我的页登录入口应使用微信手机号授权')
+  assert.match(source, /@getphonenumber="onPhoneLogin"/, '手机号授权按钮应接入 onPhoneLogin')
+  assert.match(source, /v-if="!userStore\.userInfo\.phone"/, '已登录但缺少手机号时应展示补授权入口')
+  assert.match(source, /phoneLogin\(e\)/, '手机号授权应调用真实 phoneLogin 服务')
+  assert.doesNotMatch(source, /@tap="onLogin"/, '我的页不应保留绕过手机号授权的普通登录按钮')
+  assert.doesNotMatch(source, /wxLogin/, '我的页不应通过静默登录绕过手机号选择')
+})
+
 test('order confirm should inspect logged-in phone before submitting', async () => {
   const source = await readFile(orderConfirmPath, 'utf8')
 
   assert.match(source, /getUserInfo|phone/i, '订单确认页应读取已登录用户手机号')
+})
+
+test('order list and detail render sku specs date time quantity and remarks', async () => {
+  const listSource = await readFile(orderPath, 'utf8')
+  const detailSource = await readFile(orderDetailPath, 'utf8')
+
+  assert.match(listSource, /formatOrderPhone\(order\)/, '订单列表应展示用户手机号或脱敏手机号')
+  assert.match(listSource, /user_phone_masked \|\| order\.user_phone/, '订单列表手机号应优先使用脱敏手机号')
+  assert.match(listSource, /formatOrderPaymentTime\(order\)/, '订单列表应展示后端实际支付时间')
+  assert.match(listSource, /order\.payment_time \? formatOrderDate\(order\.payment_time\) : '未支付'/, '订单列表支付时间应使用 payment_time 而非 created_at')
+  assert.match(listSource, /formatOrderRemark\(order\)/, '订单列表应展示订单备注')
+  assert.match(listSource, /formatSkuSpecLabel\(item\.sku_spec_values\)/, '订单列表应展示 SKU 规格')
+  assert.match(listSource, /formatOrderItemMeta\(goods\)/, '订单列表应统一展示日期、场次和数量口径')
+  assert.match(listSource, /getOrderDetailSummary\(order\)/, '订单列表底部应展示 X人X晚/X单 口径')
+
+  assert.match(detailSource, /formatSkuSpecLabel\(item\.sku_spec_values\)/, '订单详情应展示 SKU 规格')
+  assert.match(detailSource, /formatOrderItemMeta\(item\)/, '订单详情应统一展示日期、场次和数量口径')
+  assert.match(detailSource, /order\.remark \|\| '-'/, '订单详情应展示订单备注')
+  assert.match(detailSource, /user_phone_masked \|\| order\.user_phone/, '订单详情应展示用户手机号')
+  assert.match(detailSource, /item\.product_image \|\| item\.cover_image/, '订单详情应优先使用订单项商品图片')
+  assert.match(detailSource, /resolveImageUrl\(image,\s*'thumb'\)/, '订单详情商品图应使用缩略图变体')
+  assert.match(detailSource, /order\.payment_time/, '订单详情应使用后端 payment_time 字段展示支付时间')
+  assert.doesNotMatch(detailSource, /order\.paid_at/, '订单详情不应继续读取后端未返回的 paid_at 旧字段')
 })
 
 test('shared inventory and quote response types are declared', async () => {
@@ -474,6 +612,85 @@ test('miniapp request defaults to production api when env files are missing', as
   assert.match(source, /DEFAULT_SERVER_BASE\s*=\s*'https:\/\/www\.yyylcamp\.com'/, '默认资源域名应指向线上服务')
   assert.doesNotMatch(source, /VITE_API_BASE_URL\s*\|\|\s*'http:\/\/localhost:8000\/api\/v1'/, '缺少 env 时不应回落到 localhost API')
   assert.doesNotMatch(source, /VITE_SERVER_BASE\s*\|\|\s*'http:\/\/localhost:8000'/, '缺少 env 时不应回落到 localhost 资源域名')
+})
+
+test('cms image text consumes editor colors font sizes and admin field names', async () => {
+  const source = await readFile(cmsImageTextPath, 'utf8')
+  const cmsTypes = await readFile(cmsTypesPath, 'utf8')
+
+  assert.match(cmsTypes, /image_url\?:\s*string/, '小程序图文卡片类型应兼容 Admin 保存的 image_url 字段')
+  assert.match(cmsTypes, /title_color\?:\s*string/, '小程序图文卡片类型应声明标题颜色')
+  assert.match(cmsTypes, /desc_color\?:\s*string/, '小程序图文卡片类型应声明描述颜色')
+  assert.match(cmsTypes, /title_font_size\?:\s*number \| string/, '小程序图文卡片类型应声明标题字号')
+  assert.match(cmsTypes, /desc_font_size\?:\s*number \| string/, '小程序图文卡片类型应声明描述字号')
+  assert.match(cmsTypes, /title_font_family\?:\s*string/, '小程序图文卡片类型应声明标题字体')
+  assert.match(cmsTypes, /desc_font_weight\?:\s*string/, '小程序图文卡片类型应声明描述字重')
+
+  assert.match(source, /props\.data\.image \|\| props\.data\.image_url/, '图文卡片应兼容 image 与 image_url')
+  assert.match(source, /titleTextStyle/, '标题应绑定样式对象')
+  assert.match(source, /descTextStyle/, '描述应绑定样式对象')
+  assert.match(source, /props\.data\.title_color/, '标题应消费装修配置的标题颜色')
+  assert.match(source, /props\.data\.desc_color/, '描述应消费装修配置的描述颜色')
+  assert.match(source, /normalizeRpxSize\(props\.data\.title_font_size,\s*32\)/, '标题字号应按 rpx 归一化')
+  assert.match(source, /normalizeRpxSize\(props\.data\.desc_font_size,\s*26\)/, '描述字号应按 rpx 归一化')
+  assert.match(source, /normalizeFontFamily\(props\.data\.title_font_family\)/, '标题应消费装修配置的字体')
+  assert.match(source, /fontWeight:\s*props\.data\.title_font_weight \|\| '600'/, '标题应消费装修配置的字重')
+  assert.match(source, /layoutMode === 'right-left'/, '小程序应兼容 Admin 的右图左文布局')
+  assert.match(source, /!\['vertical', 'top-bottom'\]\.includes\(layoutMode\.value\)/, '小程序应兼容 Admin 的上图下文布局')
+})
+
+test('cms renderer consumes admin image notice nav divider and miniprogram contracts', async () => {
+  const imageSource = await readFile(cmsImagePath, 'utf8')
+  const noticeSource = await readFile(cmsNoticePath, 'utf8')
+  const navSource = await readFile(cmsNavPath, 'utf8')
+  const dividerSource = await readFile(cmsDividerPath, 'utf8')
+  const linkSource = await readFile(cmsLinkPath, 'utf8')
+  const cmsTypes = await readFile(cmsTypesPath, 'utf8')
+
+  assert.match(cmsTypes, /url\?:\s*string/, '小程序图片组件类型应兼容 Admin 单图 url')
+  assert.match(cmsTypes, /hotspots\?:\s*CmsImageHotspot\[\]/, '小程序图片组件类型应声明热区')
+  assert.match(imageSource, /normalizedImages/, '小程序图片组件应把 Admin 单图 url 归一成 images 数组')
+  assert.match(imageSource, /normalizedHotspots/, '小程序图片组件应消费图片热区')
+  assert.match(imageSource, /hotspot\.link/, '点击热区应触发热区链接')
+  assert.match(imageSource, /imageItemStyle/, '小程序图片组件应消费 Admin 单图宽高配置')
+  assert.match(imageSource, /props\.data\.width/, '小程序图片组件应读取 Admin width 字段')
+  assert.match(imageSource, /props\.data\.height/, '小程序图片组件应读取 Admin height 字段')
+
+  assert.match(cmsTypes, /texts\?:\s*string\[\]/, '公告类型应兼容 Admin 保存的 texts')
+  assert.match(noticeSource, /normalizedNotices/, '公告组件应把 texts 归一成 notices')
+  assert.match(noticeSource, /props\.data\.text_color/, '公告组件应消费 Admin 文本颜色')
+
+  assert.match(cmsTypes, /label\?:\s*string/, '导航项类型应兼容 Admin label 字段')
+  assert.match(navSource, /item\.name \|\| item\.label/, '导航组件应兼容 label/name')
+
+  assert.match(cmsTypes, /line_style\?:\s*'solid' \| 'dashed'/, '分割线类型保留小程序 line_style 字段')
+  assert.match(cmsTypes, /style\?:\s*'solid' \| 'dashed'/, '分割线类型应兼容 Admin style 字段')
+  assert.match(dividerSource, /data\.line_style \|\| data\.style/, '分割线组件应兼容 Admin style')
+  assert.match(dividerSource, /data\.margin_horizontal \?\? data\.margin/, '分割线组件应兼容 Admin margin')
+
+  assert.match(linkSource, /parseMiniprogramTarget/, '小程序跳转应解析 Admin 存在 target 中的 appId/path JSON')
+})
+
+test('cms product list maps category keys and keeps legacy category id fallback', async () => {
+  const source = await readFile(cmsProductListPath, 'utf8')
+  const cmsTypes = await readFile(cmsTypesPath, 'utf8')
+
+  assert.match(cmsTypes, /category_id\?:\s*number/, 'CMS 商品列表类型应临时保留旧 category_id')
+  assert.match(source, /CMS_CATEGORY_TO_TYPE/, 'CMS 商品列表应把装修分类 key 映射为后端商品类型')
+  assert.match(source, /equipment_rental:\s*'rental'/, '装备租赁 tab key 应映射为后端 rental 类型')
+  assert.match(source, /camp_shop:\s*'shop'/, '小商店 tab key 应映射为后端 shop 类型')
+  assert.match(source, /LEGACY_CATEGORY_ID_TO_KEY/, 'CMS 商品列表应兼容旧 category_id 配置')
+  assert.match(source, /params\.type = productType/, '可消费分类 key 应优先按 type 查询，避免 category 精确过滤失效')
+  assert.match(source, /params\.category = String\(props\.data\.category_id\)/, '无法映射的旧 category_id 应保留 category 兜底')
+  assert.match(source, /params\.ids = props\.data\.product_ids\.join\(','\)/, '手动商品应把 product_ids 传给后端 ids 过滤')
+})
+
+test('product detail normalizes relative image urls inside rich text', async () => {
+  const source = await readFile(productDetailPath, 'utf8')
+
+  assert.match(source, /normalizeRichTextImages/, '商品详情应归一化富文本中的相对图片 URL')
+  assert.match(source, /const nextSrc = resolveImageUrl\(srcMatch\[2\], 'large'\)/, '富文本相对图片应转换为完整 large 图片 URL')
+  assert.match(source, /max-width:100%;height:auto;display:block;/, '富文本图片应注入自适应展示样式')
 })
 
 test('miniapp request image variants cover png webp same-domain urls and normalized variants', async () => {

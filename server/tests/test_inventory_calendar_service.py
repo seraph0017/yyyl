@@ -1,6 +1,10 @@
 import unittest
 from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+from fastapi import HTTPException
 
 
 class InventoryCalendarServiceTest(unittest.TestCase):
@@ -219,6 +223,103 @@ class InventoryCalendarServiceTest(unittest.TestCase):
         self.assertEqual(cell["inventory_source"], "inventory_pool")
         self.assertEqual(cell["status"], "closed")
         self.assertFalse(cell["editable"])
+
+
+class InventoryCalendarServiceAsyncTest(unittest.IsolatedAsyncioTestCase):
+    async def test_update_inventory_cell_clamps_position_inventory_to_one(self):
+        from services import inventory_calendar_service
+
+        inv = SimpleNamespace(
+            id=31,
+            product_id=12,
+            sku_id=None,
+            site_id=1,
+            total=1,
+            available=1,
+            locked=0,
+            sold=0,
+        )
+        product = SimpleNamespace(
+            id=12,
+            site_id=1,
+            type="daily_camping",
+            booking_mode="by_position",
+            is_deleted=False,
+        )
+
+        class FakeResult:
+            def __init__(self, value):
+                self.value = value
+
+            def scalar_one_or_none(self):
+                return self.value
+
+        db = SimpleNamespace(
+            execute=AsyncMock(side_effect=[FakeResult(inv), FakeResult(product)]),
+            add=lambda value: None,
+            flush=AsyncMock(),
+        )
+
+        with patch.object(
+            inventory_calendar_service,
+            "get_declared_inventory_pool",
+            AsyncMock(return_value=None),
+        ):
+            updated = await inventory_calendar_service.update_inventory_cell(
+                db,
+                site_id=1,
+                inventory_id=31,
+                body={"total": 5},
+                operator_id=9,
+            )
+
+        self.assertEqual(updated.total, 1)
+        self.assertEqual(updated.available, 1)
+        self.assertEqual(db.execute.await_count, 2)
+
+    async def test_batch_price_update_rejects_sku_targets_explicitly(self):
+        from services import inventory_calendar_service
+
+        target = inventory_calendar_service.InventoryCalendarTarget(product_id=12, sku_id=99)
+
+        class FakeScalarResult:
+            def all(self):
+                return []
+
+        class FakeResult:
+            def scalars(self):
+                return FakeScalarResult()
+
+        db = SimpleNamespace(execute=AsyncMock(return_value=FakeResult()), flush=AsyncMock())
+
+        with (
+            patch.object(
+                inventory_calendar_service,
+                "_load_batch_targets",
+                AsyncMock(return_value=[target]),
+            ),
+            patch.object(
+                inventory_calendar_service,
+                "_load_products",
+                AsyncMock(return_value=[SimpleNamespace(id=12, base_price=Decimal("199.00"))]),
+            ),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                await inventory_calendar_service.batch_upsert_inventory(
+                    db,
+                    site_id=1,
+                    body={
+                        "sku_ids": [99],
+                        "dates": [date(2026, 7, 10)],
+                        "adjust_inventory": False,
+                        "price_mode": "set_total",
+                        "price_total": Decimal("219.00"),
+                    },
+                    operator_id=9,
+                )
+
+        self.assertEqual(ctx.exception.status_code, 400)
+        self.assertIn("SKU", str(ctx.exception.detail))
 
 
 if __name__ == "__main__":

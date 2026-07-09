@@ -7,7 +7,12 @@
 - POST /deposits/{id}/refund — 退还押金
 """
 
-from fastapi import APIRouter, Depends, Request
+import hashlib
+import json
+from typing import Any
+
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
@@ -26,8 +31,70 @@ from schemas.finance import (
     WithdrawResponse,
 )
 from services import finance_service, settlement_service
+from utils.security import verify_token
 
 router = APIRouter(prefix="/api/v1/admin/finance", tags=["财务"])
+
+
+def _get_admin_role_code(admin: AdminUser) -> str:
+    return getattr(getattr(admin, "role", None), "role_code", "") or ""
+
+
+def _get_required_confirm_site_id(request: Request) -> int:
+    raw_site_id = request.headers.get("X-Site-Id") or request.headers.get("x-site-id")
+    if raw_site_id is None or str(raw_site_id).strip() == "":
+        raise HTTPException(status_code=400, detail={"code": 40012, "message": "高风险财务操作必须显式传入 X-Site-Id"})
+    try:
+        site_id = int(raw_site_id)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail={"code": 40012, "message": "X-Site-Id 必须为有效营地ID"}) from exc
+    if site_id not in (1, 2):
+        raise HTTPException(status_code=400, detail={"code": 40012, "message": "X-Site-Id 必须为有效营地ID"})
+    return site_id
+
+
+def _stable_request_hash(payload: Any) -> str:
+    text = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+async def _request_json_payload(request: Request, fallback: Any) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = fallback.model_dump(mode="json", exclude_none=True)
+    if not isinstance(payload, dict):
+        payload = {}
+    return {key: value for key, value in payload.items() if value is not None}
+
+
+def _require_confirm_token(
+    *,
+    admin: AdminUser,
+    site_id: int,
+    action: str,
+    payload: Any,
+    confirm_token: str | None,
+) -> None:
+    if _get_admin_role_code(admin) != "super_admin":
+        raise HTTPException(status_code=403, detail={"code": 40302, "message": "仅超级管理员可执行该高风险财务操作"})
+    if not confirm_token:
+        raise HTTPException(status_code=403, detail={"code": 40321, "message": "缺少高风险财务操作确认"})
+    try:
+        token_data = verify_token(confirm_token)
+    except JWTError as exc:
+        raise HTTPException(status_code=403, detail={"code": 40322, "message": "高风险确认已失效，请重新确认"}) from exc
+    expected_sub = f"admin:{admin.id}"
+    if token_data.get("token_type") != "access" or token_data.get("confirm_type") != "operation":
+        raise HTTPException(status_code=403, detail={"code": 40322, "message": "高风险确认已失效，请重新确认"})
+    if token_data.get("sub") != expected_sub or token_data.get("role") != "super_admin":
+        raise HTTPException(status_code=403, detail={"code": 40323, "message": "高风险确认用户不匹配"})
+    if int(token_data.get("site_id") or 0) != int(site_id):
+        raise HTTPException(status_code=403, detail={"code": 40324, "message": "高风险确认营地不匹配"})
+    if token_data.get("action") != action:
+        raise HTTPException(status_code=403, detail={"code": 40325, "message": "高风险确认操作不匹配"})
+    if token_data.get("request_hash") != _stable_request_hash(payload):
+        raise HTTPException(status_code=403, detail={"code": 40326, "message": "高风险确认内容不匹配，请重新确认"})
 
 
 @router.get("/overview", summary="财务概览")
@@ -49,13 +116,23 @@ async def withdraw(
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
+    x_confirm_token: str | None = Header(default=None, alias="X-Confirm-Token"),
 ):
     """发起提现操作"""
-    site_id = get_site_id(request)
+    site_id = _get_required_confirm_site_id(request)
+    payload = await _request_json_payload(request, body)
+    _require_confirm_token(
+        admin=admin,
+        site_id=site_id,
+        action="finance:withdraw",
+        payload=payload,
+        confirm_token=x_confirm_token,
+    )
     result = await finance_service.withdraw(
         db,
         amount=body.amount,
         operator_id=admin.id,
+        site_id=site_id,
         bank_account=body.bank_account,
         remark=body.remark,
     )
@@ -123,13 +200,24 @@ async def refund_deposit(
     request: Request,
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
+    x_confirm_token: str | None = Header(default=None, alias="X-Confirm-Token"),
 ):
     """退还押金：全额退还或部分退还（扣除损坏费用）"""
+    site_id = _get_required_confirm_site_id(request)
+    payload = {"deposit_id": deposit_id, **await _request_json_payload(request, body)}
+    _require_confirm_token(
+        admin=admin,
+        site_id=site_id,
+        action="finance:deposit_refund",
+        payload=payload,
+        confirm_token=x_confirm_token,
+    )
     deposit = await finance_service.return_deposit(
         db,
         deposit_id=deposit_id,
         return_amount=body.return_amount,
         operator_id=admin.id,
+        site_id=site_id,
         remark=body.remark,
     )
     result = DepositRecordResponse.model_validate(deposit)

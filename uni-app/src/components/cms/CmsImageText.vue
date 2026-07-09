@@ -1,15 +1,18 @@
 <template>
   <view
     class="cms-image-text"
-    :class="{ 'cms-image-text--horizontal': layoutMode === 'horizontal' }"
+    :class="{
+      'cms-image-text--horizontal': isHorizontalLayout,
+      'cms-image-text--reverse': layoutMode === 'right-left',
+    }"
     @tap="onCardTap"
   >
-    <view class="cms-image-text__image-wrapper" :class="{ 'cms-image-text__image-wrapper--horizontal': layoutMode === 'horizontal' }">
+    <view class="cms-image-text__image-wrapper" :class="{ 'cms-image-text__image-wrapper--horizontal': isHorizontalLayout }">
       <image
         v-if="!imageError"
         class="cms-image-text__image"
-        :class="{ 'cms-image-text__image--horizontal': layoutMode === 'horizontal' }"
-        :src="resolveImageUrl(data.image || '')"
+        :class="{ 'cms-image-text__image--horizontal': isHorizontalLayout }"
+        :src="resolveImageUrl(imageUrl, 'thumb')"
         mode="aspectFill"
         lazy-load
         @error="imageError = true"
@@ -19,9 +22,9 @@
       </view>
     </view>
     <view class="cms-image-text__content">
-      <text class="cms-image-text__title">{{ data.title || '' }}</text>
+      <text class="cms-image-text__title" :style="titleTextStyle">{{ data.title || '' }}</text>
       <text v-if="data.subtitle" class="cms-image-text__subtitle">{{ data.subtitle }}</text>
-      <text v-if="data.description" class="cms-image-text__description">{{ data.description }}</text>
+      <text v-if="data.description" class="cms-image-text__description" :style="descTextStyle">{{ data.description }}</text>
     </view>
   </view>
 </template>
@@ -47,8 +50,47 @@ const emit = defineEmits<{
 
 const imageError = ref(false)
 
-/** 布局模式，默认 horizontal */
+/** 兼容 Admin 配置 image_url 与小程序旧字段 image */
+const imageUrl = computed(() => props.data.image || props.data.image_url || '')
+
+/** 布局模式，兼容 Admin 的 left-right / right-left / top-bottom */
 const layoutMode = computed(() => props.data.layout || 'horizontal')
+
+const isHorizontalLayout = computed(() => !['vertical', 'top-bottom'].includes(layoutMode.value))
+
+const titleTextStyle = computed(() => ({
+  color: props.data.title_color || '',
+  fontSize: normalizeRpxSize(props.data.title_font_size, 32),
+  fontFamily: normalizeFontFamily(props.data.title_font_family),
+  fontWeight: props.data.title_font_weight || '600',
+}))
+
+const descTextStyle = computed(() => ({
+  color: props.data.desc_color || '',
+  fontSize: normalizeRpxSize(props.data.desc_font_size, 26),
+  fontFamily: normalizeFontFamily(props.data.desc_font_family),
+  fontWeight: props.data.desc_font_weight || '400',
+}))
+
+function normalizeRpxSize(value: number | string | undefined, fallback: number) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}rpx`
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return /^\d+(\.\d+)?$/.test(value.trim()) ? `${value.trim()}rpx` : value.trim()
+  }
+  return `${fallback}rpx`
+}
+
+function normalizeFontFamily(value: string | undefined) {
+  const map: Record<string, string> = {
+    system: '',
+    sans: 'Arial, "PingFang SC", "Microsoft YaHei", sans-serif',
+    serif: '"Songti SC", SimSun, serif',
+    rounded: '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif',
+  }
+  return map[value || 'system'] ?? value ?? ''
+}
 
 /** 卡片点击 */
 function onCardTap() {
@@ -76,6 +118,10 @@ function onCardTap() {
   &--horizontal {
     display: flex;
     align-items: stretch;
+  }
+
+  &--reverse {
+    flex-direction: row-reverse;
   }
 
   &__image-wrapper {

@@ -2,7 +2,7 @@
   <view
     class="cms-notice"
     :style="noticeStyle"
-    v-if="data.notices?.length"
+    v-if="normalizedNotices.length"
     @tap="onNoticeTap"
   >
     <view class="cms-notice__icon">
@@ -11,6 +11,7 @@
     <view class="cms-notice__text">
       <text
         class="cms-notice__scroll"
+        :style="textStyle"
         :class="{ 'cms-notice__scroll--fade': fading }"
       >{{ currentNotice?.text || '' }}</text>
     </view>
@@ -41,9 +42,14 @@ let timer: ReturnType<typeof setInterval> | null = null
 
 /** 当前公告 */
 const currentNotice = computed(() => {
-  const notices = props.data.notices || []
+  const notices = normalizedNotices.value
   if (notices.length === 0) return null
   return notices[currentIndex.value % notices.length]
+})
+
+const normalizedNotices = computed<Array<{ text: string; link?: CmsLink }>>(() => {
+  if (props.data.notices?.length) return props.data.notices
+  return (props.data.texts || []).map(text => ({ text }))
 })
 
 /** 公告栏背景样式 */
@@ -53,6 +59,10 @@ const noticeStyle = computed(() => {
   }
   return {}
 })
+
+const textStyle = computed(() => ({
+  color: props.data.text_color || '',
+}))
 
 /** 点击公告 */
 function onNoticeTap() {
@@ -64,7 +74,7 @@ function onNoticeTap() {
 
 onMounted(() => {
   // 多条公告时轮流展示
-  const notices = props.data.notices || []
+  const notices = normalizedNotices.value
   if (notices.length > 1) {
     timer = setInterval(() => {
       fading.value = true

@@ -213,6 +213,20 @@
                 <el-form-item label="包含人数">
                   <el-input-number v-model="form.ext_camping.max_persons" :min="0" controls-position="right" />
                 </el-form-item>
+                <el-form-item label="儿童免费">
+                  <div class="inline-controls">
+                    <el-switch v-model="campingFreeChildEnabled" active-text="启用" inactive-text="不展示" />
+                    <el-input-number
+                      v-model="form.ext_camping.free_child_age"
+                      :min="0"
+                      :max="18"
+                      controls-position="right"
+                      placeholder="年龄"
+                      :disabled="!campingFreeChildEnabled"
+                    />
+                  </div>
+                  <div class="form-tip">勾选启用后小程序展示“X岁以下儿童免费”；关闭则清空并不展示。</div>
+                </el-form-item>
               </template>
 
               <template v-else-if="isActivityType">
@@ -429,6 +443,7 @@ const richTextBgColor = ref('#faf6f0')
 const uploadingImage = ref(false)
 const uploadingRichImage = ref(false)
 const campingAreaOptions = ref<string[]>(['A区', 'B区', '林下区', '草坪区'])
+const campingFreeChildEnabled = ref(false)
 
 const isEdit = computed(() => !!route.params.id)
 const productId = computed(() => Number(route.params.id || 0))
@@ -461,6 +476,7 @@ const form = reactive<ProductForm>({
     area: '',
     position_name: '',
     max_persons: 0,
+    free_child_age: null,
     event_start_date: null,
     event_end_date: null,
   },
@@ -541,6 +557,7 @@ function resetFormWithProduct(product: Product) {
   campingEventRange.value = form.ext_camping.event_start_date && form.ext_camping.event_end_date
     ? [form.ext_camping.event_start_date, form.ext_camping.event_end_date]
     : null
+  campingFreeChildEnabled.value = form.ext_camping.free_child_age !== null && form.ext_camping.free_child_age !== undefined
   specDefinitionsText.value = JSON.stringify(form.ext_shop.spec_definitions || [])
   syncCampingAreaOption()
   renderDescriptionEditor()
@@ -694,6 +711,10 @@ function ensureSkuCode(row: EditableSku, index: number): string {
 }
 
 function buildProductPayload(): ProductCreateRequest {
+  const extCampingPayload = {
+    ...form.ext_camping,
+    free_child_age: campingFreeChildEnabled.value ? form.ext_camping.free_child_age : null,
+  }
   const payload: ProductCreateRequest = {
     name: form.name,
     type: form.type,
@@ -725,7 +746,7 @@ function buildProductPayload(): ProductCreateRequest {
     })),
   }
 
-  if (isCampingType.value) payload.ext_camping = form.ext_camping
+  if (isCampingType.value) payload.ext_camping = extCampingPayload
   if (isActivityType.value) payload.ext_activity = form.ext_activity
   if (form.type === 'rental') payload.ext_rental = form.ext_rental
   if (['shop', 'merchandise'].includes(form.type)) {

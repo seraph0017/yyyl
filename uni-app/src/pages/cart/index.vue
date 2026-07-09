@@ -92,7 +92,7 @@ interface CartListResponse {
     product_type?: string
     stock_available?: boolean
     stock?: number
-    sku_spec_values?: Record<string, string> | null
+    sku_spec_values?: Record<string, unknown> | null
   }>
   summary?: {
     total_count: number
@@ -134,8 +134,8 @@ async function loadCartData() {
 }
 	}
 
-function formatSkuLabel(specValues?: Record<string, string> | null): string {
-  return Object.values(specValues || {}).filter(Boolean).join(' / ')
+function formatSkuLabel(specValues?: Record<string, unknown> | null): string {
+  return Object.values(specValues || {}).filter(Boolean).map(value => String(value)).join(' / ')
 }
 
 function formatAmount(value: number): string {

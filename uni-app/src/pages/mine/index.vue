@@ -28,8 +28,18 @@
               </view>
             </view>
           </view>
-          <view class="user-settings" @tap="onEditProfile">
-            <text>编辑</text>
+          <view class="user-actions">
+            <button
+              class="user-phone-auth"
+              v-if="!userStore.userInfo.phone"
+              open-type="getPhoneNumber"
+              @getphonenumber="onPhoneLogin"
+            >
+              <text>授权手机号</text>
+            </button>
+            <view class="user-settings" @tap="onEditProfile">
+              <text>编辑</text>
+            </view>
           </view>
         </view>
       </view>
@@ -44,8 +54,8 @@
             <text class="user-login__title">欢迎来到{{ brandConfig.name }}</text>
             <text class="user-login__subtitle">登录解锁更多露营体验</text>
           </view>
-          <button class="user-login__btn" @tap="onLogin">
-            <text>登录</text>
+          <button class="user-login__btn" open-type="getPhoneNumber" @getphonenumber="onPhoneLogin">
+            <text>{{ userStore.userInfo?.phone ? '授权手机号' : '登录并授权' }}</text>
           </button>
         </view>
       </view>
@@ -145,7 +155,7 @@
 import { ref } from 'vue'
 import { onShow, onShareAppMessage } from '@dcloudio/uni-app'
 import { useUserStore } from '@/store/user'
-import { wxLogin, phoneLogin, logout, checkLoginStatus } from '@/utils/auth'
+import { phoneLogin, logout, checkLoginStatus } from '@/utils/auth'
 import { get } from '@/utils/request'
 import { brandConfig } from '@/config/sites'
 import type { IUserInfo } from '@/types'
@@ -238,14 +248,18 @@ function updateGuestHeaderLayout() {
   // #endif
 }
 
-async function onLogin() {
+async function onPhoneLogin(e: any) {
   try {
-    await wxLogin()
-    refreshLoginState()
-    uni.showToast({ title: '登录成功', icon: 'success' })
+    const result = await phoneLogin(e)
+    if (!result) {
+      uni.showToast({ title: '未授权手机号', icon: 'none' })
+      return
+    }
+    await refreshLoginState()
+    uni.showToast({ title: '手机号已授权', icon: 'success' })
   } catch (err) {
-    console.error('登录失败:', err)
-    uni.showToast({ title: '登录失败，请重试', icon: 'none' })
+    console.error('手机号授权失败:', err)
+    uni.showToast({ title: '手机号授权失败，请重试', icon: 'none' })
   }
 }
 
@@ -428,16 +442,40 @@ function onStaffEntry() {
   }
 }
 
-.user-settings {
-  padding: 16rpx 24rpx;
+.user-actions {
+  margin-left: 16rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  flex-shrink: 0;
+  align-items: flex-end;
+}
+
+.user-settings,
+.user-phone-auth {
+  min-width: 112rpx;
+  min-height: 56rpx;
+  padding: 12rpx 20rpx;
   background: rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-round);
   border: 1rpx solid rgba(255, 255, 255, 0.15);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 
   text {
     font-size: var(--font-size-sm);
     color: rgba(255, 255, 255, 0.8);
     letter-spacing: 1rpx;
+  }
+}
+
+.user-phone-auth {
+  margin: 0;
+  line-height: 1;
+
+  &::after {
+    border: none;
   }
 }
 

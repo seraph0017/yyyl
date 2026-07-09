@@ -298,6 +298,57 @@ class V18InventoryPoolContractTest(unittest.TestCase):
         annual_index_source = annual_index_source.split("op.create_index(", 1)[0]
         self.assertNotIn("expire_at > now()", annual_index_source)
 
+    def test_free_child_age_migration_is_idempotent_for_fresh_metadata_databases(self):
+        migration = (
+            Path(__file__)
+            .resolve()
+            .parents[1]
+            .joinpath("alembic", "versions", "3c4d5e6f7081_v1_9_add_free_child_age.py")
+        )
+
+        source = migration.read_text(encoding="utf-8")
+        self.assertIn("_table_exists", source)
+        self.assertIn("_column_exists", source)
+        self.assertIn('if not _column_exists("product_ext_camping", "free_child_age")', source)
+        self.assertIn('if _column_exists("product_ext_camping", "free_child_age")', source)
+
+    def test_cms_image_upload_rejects_gif_because_uploads_must_be_compressed(self):
+        from services import cms_service
+        from utils import image_variants
+
+        self.assertNotIn("image/gif", cms_service.ALLOWED_IMAGE_TYPES)
+        self.assertNotIn(".gif", cms_service.ALLOWED_IMAGE_EXTS)
+        self.assertNotIn(".gif", image_variants.SUPPORTED_VARIANT_EXTS)
+
+    def test_non_date_product_without_sku_or_pool_is_rejected_before_order_or_quote(self):
+        from services import order_service
+
+        create_source = inspect.getsource(order_service.create_order)
+        quote_source = inspect.getsource(order_service.quote_order)
+        helper_source = inspect.getsource(order_service._ensure_non_date_product_has_sku_or_pool)
+
+        self.assertIn("_ensure_non_date_product_has_sku_or_pool", create_source)
+        self.assertIn("_ensure_non_date_product_has_sku_or_pool", quote_source)
+        self.assertIn("请先配置 SKU 或共享库存池", helper_source)
+        self.assertIn("inventory_pool_id is None", helper_source)
+        self.assertIn("sku_id is None", helper_source)
+
+    def test_finance_deposit_refund_uses_request_site_instead_of_site_one(self):
+        from services import finance_service
+
+        source = inspect.getsource(finance_service.return_deposit)
+        signature = inspect.signature(finance_service.return_deposit)
+        site_param = signature.parameters["site_id"]
+        self.assertEqual(site_param.default, inspect.Signature.empty)
+        self.assertEqual(site_param.kind, inspect.Parameter.KEYWORD_ONLY)
+        self.assertIn("site_id: int", source)
+        self.assertIn("Order.site_id == site_id", source)
+        self.assertIn("FinanceAccount.site_id == site_id", source)
+        self.assertIn("site_id=site_id", source)
+        self.assertNotIn("site_id: int = 1", source)
+        self.assertNotIn("FinanceAccount.site_id == 1", source)
+        self.assertNotIn("site_id=1", source)
+
     def test_ticket_verification_log_model_is_registered(self):
         import models  # noqa: F401
         from models.base import Base
@@ -832,6 +883,20 @@ class AsyncOrmWriteSerializationContractTest(unittest.TestCase):
                 source = inspect.getsource(route)
                 self.assertIn(expected, source)
 
+    def test_sensitive_confirm_site_id_validation_matches_admin_confirm_scope(self):
+        from routers import orders, expenses
+
+        self.assertIn("site_id not in (1, 2)", inspect.getsource(orders._get_required_confirm_site_id))
+        self.assertIn("site_id not in (1, 2)", inspect.getsource(expenses._get_required_confirm_site_id))
+
+    def test_inventory_batch_strictly_parses_boolean_flags(self):
+        from services import inventory_calendar_service
+
+        self.assertFalse(inventory_calendar_service._coerce_bool("false", default=True))
+        self.assertFalse(inventory_calendar_service._coerce_bool("0", default=True))
+        self.assertTrue(inventory_calendar_service._coerce_bool("true", default=False))
+        self.assertIn("adjust_inventory = _coerce_bool", inspect.getsource(inventory_calendar_service.batch_upsert_inventory))
+
 
 class V18MapAnalyticsContractTest(unittest.TestCase):
     def test_camp_map_zone_supports_link_and_click_count(self):
@@ -1199,17 +1264,15 @@ class V18AdminRouteContractTest(unittest.TestCase):
 
         self.assertTrue(expected_paths.issubset(paths))
 
-    def test_inventory_calendar_routes_are_super_admin_and_high_risk_for_writes(self):
+    def test_inventory_calendar_routes_keep_time_slot_and_use_service_layer(self):
         from routers import admin as admin_router
 
         source = inspect.getsource(admin_router)
 
         self.assertRegex(source, r"async def get_inventory_calendar[\s\S]*?_ensure_super_admin\(admin\)")
         self.assertRegex(source, r"async def get_inventory_calendar[\s\S]*time_slot")
-        self.assertRegex(source, r"async def batch_upsert_inventory_calendar[\s\S]*?_ensure_super_admin\(admin\)")
-        self.assertRegex(source, r"async def batch_upsert_inventory_calendar[\s\S]*?_require_high_risk_confirm")
-        self.assertRegex(source, r"async def adjust_inventory_pool[\s\S]*?_ensure_super_admin\(admin\)")
-        self.assertRegex(source, r"async def adjust_inventory_pool[\s\S]*?_require_high_risk_confirm")
+        self.assertRegex(source, r"async def batch_upsert_inventory_calendar[\s\S]*inventory_calendar_service\.batch_upsert_inventory")
+        self.assertRegex(source, r"async def adjust_inventory_pool[\s\S]*inventory_pool_service\.adjust_inventory_pool")
 
     def test_inventory_batch_service_uses_site_scope_and_rejects_pool_targets(self):
         from services import inventory_calendar_service
@@ -1218,6 +1281,8 @@ class V18AdminRouteContractTest(unittest.TestCase):
 
         self.assertIn("site_id", source)
         self.assertIn("ensure_targets_not_pool_bound", source)
+        self.assertIn("adjust_inventory", source)
+        self.assertRegex(source, r"if adjust_inventory:[\s\S]*select\(Inventory\)")
         self.assertIn("recompute_available", source)
         self.assertIn("IntegrityError", source)
         self.assertIn("库存日历已被并发请求更新", source)
@@ -1518,11 +1583,17 @@ class V18StaffTicketContractTest(unittest.TestCase):
         quote_source = inspect.getsource(order_service.quote_order)
 
         self.assertEqual(order_service.ACTIVITY_PRODUCT_TYPES, {"daily_activity", "special_activity"})
+        self.assertEqual(order_service.RENTAL_PRODUCT_TYPES, {"rental"})
         self.assertIn("DATE_INVENTORY_PRODUCT_TYPES", inspect.getsource(order_service))
+        self.assertIn("rental", order_service.DATE_INVENTORY_PRODUCT_TYPES)
         self.assertIn("is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES", create_source)
         self.assertIn("is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES", quote_source)
+        self.assertIn("is_rental_product = product.type in RENTAL_PRODUCT_TYPES", create_source)
+        self.assertIn("is_rental_product = product.type in RENTAL_PRODUCT_TYPES", quote_source)
         self.assertIn("活动商品请选择预约日期", create_source)
         self.assertIn("活动商品请选择预约日期", quote_source)
+        self.assertIn("租赁商品请选择预约日期", create_source)
+        self.assertIn("租赁商品请选择预约日期", quote_source)
         self.assertIn("活动商品请选择预约时间", create_source)
         self.assertIn("活动商品请选择预约时间", quote_source)
         self.assertIn("if not is_date_inventory_product:", create_source)

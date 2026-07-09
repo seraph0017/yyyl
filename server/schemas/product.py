@@ -197,6 +197,7 @@ class CampingExtSchema(BaseModel):
     position_name: Optional[str] = Field(default=None, description="营位编号")
     area: Optional[str] = Field(default=None, description="区域")
     max_persons: Optional[int] = Field(default=None, description="最大人数")
+    free_child_age: Optional[int] = Field(default=None, ge=0, description="X岁以下儿童免费")
     event_start_date: Optional[DateField] = Field(default=None, description="活动起始日")
     event_end_date: Optional[DateField] = Field(default=None, description="活动结束日")
 

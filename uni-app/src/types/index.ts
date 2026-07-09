@@ -79,6 +79,19 @@ export interface IProductSku {
   stock: number
   status: string
   image_url?: string | null
+  inventory_mode?: 'independent' | 'shared_product' | string
+  inventory_pool_id?: number | null
+  inventory_pool_available?: number | null
+}
+
+/** 露营商品扩展 */
+export interface IProductCampingExt {
+  max_persons?: number | null
+  free_child_age?: number | null
+  has_electricity?: boolean | null
+  has_platform?: boolean | null
+  sun_exposure?: string | null
+  area?: string | null
 }
 
 /** 商品 */
@@ -98,10 +111,23 @@ export interface IProduct {
   stock: number
   sales_count: number
   ticket_start_time: string | null
+  ext_camping?: IProductCampingExt | null
   is_seckill: boolean
   has_disclaimer: boolean
   identity_mode: 'required' | 'optional' | 'none'
   deposit_amount: number
+  ext_shop?: {
+    shipping_required?: boolean
+    has_sku?: boolean
+    spec_definitions?: Array<Record<string, unknown>> | null
+    shop_type?: string
+  }
+  ext_activity?: {
+    booking_unit?: 'person' | 'group' | string
+    time_slots?: Array<Record<string, unknown>>
+    event_date?: string | null
+    meeting_point?: string | null
+  }
   skus?: IProductSku[]
 }
 
@@ -123,12 +149,13 @@ export interface ICartItem {
   sku_id?: number | null
   product_name: string
   cover_image: string
-  sku_spec_values?: Record<string, string> | null
+  sku_spec_values?: Record<string, unknown> | null
   price: number
   quantity: number
   selected: boolean
   stock: number
   category: ProductCategory
+  shipping_required?: boolean
 }
 
 /** 订单状态 */
@@ -147,16 +174,22 @@ export interface IOrder {
   id: number
   order_no: string
   status: OrderStatus
+  order_type?: string
+  user_id?: number
+  user_nickname?: string | null
+  user_phone?: string | null
+  user_phone_masked?: string | null
   total_amount: number
   actual_amount: number
   discount_amount: number
   items: IOrderItem[]
   created_at: string
-  paid_at: string | null
-  expired_at: string
-  refund_reason: string
-  payment_method: string
-  shipping_address: IAddress | null
+  payment_time?: string | null
+  expire_at?: string | null
+  refund_reason?: string | null
+  payment_method?: string
+  remark?: string | null
+  shipping_address?: IAddress | null
 }
 
 /** 订单项 */
@@ -164,13 +197,20 @@ export interface IOrderItem {
   id: number
   product_id: number
   product_name: string
-  cover_image: string
-  date: string
+  cover_image?: string | null
+  product_category?: ProductCategory | string
+  sku_id?: number | null
+  sku_name?: string | null
+  sku_spec_values?: Record<string, unknown> | null
+  date?: string | null
+  time_slot?: string | null
   quantity: number
   unit_price: number
   actual_price: number
   identity_id: number | null
   inventory_pool_id?: number | null
+  product_image?: string | null
+  remark?: string | null
 }
 
 /** 订单报价项 */
@@ -221,8 +261,8 @@ export interface ICustomerServiceAskResult {
 /** 地址 */
 export interface IAddress {
   id: number
-  name: string
-  phone: string
+  contact_name: string
+  contact_phone: string
   province: string
   city: string
   district: string
@@ -230,13 +270,28 @@ export interface IAddress {
   is_default: boolean
 }
 
+export interface IAddressFormPayload {
+  address_id?: number
+  contact_name?: string
+  contact_phone?: string
+  province?: string
+  city?: string
+  district?: string
+  detail?: string
+  is_default?: boolean
+}
+
 /** 身份信息 */
 export interface IIdentity {
   id: number
   name: string
-  id_card: string
-  phone: string
-  custom_fields: Record<string, string>
+  /** 新增/编辑时为完整身份证；列表接口通常只返回脱敏值 */
+  id_card?: string | null
+  /** 后端列表接口返回的脱敏身份证号 */
+  id_card_masked?: string | null
+  /** 后端列表接口返回的手机号可能已脱敏 */
+  phone?: string | null
+  custom_fields?: Record<string, string>
   is_default: boolean
 }
 

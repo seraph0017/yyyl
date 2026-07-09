@@ -161,7 +161,7 @@ function filterMenuByRole(items: MenuItem[]): MenuItem[] {
 const menuItems = computed<MenuItem[]>(() => {
   const items: MenuItem[] = [
     { path: '/dashboard', title: 'Dashboard', icon: DataAnalysis },
-    { path: '/calendar', title: '库存日历', icon: Calendar, roles: ['super_admin'] },
+    { path: '/calendar', title: '商品日历', icon: Calendar, roles: ['super_admin'] },
     { path: '/products', title: '商品管理', icon: Goods },
     { path: '/orders', title: '订单管理', icon: List },
     {

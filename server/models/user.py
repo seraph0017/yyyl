@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
+from utils.security import decrypt_sensitive, encrypt_sensitive, hash_sensitive, mask_id_card
 
 if TYPE_CHECKING:
     from models.member import AnnualCard, PointsRecord, TimesCard
@@ -214,6 +215,33 @@ class UserIdentity(Base):
         Boolean, nullable=False, default=False, server_default="false",
         comment="默认出行人"
     )
+
+    @property
+    def id_card(self) -> Optional[str]:
+        """身份证明文虚拟字段，仅用于当前请求内写入/展示脱敏值。"""
+        if not self.id_card_encrypted:
+            return None
+        try:
+            return decrypt_sensitive(self.id_card_encrypted)
+        except Exception:
+            return None
+
+    @id_card.setter
+    def id_card(self, value: Optional[str]) -> None:
+        """设置身份证时同步写入加密值和查询哈希。"""
+        normalized = (value or "").strip().upper()
+        if not normalized:
+            self.id_card_encrypted = None
+            self.id_card_hash = None
+            return
+        self.id_card_encrypted = encrypt_sensitive(normalized)
+        self.id_card_hash = hash_sensitive(normalized)
+
+    @property
+    def id_card_masked(self) -> Optional[str]:
+        """身份证脱敏展示字段，供 Pydantic 响应模型读取。"""
+        id_card = self.id_card
+        return mask_id_card(id_card) if id_card else None
 
     # 关系
     user: Mapped["User"] = relationship(back_populates="identities")

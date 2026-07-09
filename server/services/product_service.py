@@ -240,6 +240,24 @@ def _product_sku_shared_pool_code(product: Product) -> str:
     return inventory_pool_service.get_product_sku_shared_pool_code(product.site_id, product.id)
 
 
+def _is_position_product(product_type: str | None, booking_mode: str | None) -> bool:
+    """孤品库存规则：日期/活动/租赁同一时段为1；商品类静态库存为1。"""
+    return booking_mode == "by_position" and product_type in {
+        "daily_camping",
+        "event_camping",
+        "daily_activity",
+        "special_activity",
+        "rental",
+        "shop",
+        "merchandise",
+    }
+
+
+def _normalize_position_sku_stock(product_type: str | None, booking_mode: str | None, sku_data: Dict[str, Any]) -> None:
+    if _is_position_product(product_type, booking_mode) and product_type in {"shop", "merchandise"}:
+        sku_data["stock"] = 1
+
+
 async def annotate_product_sku_inventory_modes(db: AsyncSession, product: Product) -> None:
     """为商品详情中的 SKU 标注是否命中本商品共享库存池。"""
     sku_ids = [sku.id for sku in (getattr(product, "skus", []) or []) if getattr(sku, "id", None)]
@@ -327,6 +345,7 @@ async def create_product(
         inventory_mode = normalize_sku_inventory_mode(sku_data.pop("inventory_mode", SKU_INVENTORY_INDEPENDENT))
         _ensure_sku_code(product, sku_data)
         sku_data["spec_values"] = _normalize_sku_spec_values(sku_data.get("spec_values"))
+        _normalize_position_sku_stock(product.type, product.booking_mode, sku_data)
         sku = SKU(product_id=product.id, **sku_data)
         db.add(sku)
         pending_sku_modes.append((sku, inventory_mode))
@@ -452,6 +471,7 @@ async def _sync_product_skus(
                 sku_data["sku_code"] = _ensure_sku_code(product, sku_data)
             if "spec_values" in sku_data:
                 sku_data["spec_values"] = _normalize_sku_spec_values(sku_data.get("spec_values"))
+            _normalize_position_sku_stock(product.type, product.booking_mode, sku_data)
             for key, value in sku_data.items():
                 if value is not None and hasattr(sku, key):
                     setattr(sku, key, value)
@@ -461,6 +481,7 @@ async def _sync_product_skus(
 
         sku_code = _ensure_sku_code(product, sku_data)
         sku_data["spec_values"] = _normalize_sku_spec_values(sku_data.get("spec_values"))
+        _normalize_position_sku_stock(product.type, product.booking_mode, sku_data)
         inventory_mode = inventory_mode or SKU_INVENTORY_INDEPENDENT
         sku = SKU(
             product_id=product.id,

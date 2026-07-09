@@ -72,10 +72,38 @@
       </view>
     </view>
 
+    <!-- 活动信息 -->
+    <view class="detail-activity card" v-if="activityInfoRows.length > 0">
+      <view class="detail-section-title">活动信息</view>
+      <view class="detail-activity__row" v-for="row in activityInfoRows" :key="row.label">
+        <text class="detail-activity__label">{{ row.label }}</text>
+        <text class="detail-activity__value">{{ row.value }}</text>
+      </view>
+    </view>
+
+    <!-- 活动场次 -->
+    <view class="detail-activity-slots card" v-if="isActivityProduct(product.category) && activitySlotOptions.length > 0">
+      <view class="detail-section-title">预约时间</view>
+      <view class="detail-activity-slots__list">
+        <view
+          v-for="slot in activitySlotOptions"
+          :key="slot"
+          :class="['detail-activity-slots__item', selectedActivitySlot === slot ? 'detail-activity-slots__item--active' : '']"
+          @tap.stop="onSelectActivitySlot(slot)"
+        >
+          <text>{{ slot }}</text>
+        </view>
+      </view>
+    </view>
+
     <!-- 日期选择 -->
-    <view class="detail-date card" v-if="isCampsiteProduct(product.category)" @tap="onOpenCalendar">
+    <view class="detail-date card" v-if="isDateBookingProduct(product.category)" @tap="onOpenCalendar">
       <view class="detail-section-title">选择日期</view>
-      <view class="detail-date__range" v-if="checkInDate && checkOutDate">
+      <view class="detail-date__selected" v-if="isActivityProduct(product.category) && selectedDates.length > 0">
+        <text class="detail-date__chip">活动: {{ formatDateShort(selectedDates[0]) }}</text>
+        <text class="detail-date__hint">点击更换预约日期</text>
+      </view>
+      <view class="detail-date__range" v-else-if="checkInDate && checkOutDate">
         <view class="detail-date__point">
           <text class="detail-date__label">入住</text>
           <text class="detail-date__value">{{ formatDateShort(checkInDate) }}</text>
@@ -95,7 +123,7 @@
         <text class="detail-date__hint">请选择离店日期</text>
       </view>
       <view class="detail-date__placeholder" v-else>
-        <text>请选择入营日期</text>
+        <text>{{ isActivityProduct(product.category) ? '请选择活动日期' : '请选择入营日期' }}</text>
         <text class="detail-date__arrow">›</text>
       </view>
       <view class="detail-date__weather" v-if="selectedWeather">
@@ -228,7 +256,17 @@
           </view>
         </view>
 
-        <view class="calendar-legend">
+        <view class="calendar-legend" v-if="isActivityProduct(product.category)">
+          <view class="calendar-legend__item">
+            <view class="calendar-legend__dot calendar-legend__dot--checkin"></view>
+            <text>预约日期</text>
+          </view>
+          <view class="calendar-legend__item">
+            <view class="calendar-legend__dot calendar-legend__dot--weekend"></view>
+            <text>周末价</text>
+          </view>
+        </view>
+        <view class="calendar-legend" v-else>
           <view class="calendar-legend__item">
             <view class="calendar-legend__dot calendar-legend__dot--checkin"></view>
             <text>入住</text>
@@ -245,10 +283,10 @@
 
         <view class="calendar-footer">
           <view class="calendar-footer__summary" v-if="selectedDates.length > 0">
-            <text class="calendar-footer__nights">{{ selectedDates.length }}晚</text>
+            <text class="calendar-footer__nights">{{ isActivityProduct(product.category) ? '已选1天' : `${selectedDates.length}晚` }}</text>
             <text class="calendar-footer__price">合计 ¥{{ totalPrice }}</text>
           </view>
-          <text class="calendar-footer__info" v-else>请选择入住日期</text>
+          <text class="calendar-footer__info" v-else>{{ isActivityProduct(product.category) ? '请选择活动日期' : '请选择入住日期' }}</text>
           <view class="calendar-footer__btn" @tap="onConfirmCalendar">
             <text>确定</text>
           </view>
@@ -287,7 +325,9 @@
 import { computed, ref } from 'vue'
 import { onLoad, onShareAppMessage } from '@dcloudio/uni-app'
 import { fallbackOriginalImageUrl, get, post, resolveImageUrl } from '@/utils/request'
-import { isCampsiteProduct, isRetailProduct, normalizeProductCategory } from '@/utils/product-rules'
+import { resolveQrcode } from '@/api/qrcode'
+import { isActivityProduct, isCampsiteProduct, isDateBookingProduct, isRetailProduct, normalizeProductCategory } from '@/utils/product-rules'
+import { savePendingCategoryKey, saveQrcodeAttribution } from '@/utils/attribution'
 import { recordPageView } from '@/utils/analytics'
 import { brandConfig } from '@/config/sites'
 import PriceTag from '@/components/price-tag/index.vue'
@@ -356,12 +396,32 @@ const notStarted = ref(false)
 const weatherForecasts = ref<IWeatherForecast[]>([])
 const priceCalendarMap = ref<Record<string, IPriceCalendarItem>>({})
 const loadedCalendarMonths = ref<Record<string, boolean>>({})
+const selectedActivitySlot = ref('')
 const disclaimerLines = computed(() => disclaimerText.value.split('\n').filter(line => line.trim()))
 const selectedWeather = computed(() => {
   if (checkInDate.value) {
     return getWeatherForDate(checkInDate.value)
   }
   return weatherForecasts.value[0] || null
+})
+const activityInfoRows = computed(() => {
+  const extActivity = product.value?.ext_activity
+  if (!extActivity) return []
+  const rows: Array<{ label: string; value: string }> = []
+  const slots = extActivity.time_slots || []
+  if (slots.length > 0) {
+    rows.push({ label: '预约时间', value: slots.map(formatActivitySlot).filter(Boolean).join('、') })
+  } else if (extActivity.event_date) {
+    rows.push({ label: '活动日期', value: extActivity.event_date })
+  }
+  if (extActivity.meeting_point) {
+    rows.push({ label: '集合地点', value: extActivity.meeting_point })
+  }
+  return rows.filter(row => row.value)
+})
+const activitySlotOptions = computed(() => {
+  const slots = product.value?.ext_activity?.time_slots || []
+  return slots.map(formatActivitySlot).filter(Boolean)
 })
 
 /** 最大连续预定天数限制（PRD 3.2.1: MAX_CONSECUTIVE = 5，即最多住5晚） */
@@ -389,10 +449,90 @@ function getTodayInfo() {
 }
 
 onLoad((options) => {
-  const id = options?.id || '1'
-  loadProduct(Number(id))
-  loadWeatherForecast()
+  void initProductDetailPage(options || {})
 })
+
+async function initProductDetailPage(options: Record<string, any>) {
+  void loadWeatherForecast()
+  const rawScene = String(options?.scene || '').trim()
+  if (rawScene) {
+    await resolveQrcodeSceneAndLoad(rawScene)
+    return
+  }
+
+  const productId = normalizeProductId(options?.id) || 1
+  await loadProduct(productId)
+}
+
+function safeDecodeQrcodeScene(raw: string): string {
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
+function normalizeProductId(value: unknown): number | null {
+  const id = Number(value)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+function extractProductIdFromQrcodeTarget(targetKey: string, path: string): number | null {
+  const keyId = normalizeProductId(targetKey)
+  if (keyId) return keyId
+  const match = String(path || '').match(/[?&]id=(\d+)/)
+  return match ? normalizeProductId(match[1]) : null
+}
+
+async function resolveQrcodeSceneAndLoad(rawScene: string) {
+  const scene = safeDecodeQrcodeScene(rawScene)
+  if (!scene) {
+    loading.value = false
+    uni.showToast({ title: '二维码参数无效', icon: 'none' })
+    return
+  }
+
+  loading.value = true
+  try {
+    const data = await resolveQrcode(scene)
+    saveQrcodeAttribution(data)
+    if (data.target_type === 'product' || data.target_type === 'activity_product') {
+      const productId = extractProductIdFromQrcodeTarget(data.target_key, data.path)
+      if (!productId) throw new Error('二维码商品参数无效')
+      await loadProduct(productId)
+      return
+    }
+    redirectResolvedQrcodePath(data.path, data.target_type, data.target_key)
+  } catch (err) {
+    console.error('解析商品二维码失败:', err)
+    loading.value = false
+    uni.showToast({ title: '二维码已失效或网络异常', icon: 'none' })
+  }
+}
+
+function redirectResolvedQrcodePath(path: string, targetType: string, targetKey: string) {
+  loading.value = false
+  if (targetType === 'category') {
+    savePendingCategoryKey(targetKey)
+    uni.switchTab({ url: '/pages/category/index' })
+    return
+  }
+  if (path.startsWith('/pages/index/index')) {
+    uni.switchTab({ url: '/pages/index/index' })
+    return
+  }
+  uni.redirectTo({
+    url: path,
+    fail: () => {
+      uni.navigateTo({
+        url: path,
+        fail: () => {
+          uni.switchTab({ url: '/pages/index/index' })
+        },
+      })
+    },
+  })
+}
 
 onShareAppMessage(() => {
   const p = product.value
@@ -421,7 +561,8 @@ async function loadProduct(id: number) {
       if (detail.ext_camping.sun_exposure === 'sunny') attributes.push({ key: 'shade', label: '光照', value: '阳光 ☀️', icon: '☀️' })
       if (detail.ext_camping.sun_exposure === 'shaded') attributes.push({ key: 'shade', label: '光照', value: '阴凉 🌳', icon: '🌳' })
       if (detail.ext_camping.sun_exposure === 'mixed') attributes.push({ key: 'shade', label: '光照', value: '半阴半阳', icon: '⛅' })
-      if (detail.ext_camping.max_persons) attributes.push({ key: 'size', label: '人数', value: `最多${detail.ext_camping.max_persons}人`, icon: '👥' })
+      if (detail.ext_camping.max_persons) attributes.push({ key: 'size', label: '人数', value: `包含${detail.ext_camping.max_persons}名成人`, icon: '👥' })
+      if (detail.ext_camping.free_child_age !== null && detail.ext_camping.free_child_age !== undefined) attributes.push({ key: 'children_free', label: '儿童', value: `${detail.ext_camping.free_child_age}岁以下儿童免费`, icon: '🧒' })
       if (detail.ext_camping.area) attributes.push({ key: 'area', label: '区域', value: detail.ext_camping.area, icon: '📍' })
     }
 
@@ -431,7 +572,7 @@ async function loadProduct(id: number) {
       id: detail.id,
       name: detail.name,
       category,
-      description: detail.description || '',
+      description: normalizeRichTextImages(detail.description || ''),
       cover_image: coverImage,
       images: images.map((img: any) => resolveImageUrl(img.url || '', 'large')),
       base_price: parseFloat(detail.base_price) || 0,
@@ -447,6 +588,8 @@ async function loadProduct(id: number) {
       has_disclaimer: detail.require_disclaimer !== false,
       identity_mode: 'optional',
       deposit_amount: detail.ext_rental?.deposit_amount || 0,
+      ext_shop: detail.ext_shop || undefined,
+      ext_activity: detail.ext_activity || undefined,
       skus: (detail.skus || []).map((sku: any): IProductSku => ({
         id: Number(sku.id),
         product_id: Number(sku.product_id || detail.id),
@@ -456,21 +599,26 @@ async function loadProduct(id: number) {
         stock: Number(sku.stock || 0),
         status: sku.status || 'active',
         image_url: sku.image_url || null,
+        inventory_mode: sku.inventory_mode || 'independent',
+        inventory_pool_id: sku.inventory_pool_id ?? null,
+        inventory_pool_available: sku.inventory_pool_available ?? null,
       })),
     }
-    const firstActiveSku = p.skus?.find(sku => sku.status === 'active' && sku.stock > 0) || p.skus?.find(sku => sku.status === 'active')
+    const firstActiveSku = p.skus?.find(sku => sku.status === 'active' && getSkuAvailableStock(sku, p) > 0) || p.skus?.find(sku => sku.status === 'active')
     if (firstActiveSku) {
       selectedSkuId.value = firstActiveSku.id
       p.current_price = firstActiveSku.price || p.current_price
-      p.stock = firstActiveSku.stock
+      p.stock = getSkuAvailableStock(firstActiveSku, p)
     }
 
     disclaimerText.value = '1. 参与者确认已充分了解户外露营活动的风险性，自愿参加本次露营活动。\n2. 参与者应遵守营地管理规定，爱护公共设施，保持环境整洁。\n3. 参与者对自身及随行人员的安全负有责任。\n4. 如遇极端天气或不可抗力因素，营地有权调整或取消活动。\n5. 参与者应妥善管理个人财物，营地对个人财物遗失不承担赔偿责任。\n6. 未成年人须在监护人陪同下参加露营活动。\n7. 禁止在非指定区域使用明火，违规产生的一切后果由参与者自行承担。'
 
+    const nextActivitySlots = (p.ext_activity?.time_slots || []).map(formatActivitySlot).filter(Boolean)
+    selectedActivitySlot.value = nextActivitySlots.length === 1 ? nextActivitySlots[0] : ''
     product.value = p
     recordPageView(`product:${p.id}`, p.name)
     notStarted.value = !!p.ticket_start_time && new Date(p.ticket_start_time).getTime() > Date.now()
-    if (isCampsiteProduct(p.category)) {
+    if (isDateBookingProduct(p.category)) {
       await loadPriceCalendarForCurrentMonth()
     }
     generateCalendar()
@@ -500,11 +648,11 @@ function parseCalendarItem(item: Record<string, any>): IPriceCalendarItem {
 
 async function loadPriceCalendarForCurrentMonth(force = false) {
   const p = product.value
-  if (!p || !isCampsiteProduct(p.category)) return
+  if (!p || !isDateBookingProduct(p.category)) return
 
   const year = calendarYear.value
   const month = calendarMonth.value
-  const monthKey = `${year}-${String(month).padStart(2, '0')}`
+  const monthKey = `${year}-${String(month).padStart(2, '0')}:${selectedSkuId.value || 0}:${selectedActivitySlot.value || ''}`
   if (!force && loadedCalendarMonths.value[monthKey]) return
 
   const lastDay = new Date(year, month, 0).getDate()
@@ -517,6 +665,7 @@ async function loadPriceCalendarForCurrentMonth(force = false) {
       date_start: dateStart,
       date_end: dateEnd,
       ...(selectedSkuId.value ? { sku_id: selectedSkuId.value } : {}),
+      ...(isActivityProduct(p.category) && selectedActivitySlot.value ? { time_slot: selectedActivitySlot.value } : {}),
     },
     { needAuth: false, showError: false },
   )
@@ -554,8 +703,60 @@ function formatSkuLabel(specValues: Record<string, string>): string {
   return Object.values(specValues || {}).filter(Boolean).join(' / ')
 }
 
+function formatActivitySlot(slot: Record<string, unknown>): string {
+  const start = String(slot.start || '').trim()
+  const end = String(slot.end || '').trim()
+  if (start && end) return `${start}-${end}`
+  return start || end
+}
+
+async function onSelectActivitySlot(slot: string) {
+  if (selectedActivitySlot.value === slot) return
+  selectedActivitySlot.value = slot
+  selectedDates.value = []
+  checkInDate.value = null
+  checkOutDate.value = null
+  loadedCalendarMonths.value = {}
+  priceCalendarMap.value = {}
+  try {
+    await loadPriceCalendarForCurrentMonth(true)
+  } catch {
+    uni.showToast({ title: '场次日历加载失败，请稍后重试', icon: 'none' })
+  }
+  generateCalendar()
+  calcPrice()
+}
+
+function isSharedInventorySku(sku: IProductSku | null | undefined): boolean {
+  return sku?.inventory_mode === 'shared_product' || !!sku?.inventory_pool_id
+}
+
+function getSkuAvailableStock(sku: IProductSku, fallbackProduct?: IProduct): number {
+  if (isSharedInventorySku(sku)) {
+    return Number(sku.inventory_pool_available ?? fallbackProduct?.stock ?? sku.stock ?? 0)
+  }
+  return Number(sku.stock || 0)
+}
+
+function normalizeRichTextImages(html: string): string {
+  if (!html) return ''
+  return html.replace(/<img\b([^>]*)>/gi, (_match, attrs) => {
+    const srcMatch = String(attrs).match(/src=(["'])([^"']+)\1/i)
+    if (!srcMatch) return `<img${attrs}>`
+    const nextSrc = resolveImageUrl(srcMatch[2], 'large')
+    let nextAttrs = String(attrs).replace(/src=(["'])([^"']+)\1/i, `src="${nextSrc}"`)
+    const imageStyle = 'max-width:100%;height:auto;display:block;'
+    if (/style=(["'])(.*?)\1/i.test(nextAttrs)) {
+      nextAttrs = nextAttrs.replace(/style=(["'])(.*?)\1/i, (_style, quote, value) => `style=${quote}${value};${imageStyle}${quote}`)
+    } else {
+      nextAttrs += ` style="${imageStyle}"`
+    }
+    return `<img${nextAttrs}>`
+  })
+}
+
 function isSkuOptionDisabled(sku: IProductSku): boolean {
-  return sku.status !== 'active' || (isRetailProduct(product.value?.category) && sku.stock <= 0)
+  return sku.status !== 'active' || (isRetailProduct(product.value?.category) && getSkuAvailableStock(sku, product.value || undefined) <= 0)
 }
 
 async function onSelectSku(skuId: number) {
@@ -566,13 +767,15 @@ async function onSelectSku(skuId: number) {
   }
   selectedSkuId.value = sku.id
   if (product.value) {
+    const nextStock = getSkuAvailableStock(sku, product.value)
     product.value = {
       ...product.value,
       current_price: sku.price || product.value.current_price,
-      stock: sku.stock,
+      stock: nextStock,
     }
   }
-  if (quantity.value > sku.stock) quantity.value = Math.max(1, sku.stock)
+  const selectedStock = getSkuAvailableStock(sku, product.value || undefined)
+  if (quantity.value > selectedStock) quantity.value = Math.max(1, selectedStock)
   selectedDates.value = []
   checkInDate.value = null
   checkOutDate.value = null
@@ -784,6 +987,16 @@ async function onSelectDate(item: ICalendarDay) {
 
   const date = item.date
 
+  if (isActivityProduct(product.value?.category)) {
+    if (!item.isAvailable) return
+    checkInDate.value = date
+    checkOutDate.value = null
+    selectedDates.value = [date]
+    generateCalendar()
+    calcPrice()
+    return
+  }
+
   if (!checkInDate.value) {
     // 第一次点击：设置入住日
     checkInDate.value = date
@@ -861,7 +1074,7 @@ function fillDateRange() {
 
 /** 确认日历选择 */
 function onConfirmCalendar() {
-  if (checkInDate.value && !checkOutDate.value) {
+  if (!isActivityProduct(product.value?.category) && checkInDate.value && !checkOutDate.value) {
     uni.showToast({ title: '请选择离店日期', icon: 'none' })
     return
   }
@@ -956,8 +1169,13 @@ function onBook() {
     return
   }
 
-  if (isCampsiteProduct(p.category) && selectedDates.value.length === 0) {
+  if (isDateBookingProduct(p.category) && selectedDates.value.length === 0) {
     uni.showToast({ title: '请先选择日期', icon: 'none' })
+    return
+  }
+
+  if (isActivityProduct(p.category) && activitySlotOptions.value.length > 0 && !selectedActivitySlot.value) {
+    uni.showToast({ title: '请选择预约时间', icon: 'none' })
     return
   }
 
@@ -966,10 +1184,11 @@ function onBook() {
     return
   }
 
-  const dateQuery = isCampsiteProduct(p.category) ? selectedDates.value.join(',') : ''
+  const dateQuery = isDateBookingProduct(p.category) ? selectedDates.value.join(',') : ''
   const skuQuery = selectedSkuId.value ? `&sku_id=${selectedSkuId.value}` : ''
+  const timeSlotQuery = selectedActivitySlot.value ? `&time_slot=${encodeURIComponent(selectedActivitySlot.value)}` : ''
   uni.navigateTo({
-    url: `/pages/order-confirm/index?product_id=${p.id}${skuQuery}&dates=${dateQuery}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
+    url: `/pages/order-confirm/index?product_id=${p.id}${skuQuery}${timeSlotQuery}&dates=${dateQuery}&quantity=${quantity.value}&disclaimer_signed=${disclaimerAgreed.value ? '1' : '0'}`,
   })
 }
 
@@ -1407,6 +1626,67 @@ function onGoBack() {
   padding: 24rpx;
 }
 
+.detail-activity {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx;
+
+  &__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 24rpx;
+    padding: 12rpx 0;
+    font-size: var(--font-size-base);
+  }
+
+  &__label {
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+  }
+
+  &__value {
+    color: var(--color-text);
+    text-align: right;
+    word-break: break-word;
+  }
+}
+
+.detail-activity-slots {
+  margin: 0 24rpx 16rpx;
+  padding: 24rpx;
+
+  &__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14rpx;
+  }
+
+  &__item {
+    min-height: 64rpx;
+    max-width: 100%;
+    padding: 0 24rpx;
+    display: inline-flex;
+    align-items: center;
+    border: 1rpx solid rgba(45, 74, 62, 0.18);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg-light);
+    color: var(--color-text);
+
+    text {
+      max-width: 560rpx;
+      font-size: var(--font-size-sm);
+      line-height: 1.4;
+      word-break: break-word;
+    }
+  }
+
+  &__item--active {
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+    font-weight: 600;
+  }
+}
+
 .detail-sku__list {
   display: flex;
   flex-wrap: wrap;
@@ -1494,6 +1774,9 @@ function onGoBack() {
     color: var(--color-text-secondary);
     line-height: 1.8;
     white-space: pre-wrap;
+    display: block;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 }
 

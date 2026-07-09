@@ -339,6 +339,7 @@ import type {
 } from '@/types'
 import type { OrderExportTask } from '@/types/order-export'
 import { downloadFile } from '@/utils'
+import { requestHighRiskConfirm } from '@/utils/high-risk-confirm'
 
 const router = useRouter()
 const loading = ref(false)
@@ -500,11 +501,15 @@ function handleReset() {
 async function handleExport() {
   exporting.value = true
   try {
-    await createOrderExport({
+    const payload = {
       filters: { ...searchParams },
       file_format: exportForm.file_format,
       include_sensitive: exportForm.include_sensitive,
-    })
+    }
+    const confirmToken = exportForm.include_sensitive
+      ? await requestHighRiskConfirm('orders:export_sensitive', '确认批量导出客户敏感信息？', payload)
+      : undefined
+    await createOrderExport(payload, confirmToken)
     ElMessage.success('导出任务已提交')
     showExportDialog.value = false
     showExportTaskDrawer.value = true

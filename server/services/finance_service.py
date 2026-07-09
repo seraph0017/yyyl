@@ -19,6 +19,7 @@ from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.finance import DepositRecord, FinanceAccount, FinanceTransaction
+from models.order import Order
 from utils.helpers import generate_transaction_no
 
 logger = logging.getLogger(__name__)
@@ -245,6 +246,8 @@ async def return_deposit(
     deposit_id: int,
     return_amount: Decimal,
     operator_id: int,
+    *,
+    site_id: int,
     remark: Optional[str] = None,
 ) -> DepositRecord:
     """退还押金
@@ -254,14 +257,16 @@ async def return_deposit(
         deposit_id: 押金记录ID
         return_amount: 退还金额
         operator_id: 操作人ID
+        site_id: 营地ID
         remark: 备注
 
     Returns:
         更新后的 DepositRecord
     """
     result = await db.execute(
-        select(DepositRecord).where(
+        select(DepositRecord).join(Order, DepositRecord.order_id == Order.id).where(
             DepositRecord.id == deposit_id,
+            Order.site_id == site_id,
             DepositRecord.is_deleted.is_(False),
         )
     )
@@ -299,7 +304,7 @@ async def return_deposit(
 
     # 更新 FinanceAccount 的 deposit_amount 和创建交易流水
     account_result = await db.execute(
-        select(FinanceAccount).where(FinanceAccount.site_id == 1)
+        select(FinanceAccount).where(FinanceAccount.site_id == site_id)
     )
     account = account_result.scalar_one_or_none()
     if account:
@@ -319,7 +324,7 @@ async def return_deposit(
             order_id=deposit.order_id,
             remark=remark or "押金退还",
             operator_id=operator_id,
-            site_id=1,
+            site_id=site_id,
         )
         db.add(tx)
 
@@ -335,7 +340,7 @@ async def return_deposit(
                 order_id=deposit.order_id,
                 remark=f"设备损坏扣除 deposit_id={deposit_id}",
                 operator_id=operator_id,
-                site_id=1,
+                site_id=site_id,
             )
             db.add(deduct_tx)
 

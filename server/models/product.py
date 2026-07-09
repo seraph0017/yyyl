@@ -288,6 +288,9 @@ class ProductExtCamping(Base):
     max_persons: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True, comment="最大人数"
     )
+    free_child_age: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True, comment="X岁以下儿童免费，空值表示不展示"
+    )
     event_start_date: Mapped[Optional[date]] = mapped_column(
         Date, nullable=True, comment="活动起始日"
     )

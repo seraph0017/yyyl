@@ -132,6 +132,54 @@ class TemporaryOrderServiceTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(session.audit_data["qrcode_image_url"], "/images/qrcodes/temporary/2/plain-token.png")
         db.flush.assert_awaited_once()
 
+    async def test_product_temporary_session_requires_date_for_activity_and_rental(self):
+        from schemas.order import TemporaryOrderCreateRequest
+        from services import order_service
+
+        class FakeResult:
+            def __init__(self, value):
+                self.value = value
+
+            def scalar_one_or_none(self):
+                return self.value
+
+        cases = [
+            (
+                SimpleNamespace(id=5, site_id=1, type="daily_activity", is_deleted=False, status="on_sale"),
+                TemporaryOrderCreateRequest(product_id=5, quantity=1),
+                40916,
+                "活动商品现场下单必须选择预约日期",
+            ),
+            (
+                SimpleNamespace(id=6, site_id=1, type="rental", is_deleted=False, status="on_sale"),
+                TemporaryOrderCreateRequest(product_id=6, quantity=1),
+                40916,
+                "租赁商品现场下单必须选择预约日期",
+            ),
+            (
+                SimpleNamespace(id=7, site_id=1, type="special_activity", is_deleted=False, status="on_sale"),
+                TemporaryOrderCreateRequest(product_id=7, quantity=1, booking_date=date(2026, 7, 10)),
+                40918,
+                "活动商品现场下单必须选择预约时间",
+            ),
+        ]
+
+        for product, body, code, message in cases:
+            with self.subTest(product_type=product.type):
+                db = SimpleNamespace(execute=AsyncMock(return_value=FakeResult(product)))
+                with self.assertRaises(HTTPException) as ctx:
+                    await order_service.create_temporary_order_session(
+                        db,
+                        site_id=1,
+                        body=body,
+                        operator_id=9,
+                        operator_source="admin",
+                    )
+
+                self.assertEqual(ctx.exception.status_code, 400)
+                self.assertEqual(ctx.exception.detail["code"], code)
+                self.assertIn(message, ctx.exception.detail["message"])
+
     def test_temporary_session_response_exposes_real_qrcode_image_url(self):
         from models.order import TemporaryOrderSession
         from services import order_service

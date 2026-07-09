@@ -1,25 +1,35 @@
 <template>
-  <view class="cms-image" v-if="data.images?.length">
+  <view class="cms-image" v-if="normalizedImages.length">
     <view class="cms-image__grid" :style="gridStyle">
       <view
-        v-for="(item, idx) in data.images"
+        v-for="(item, idx) in normalizedImages"
         :key="idx"
         class="cms-image__item"
+        :style="imageItemStyle(idx)"
         @tap="onImageTap(item, idx)"
       >
         <image
           v-if="!errorImages[idx]"
           class="cms-image__img"
-          :class="{ 'cms-image__img--multi': data.layout !== 'single' }"
+          :class="{ 'cms-image__img--multi': layoutMode !== 'single' }"
           :src="cmsImageUrl(item.url, idx)"
-          :mode="data.layout === 'single' ? 'widthFix' : 'aspectFill'"
+          :mode="layoutMode === 'single' ? (data.mode || 'widthFix') : 'aspectFill'"
+          :style="imageStyle(idx)"
           :lazy-load="idx > 0"
           @error="onImageError(idx)"
         />
         <!-- 图片加载失败占位 -->
-        <view v-else class="cms-image__fallback">
+        <view v-else class="cms-image__fallback" :style="imageStyle(idx)">
           <text class="cms-image__fallback-icon">🖼️</text>
         </view>
+        <view
+          v-if="idx === 0"
+          v-for="(hotspot, hotspotIndex) in normalizedHotspots"
+          :key="`hotspot-${hotspotIndex}`"
+          class="cms-image__hotspot"
+          :style="hotspotStyle(hotspot)"
+          @tap.stop="onHotspotTap(hotspot)"
+        />
       </view>
     </view>
   </view>
@@ -32,7 +42,7 @@
  */
 import { ref, computed } from 'vue'
 import { fallbackOriginalImageUrl, resolveImageUrl } from '@/utils/request'
-import type { CmsImageProps, CmsComponentStyle, CmsLink } from '@/types/cms'
+import type { CmsImageHotspot, CmsImageProps, CmsComponentStyle, CmsLink } from '@/types/cms'
 
 interface Props {
   data: CmsImageProps
@@ -51,9 +61,19 @@ function cmsImageUrl(url: string, idx: number) {
   return fallbackImages.value[idx] || resolveImageUrl(url, 'large')
 }
 
+const normalizedImages = computed(() => {
+  if (props.data.images?.length) return props.data.images
+  if (props.data.url) {
+    return [{ url: props.data.url, link: props.data.link || { type: 'none', target: '', title: '' } }]
+  }
+  return []
+})
+
+const normalizedHotspots = computed(() => props.data.hotspots || [])
+
 /** 图片加载失败 */
 function onImageError(idx: number) {
-  const item = props.data.images?.[idx]
+  const item = normalizedImages.value[idx]
   if (item?.url) {
     const variantUrl = cmsImageUrl(item.url, idx)
     const fallbackUrl = fallbackOriginalImageUrl(variantUrl)
@@ -67,7 +87,7 @@ function onImageError(idx: number) {
 
 /** 根据 layout 计算 grid 样式 */
 const gridStyle = computed(() => {
-  const layout = props.data.layout || 'single'
+  const layout = layoutMode.value
   const columnMap: Record<string, string> = {
     single: '1fr',
     'two-column': 'repeat(2, 1fr)',
@@ -79,17 +99,55 @@ const gridStyle = computed(() => {
   }
 })
 
+const layoutMode = computed(() => props.data.layout || 'single')
+
 /** 图片点击 — 有 link 则跳转，否则预览大图 */
-function onImageTap(item: { url: string; link: CmsLink }, idx: number) {
+function onImageTap(item: { url: string; link?: CmsLink }, idx: number) {
   if (item.link && item.link.type !== 'none') {
     emit('link-tap', item.link)
   } else {
     // 长按/点击预览大图
-    const urls = (props.data.images || []).map((img, imageIdx) => cmsImageUrl(img.url, imageIdx))
+    const urls = normalizedImages.value.map((img, imageIdx) => cmsImageUrl(img.url, imageIdx))
     uni.previewImage({
       urls,
       current: idx,
     })
+  }
+}
+
+function hotspotStyle(hotspot: CmsImageHotspot) {
+  return {
+    left: `${hotspot.x}%`,
+    top: `${hotspot.y}%`,
+    width: `${hotspot.width}%`,
+    height: `${hotspot.height}%`,
+  }
+}
+
+function normalizeSize(value?: string | number) {
+  if (value === undefined || value === null || value === '') return undefined
+  return typeof value === 'number' ? `${value}rpx` : String(value)
+}
+
+function imageItemStyle(idx: number) {
+  if (layoutMode.value !== 'single' || idx !== 0) return {}
+  return {
+    width: normalizeSize(props.data.width) || '100%',
+  }
+}
+
+function imageStyle(idx: number) {
+  if (layoutMode.value !== 'single' || idx !== 0) return {}
+  const height = normalizeSize(props.data.height)
+  return {
+    width: '100%',
+    ...(height ? { height } : {}),
+  }
+}
+
+function onHotspotTap(hotspot: CmsImageHotspot) {
+  if (hotspot.link && hotspot.link.type !== 'none') {
+    emit('link-tap', hotspot.link)
   }
 }
 </script>
@@ -112,6 +170,11 @@ function onImageTap(item: { url: string; link: CmsLink }, idx: number) {
       transform: scale(0.96);
       opacity: 0.85;
     }
+  }
+
+  &__hotspot {
+    position: absolute;
+    z-index: 2;
   }
 
   &__img {

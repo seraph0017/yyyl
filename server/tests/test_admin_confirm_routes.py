@@ -1,11 +1,16 @@
 import unittest
+from datetime import datetime, timezone
+from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from fastapi import HTTPException
 from pydantic import ValidationError
 
 from routers import admin as admin_router
+from routers import expenses as expenses_router
+from routers import finance as finance_router
+from routers import orders as orders_router
 from schemas.admin import OperationPasswordUpdateRequest
 from utils.security import hash_password, verify_password
 
@@ -353,6 +358,172 @@ class AdminConfirmRouteTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(ctx_hash.exception.status_code, 400)
         self.assertIn("request_hash", str(ctx_hash.exception.detail))
+
+    async def test_sensitive_order_export_confirm_token_matches_admin_token_shape(self):
+        admin = self.make_admin(site_id=1)
+        payload = {
+            "filters": {"status": "paid"},
+            "file_format": "xlsx",
+            "include_sensitive": True,
+        }
+        token = admin_router._build_confirm_token(
+            admin,
+            action="orders:export_sensitive",
+            request_hash=orders_router._stable_request_hash(payload),
+            site_id=1,
+        )
+
+        orders_router._require_confirm_token(
+            admin=admin,
+            site_id=1,
+            action="orders:export_sensitive",
+            payload=payload,
+            confirm_token=token,
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            orders_router._require_confirm_token(
+                admin=admin,
+                site_id=1,
+                action="orders:export_sensitive",
+                payload={**payload, "file_format": "csv"},
+                confirm_token=token,
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    async def test_expense_paid_confirm_token_matches_admin_token_shape(self):
+        admin = self.make_admin(site_id=2)
+        payload = {"expense_id": 88}
+        token = admin_router._build_confirm_token(
+            admin,
+            action="finance:expense:mark_paid:88",
+            request_hash=expenses_router._stable_request_hash(payload),
+            site_id=2,
+        )
+
+        expenses_router._require_confirm_token(
+            admin=admin,
+            site_id=2,
+            action="finance:expense:mark_paid:88",
+            payload=payload,
+            confirm_token=token,
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            expenses_router._require_confirm_token(
+                admin=admin,
+                site_id=2,
+                action="finance:expense:mark_paid:89",
+                payload=payload,
+                confirm_token=token,
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    async def test_finance_withdraw_requires_confirm_token_and_uses_request_site(self):
+        from schemas.finance import WithdrawRequest
+
+        admin = self.make_admin(site_id=2)
+        body = WithdrawRequest(amount=Decimal("12.30"), bank_account="bank-1", remark="提现")
+        payload = body.model_dump(mode="json", exclude_none=True)
+        token = admin_router._build_confirm_token(
+            admin,
+            action="finance:withdraw",
+            request_hash=finance_router._stable_request_hash(payload),
+            site_id=2,
+        )
+        request = SimpleNamespace(headers={"X-Site-Id": "2"})
+
+        with patch.object(
+            finance_router.finance_service,
+            "withdraw",
+            AsyncMock(return_value={
+                "transaction_no": "WD202607090001",
+                "amount": Decimal("12.30"),
+                "status": "pending",
+                "created_at": datetime.now(timezone.utc),
+            }),
+        ) as withdraw:
+            await finance_router.withdraw(
+                body,
+                request=request,
+                db=SimpleNamespace(),
+                admin=admin,
+                x_confirm_token=token,
+            )
+
+        withdraw.assert_awaited_once()
+        _, kwargs = withdraw.await_args
+        self.assertEqual(kwargs["site_id"], 2)
+        self.assertEqual(kwargs["operator_id"], 9)
+
+        with self.assertRaises(HTTPException) as ctx:
+            await finance_router.withdraw(
+                body,
+                request=request,
+                db=SimpleNamespace(),
+                admin=admin,
+                x_confirm_token=None,
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
+
+    async def test_finance_deposit_refund_requires_confirm_token_and_uses_request_site(self):
+        from schemas.finance import DepositRefundRequest
+
+        admin = self.make_admin(site_id=2)
+        body = DepositRefundRequest(return_amount=Decimal("50.00"), remark="退押金")
+        payload = {"deposit_id": 88, **body.model_dump(mode="json", exclude_none=True)}
+        token = admin_router._build_confirm_token(
+            admin,
+            action="finance:deposit_refund",
+            request_hash=finance_router._stable_request_hash(payload),
+            site_id=2,
+        )
+        request = SimpleNamespace(headers={"X-Site-Id": "2"})
+        deposit = SimpleNamespace(
+            id=88,
+            order_id=18,
+            order_item_id=28,
+            deposit_amount=Decimal("100.00"),
+            status="returned",
+            return_amount=Decimal("50.00"),
+            deduct_amount=Decimal("50.00"),
+            damage_level=None,
+            damage_photos=None,
+            damage_remark=None,
+            processed_by=9,
+            processed_at=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
+        )
+
+        with patch.object(
+            finance_router.finance_service,
+            "return_deposit",
+            AsyncMock(return_value=deposit),
+        ) as return_deposit:
+            await finance_router.refund_deposit(
+                88,
+                body,
+                request=request,
+                db=SimpleNamespace(),
+                admin=admin,
+                x_confirm_token=token,
+            )
+
+        return_deposit.assert_awaited_once()
+        _, kwargs = return_deposit.await_args
+        self.assertEqual(kwargs["site_id"], 2)
+        self.assertEqual(kwargs["operator_id"], 9)
+
+        with self.assertRaises(HTTPException) as ctx:
+            await finance_router.refund_deposit(
+                88,
+                body,
+                request=request,
+                db=SimpleNamespace(),
+                admin=admin,
+                x_confirm_token=None,
+            )
+        self.assertEqual(ctx.exception.status_code, 403)
 
 
 if __name__ == "__main__":

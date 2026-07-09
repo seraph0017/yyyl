@@ -38,11 +38,26 @@ logger = logging.getLogger(__name__)
 
 CAMPSITE_PRODUCT_TYPES = {"daily_camping", "event_camping"}
 ACTIVITY_PRODUCT_TYPES = {"daily_activity", "special_activity"}
-DATE_INVENTORY_PRODUCT_TYPES = CAMPSITE_PRODUCT_TYPES | ACTIVITY_PRODUCT_TYPES
+RENTAL_PRODUCT_TYPES = {'rental'}
+DATE_INVENTORY_PRODUCT_TYPES = CAMPSITE_PRODUCT_TYPES | ACTIVITY_PRODUCT_TYPES | RENTAL_PRODUCT_TYPES
 TEMPORARY_ORDER_EXPIRE_SECONDS = 15 * 60
 
 # 排序字段白名单
 ALLOWED_SORT_FIELDS = {"id", "created_at", "actual_amount", "status"}
+
+
+def _ensure_non_date_product_has_sku_or_pool(
+    *,
+    product: Product,
+    sku_id: Optional[int],
+    inventory_pool_id: Optional[int],
+) -> None:
+    """无日期商品必须通过 SKU 静态库存或共享库存池锁库存，避免无库存维度超卖。"""
+    if sku_id is None and inventory_pool_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": 40919, "message": f"商品「{product.name}」请先配置 SKU 或共享库存池后再售卖"},
+        )
 
 
 def _first_product_image(product: Optional[Product]) -> Optional[str]:
@@ -373,6 +388,7 @@ async def create_order(
 
             is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
             is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES
+            is_rental_product = product.type in RENTAL_PRODUCT_TYPES
             is_date_inventory_product = product.type in DATE_INVENTORY_PRODUCT_TYPES
             if is_campsite_product and not dates:
                 raise HTTPException(
@@ -383,6 +399,11 @@ async def create_order(
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail={"code": 40916, "message": "活动商品请选择预约日期"},
+                )
+            if is_rental_product and not dates:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail={"code": 40916, "message": "租赁商品请选择预约日期"},
                 )
             if is_activity_product and not time_slot:
                 raise HTTPException(
@@ -460,6 +481,11 @@ async def create_order(
                     time_slot=time_slot,
                     locked_inventories=locked_inventories,
                     locked_inventory_pools=locked_inventory_pools,
+                )
+                _ensure_non_date_product_has_sku_or_pool(
+                    product=product,
+                    sku_id=sku_id,
+                    inventory_pool_id=inventory_pool_id,
                 )
                 if inventory_pool_id is None and sku_id:
                     await _lock_static_sku_stock(db, product, sku_id, quantity, locked_skus)
@@ -617,6 +643,7 @@ async def quote_order(
 
         is_campsite_product = product.type in CAMPSITE_PRODUCT_TYPES
         is_activity_product = product.type in ACTIVITY_PRODUCT_TYPES
+        is_rental_product = product.type in RENTAL_PRODUCT_TYPES
         is_date_inventory_product = product.type in DATE_INVENTORY_PRODUCT_TYPES
         if is_campsite_product and not dates:
             raise HTTPException(
@@ -627,6 +654,11 @@ async def quote_order(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": 40916, "message": "活动商品请选择预约日期"},
+            )
+        if is_rental_product and not dates:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40916, "message": "租赁商品请选择预约日期"},
             )
         if is_activity_product and not time_slot:
             raise HTTPException(
@@ -709,6 +741,11 @@ async def quote_order(
                     quantity,
                     sku_requirements,
                 )
+            _ensure_non_date_product_has_sku_or_pool(
+                product=product,
+                sku_id=sku_id,
+                inventory_pool_id=inventory_pool_id,
+            )
             unit_price = await _resolve_sku_price(db, product, sku_id)
             actual_price = unit_price * quantity
             quote_item = {
@@ -877,6 +914,21 @@ async def create_temporary_order_session(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail={"code": 40916, "message": "营位商品现场下单必须选择预约日期"},
+            )
+        if product.type in ACTIVITY_PRODUCT_TYPES and not body.booking_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40916, "message": "活动商品现场下单必须选择预约日期"},
+            )
+        if product.type in RENTAL_PRODUCT_TYPES and not body.booking_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40916, "message": "租赁商品现场下单必须选择预约日期"},
+            )
+        if product.type in ACTIVITY_PRODUCT_TYPES and not body.time_slot:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": 40918, "message": "活动商品现场下单必须选择预约时间"},
             )
 
     now = _now()

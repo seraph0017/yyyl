@@ -92,6 +92,24 @@ const props = defineProps<Props>()
 const products = ref<IProduct[]>([])
 const loading = ref(true)
 const loadError = ref(false)
+const CMS_CATEGORY_TO_TYPE: Record<string, string> = {
+  daily_camping: 'daily_camping',
+  event_camping: 'event_camping',
+  equipment_rental: 'rental',
+  daily_activity: 'daily_activity',
+  special_activity: 'special_activity',
+  camp_shop: 'shop',
+  merchandise: 'merchandise',
+}
+const LEGACY_CATEGORY_ID_TO_KEY: Record<number, string> = {
+  1: 'daily_camping',
+  2: 'event_camping',
+  3: 'equipment_rental',
+  4: 'daily_activity',
+  5: 'special_activity',
+  6: 'camp_shop',
+  7: 'merchandise',
+}
 
 /** 布局模式，默认 grid */
 const layoutMode = computed(() => props.data.layout || 'grid')
@@ -134,6 +152,8 @@ function mapProduct(item: Record<string, unknown>): IProduct {
     has_disclaimer: item.require_disclaimer !== false,
     identity_mode: 'optional',
     deposit_amount: ((item.ext_rental as Record<string, unknown>)?.deposit_amount as number) || 0,
+    ext_shop: item.ext_shop as IProduct['ext_shop'],
+    ext_activity: item.ext_activity as IProduct['ext_activity'],
   }
 }
 
@@ -157,8 +177,16 @@ async function loadProducts() {
         }
         break
       case 'category':
-        if (props.data.category_key) {
-          params.category = props.data.category_key
+        {
+          const categoryKey = props.data.category_key || (props.data.category_id ? LEGACY_CATEGORY_ID_TO_KEY[Number(props.data.category_id)] : '')
+          const productType = categoryKey ? CMS_CATEGORY_TO_TYPE[categoryKey] : ''
+          if (productType) {
+            params.type = productType
+          } else if (categoryKey) {
+            params.category = categoryKey
+          } else if (props.data.category_id) {
+            params.category = String(props.data.category_id)
+          }
         }
         params.page_size = props.data.count || 6
         break

@@ -106,8 +106,8 @@ export function getCalendarData(params: CalendarQuery) {
   return get<{ data: CalendarItem[] }>('/admin/calendar', params)
 }
 
-function confirmHeaders(confirmToken: string) {
-  return { headers: { 'X-Confirm-Token': confirmToken } }
+function confirmHeaders(confirmToken?: string) {
+  return confirmToken ? { headers: { 'X-Confirm-Token': confirmToken } } : undefined
 }
 
 function serializeInventoryArrayParams(params: Record<string, unknown>) {
@@ -133,6 +133,6 @@ export function getInventoryCalendarData(params: InventoryCalendarQuery) {
   })
 }
 
-export function batchUpdateInventory(data: InventoryBatchPayload, confirmToken: string) {
+export function batchUpdateInventory(data: InventoryBatchPayload, confirmToken?: string) {
   return post<{ data: InventoryBatchResponse }>('/admin/inventory/batch-upsert', data, confirmHeaders(confirmToken))
 }

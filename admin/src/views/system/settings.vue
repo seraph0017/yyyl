@@ -73,7 +73,7 @@
           <el-form :model="operationPasswordForm" label-width="140px" style="max-width: 600px;">
             <el-alert
               class="mb-20"
-              title="操作密码用于提现、批量导出、库存批量调整等高风险操作。已有操作密码时需输入旧密码后才能修改。"
+              title="操作密码当前用于财务出账、含敏感客户信息的订单导出；如后续接入批量删除商品或订单，也必须使用操作密码。已有操作密码时需输入旧密码后才能修改。"
               type="warning"
               :closable="false"
             />

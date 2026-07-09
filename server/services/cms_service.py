@@ -32,6 +32,7 @@ from schemas.cms import (
 )
 from utils.image_variants import (
     ImageVariantError,
+    compress_uploaded_image,
     generate_image_variants,
     inspect_image_size,
     remove_image_variants,
@@ -47,9 +48,9 @@ ALLOWED_COMPONENT_TYPES = {
 
 # ---- 素材上传常量 ----
 
-ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 ALLOWED_VIDEO_TYPES = {"video/mp4", "video/webm"}
-ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_VIDEO_EXTS = {".mp4", ".webm"}
 
 MAX_IMAGE_SIZE = 10 * 1024 * 1024   # 10MB
@@ -974,7 +975,7 @@ async def upload_asset(
 
         if file_type == "image":
             try:
-                width, height = await asyncio.to_thread(inspect_image_size, save_path)
+                width, height = await asyncio.to_thread(compress_uploaded_image, save_path)
                 generated_variants = await asyncio.to_thread(
                     generate_image_variants,
                     save_path,
@@ -991,11 +992,12 @@ async def upload_asset(
         raise
 
     try:
+        stored_original_size = save_path.stat().st_size
         variant_size = sum(
             path.stat().st_size
             for path in generated_variants.values()
         ) if file_type == "image" else 0
-        total_recorded_size = len(content) + variant_size
+        total_recorded_size = stored_original_size + variant_size
         if total_size + total_recorded_size > 10 * 1024 * 1024 * 1024:
             raise HTTPException(status_code=400, detail={
                 "code": "CMS_ASSET_STORAGE_EXCEEDED",

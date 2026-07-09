@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable, Optional
 
 from fastapi import HTTPException, status
@@ -139,6 +139,43 @@ def _sku_label(sku: Optional[SKU]) -> Optional[str]:
     spec_values = sku.spec_values or {}
     spec_label = " / ".join(str(value) for value in spec_values.values())
     return spec_label or sku.sku_code
+
+
+def _decimal_or_none(value: Any) -> Optional[Decimal]:
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="价格必须为有效数字") from exc
+
+
+def _coerce_bool(value: Any, *, default: bool = False) -> bool:
+    """严格解析 API 布尔入参，避免字符串 "false" 被 bool() 误判为 True。"""
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "y", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "n", "off"}:
+            return False
+    raise HTTPException(status_code=400, detail="布尔参数必须为 true/false")
+
+
+def _is_position_inventory_product(product: Product) -> bool:
+    """孤品日期库存：露营、活动、租赁类同一时段库存固定为1。"""
+    return product.booking_mode == "by_position" and product.type in {
+        "daily_camping",
+        "event_camping",
+        "daily_activity",
+        "special_activity",
+        "rental",
+    }
 
 
 def build_inventory_calendar_cell(
@@ -592,7 +629,7 @@ async def batch_upsert_inventory(
     body: dict[str, Any],
     operator_id: Optional[int] = None,
 ) -> dict[str, Any]:
-    """批量创建或调整普通日期库存。"""
+    """批量创建或调整普通日期库存，并可同步写入商品日期价。"""
     product_ids = _normalize_int_list(body.get("product_ids") or body.get("product_id"))
     sku_ids = _normalize_int_list(body.get("sku_ids") or body.get("sku_id"))
     dates = expand_batch_dates(
@@ -608,7 +645,11 @@ async def batch_upsert_inventory(
     requested_total = int(requested_total) if requested_total is not None else None
     delta = int(body["delta"]) if body.get("delta") is not None else None
     inv_status = body.get("status")
-    create_missing = bool(body.get("create_missing", True))
+    price_mode = body.get("price_mode")
+    price_total = _decimal_or_none(body.get("price_total"))
+    price_delta = _decimal_or_none(body.get("price_delta"))
+    create_missing = _coerce_bool(body.get("create_missing"), default=True)
+    adjust_inventory = _coerce_bool(body.get("adjust_inventory"), default=True)
     time_slot = body.get("time_slot")
     remark = body.get("remark")
 
@@ -618,112 +659,176 @@ async def batch_upsert_inventory(
         product_ids=product_ids,
         sku_ids=sku_ids,
     )
-    bound_pool_map = await _load_declared_pool_map(db, site_id=site_id, targets=targets)
-    try:
-        ensure_targets_not_pool_bound(targets, bound_pool_map=bound_pool_map)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    target_product_ids = sorted({target.product_id for target in targets})
+    products = await _load_products(db, site_id=site_id, product_ids=target_product_ids)
+    product_map = {product.id: product for product in products}
+    if price_mode and any(target.sku_id is not None for target in targets):
+        raise HTTPException(status_code=400, detail="SKU 行暂不支持批量调价，请选择商品级行")
+    if adjust_inventory:
+        bound_pool_map = await _load_declared_pool_map(db, site_id=site_id, targets=targets)
+        try:
+            ensure_targets_not_pool_bound(targets, bound_pool_map=bound_pool_map)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
-    inv_conditions = [
-        Inventory.site_id == site_id,
-        Inventory.date.in_(dates),
-        Inventory.product_id.in_([target.product_id for target in targets]),
-        Inventory.is_deleted.is_(False),
-    ]
-    target_sku_ids = [target.sku_id for target in targets if target.sku_id is not None]
-    if target_sku_ids:
-        inv_conditions.append(Inventory.sku_id.in_(target_sku_ids))
-    else:
-        inv_conditions.append(Inventory.sku_id.is_(None))
-    if time_slot is None:
-        inv_conditions.append(Inventory.time_slot.is_(None))
-    else:
-        inv_conditions.append(Inventory.time_slot == time_slot)
+    existing_map: dict[tuple[int, Optional[int], date, Optional[str]], Inventory] = {}
+    if adjust_inventory:
+        inv_conditions = [
+            Inventory.site_id == site_id,
+            Inventory.date.in_(dates),
+            Inventory.product_id.in_(target_product_ids),
+            Inventory.is_deleted.is_(False),
+        ]
+        target_sku_ids = [target.sku_id for target in targets if target.sku_id is not None]
+        include_product_level_rows = any(target.sku_id is None for target in targets)
+        if target_sku_ids and include_product_level_rows:
+            inv_conditions.append(or_(Inventory.sku_id.in_(target_sku_ids), Inventory.sku_id.is_(None)))
+        elif target_sku_ids:
+            inv_conditions.append(Inventory.sku_id.in_(target_sku_ids))
+        else:
+            inv_conditions.append(Inventory.sku_id.is_(None))
+        if time_slot is None:
+            inv_conditions.append(Inventory.time_slot.is_(None))
+        else:
+            inv_conditions.append(Inventory.time_slot == time_slot)
 
-    inv_result = await db.execute(select(Inventory).where(*inv_conditions))
-    existing_map = {
-        (inv.product_id, inv.sku_id, inv.date, inv.time_slot): inv
-        for inv in inv_result.scalars().all()
-    }
+        inv_result = await db.execute(select(Inventory).where(*inv_conditions))
+        existing_map = {
+            (inv.product_id, inv.sku_id, inv.date, inv.time_slot): inv
+            for inv in inv_result.scalars().all()
+        }
+
+    price_rule_map: dict[tuple[int, date], PricingRule] = {}
+    if price_mode:
+        if price_mode not in {"set_total", "adjust_total"}:
+            raise HTTPException(status_code=400, detail="price_mode 只能为 set_total/adjust_total")
+        if price_mode == "set_total" and price_total is None:
+            raise HTTPException(status_code=400, detail="价格总价模式需要提供 price_total")
+        if price_mode == "adjust_total" and price_delta is None:
+            raise HTTPException(status_code=400, detail="价格增减模式需要提供 price_delta")
+        rule_result = await db.execute(
+            select(PricingRule).where(
+                PricingRule.product_id.in_(target_product_ids),
+                PricingRule.rule_type == "custom_date",
+                PricingRule.custom_date.in_(dates),
+            )
+        )
+        price_rule_map = {
+            (rule.product_id, rule.custom_date): rule
+            for rule in rule_result.scalars().all()
+            if rule.custom_date is not None
+        }
 
     created_count = updated_count = skipped_count = matched_count = 0
+    price_created_count = price_updated_count = 0
     errors: list[dict[str, Any]] = []
     for target in targets:
+        product = product_map.get(target.product_id)
         for current_date in dates:
-            key = (target.product_id, target.sku_id, current_date, time_slot)
-            inv = existing_map.get(key)
-            if inv is None and not create_missing:
-                skipped_count += 1
-                continue
+            if adjust_inventory:
+                key = (target.product_id, target.sku_id, current_date, time_slot)
+                inv = existing_map.get(key)
+                if inv is None and not create_missing:
+                    skipped_count += 1
+                else:
+                    if inv is None:
+                        base_total = 0
+                        locked = sold = 0
+                    else:
+                        base_total = int(inv.total or 0)
+                        locked = int(inv.locked or 0)
+                        sold = int(inv.sold or 0)
+                        matched_count += 1
 
-            if inv is None:
-                base_total = 0
-                locked = sold = 0
-            else:
-                base_total = int(inv.total or 0)
-                locked = int(inv.locked or 0)
-                sold = int(inv.sold or 0)
-                matched_count += 1
-
-            next_total = _next_total_for_mode(
-                mode=mode,
-                existing_total=base_total,
-                requested_total=requested_total,
-                delta=delta,
-            )
-            if next_total is None:
-                raise HTTPException(status_code=400, detail="当前 mode 需要提供 total 或 delta")
-            try:
-                available = recompute_available(total=next_total, locked=locked, sold=sold)
-            except ValueError as exc:
-                errors.append(
-                    {
-                        "product_id": target.product_id,
-                        "sku_id": target.sku_id,
-                        "date": current_date.isoformat(),
-                        "message": str(exc),
-                    }
-                )
-                continue
-
-            if inv is None:
-                inv = Inventory(
-                    site_id=site_id,
-                    product_id=target.product_id,
-                    sku_id=target.sku_id,
-                    date=current_date,
-                    time_slot=time_slot,
-                    total=next_total,
-                    available=available,
-                    locked=0,
-                    sold=0,
-                    status=inv_status or ("closed" if mode == "close" else "open"),
-                )
-                db.add(inv)
-                existing_map[key] = inv
-                created_count += 1
-                continue
-
-            old_total = inv.total
-            inv.total = next_total
-            inv.available = available
-            if inv_status is not None:
-                inv.status = inv_status
-            elif mode == "open":
-                inv.status = "open"
-            elif mode == "close":
-                inv.status = "closed"
-            if old_total != inv.total or inv_status is not None or mode in {"open", "close"}:
-                db.add(
-                    InventoryLog(
-                        inventory_id=inv.id,
-                        change_type="manual_adjust",
-                        quantity=int(inv.total or 0) - int(old_total or 0),
-                        operator_id=operator_id,
-                        remark=remark or "批量库存调整",
+                    next_total = _next_total_for_mode(
+                        mode=mode,
+                        existing_total=base_total,
+                        requested_total=requested_total,
+                        delta=delta,
                     )
-                )
-            updated_count += 1
+                    if next_total is None:
+                        raise HTTPException(status_code=400, detail="当前 mode 需要提供 total 或 delta")
+                    if product is not None and _is_position_inventory_product(product):
+                        next_total = 1
+                    try:
+                        available = recompute_available(total=next_total, locked=locked, sold=sold)
+                    except ValueError as exc:
+                        errors.append(
+                            {
+                                "product_id": target.product_id,
+                                "sku_id": target.sku_id,
+                                "date": current_date.isoformat(),
+                                "message": str(exc),
+                            }
+                        )
+                        continue
+
+                    if inv is None:
+                        inv = Inventory(
+                            site_id=site_id,
+                            product_id=target.product_id,
+                            sku_id=target.sku_id,
+                            date=current_date,
+                            time_slot=time_slot,
+                            total=next_total,
+                            available=available,
+                            locked=0,
+                            sold=0,
+                            status=inv_status or ("closed" if mode == "close" else "open"),
+                        )
+                        db.add(inv)
+                        existing_map[key] = inv
+                        created_count += 1
+                    else:
+                        old_total = inv.total
+                        inv.total = next_total
+                        inv.available = available
+                        if inv_status is not None:
+                            inv.status = inv_status
+                        elif mode == "open":
+                            inv.status = "open"
+                        elif mode == "close":
+                            inv.status = "closed"
+                        if old_total != inv.total or inv_status is not None or mode in {"open", "close"}:
+                            db.add(
+                                InventoryLog(
+                                    inventory_id=inv.id,
+                                    change_type="manual_adjust",
+                                    quantity=int(inv.total or 0) - int(old_total or 0),
+                                    operator_id=operator_id,
+                                    remark=remark or "批量库存调整",
+                                )
+                            )
+                        updated_count += 1
+
+            if price_mode and product is not None and target.sku_id is None:
+                rule_key = (target.product_id, current_date)
+                rule = price_rule_map.get(rule_key)
+                base_price = Decimal(str(rule.price if rule else product.base_price or 0))
+                next_price = price_total if price_mode == "set_total" else base_price + (price_delta or Decimal("0"))
+                if next_price is None or next_price < 0:
+                    errors.append(
+                        {
+                            "product_id": target.product_id,
+                            "sku_id": target.sku_id,
+                            "date": current_date.isoformat(),
+                            "message": "价格不能小于0",
+                        }
+                    )
+                    continue
+                if rule is None:
+                    rule = PricingRule(
+                        product_id=target.product_id,
+                        rule_type="custom_date",
+                        custom_date=current_date,
+                        price=next_price,
+                    )
+                    db.add(rule)
+                    price_rule_map[rule_key] = rule
+                    price_created_count += 1
+                else:
+                    rule.price = next_price
+                    price_updated_count += 1
 
     if errors:
         raise HTTPException(
@@ -743,6 +848,8 @@ async def batch_upsert_inventory(
         "created_count": created_count,
         "updated_count": updated_count,
         "skipped_count": skipped_count,
+        "price_created_count": price_created_count,
+        "price_updated_count": price_updated_count,
         "errors": errors,
     }
 
@@ -778,9 +885,22 @@ async def update_inventory_cell(
     if pool is not None:
         raise HTTPException(status_code=409, detail="该商品/SKU 已绑定共享库存池，请调整共享库存池")
 
+    product_result = await db.execute(
+        select(Product).where(
+            Product.id == inv.product_id,
+            Product.site_id == site_id,
+            Product.is_deleted.is_(False),
+        )
+    )
+    product = product_result.scalar_one_or_none()
+    if product is None:
+        raise HTTPException(status_code=404, detail="商品不存在")
+
     old_total = inv.total
     if body.get("total") is not None:
         total = int(body["total"])
+        if _is_position_inventory_product(product):
+            total = 1
         inv.available = recompute_available(total=total, locked=inv.locked, sold=inv.sold)
         inv.total = total
     if body.get("status") is not None:

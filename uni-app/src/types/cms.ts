@@ -15,6 +15,16 @@ export interface CmsLink {
   path?: string
 }
 
+/** 图片局部热区 */
+export interface CmsImageHotspot {
+  x: number
+  y: number
+  width: number
+  height: number
+  link: CmsLink
+  title?: string
+}
+
 /** 组件通用样式 */
 export interface CmsComponentStyle {
   margin_top?: number
@@ -41,7 +51,14 @@ export interface CmsBannerProps {
 
 /** 图片区块 props */
 export interface CmsImageProps {
-  images: Array<{
+  /** Admin 装修编辑器保存的单图字段 */
+  url?: string
+  link?: CmsLink
+  hotspots?: CmsImageHotspot[]
+  mode?: 'aspectFill' | 'aspectFit' | 'widthFix'
+  width?: string
+  height?: string
+  images?: Array<{
     url: string
     link: CmsLink
   }>
@@ -51,25 +68,38 @@ export interface CmsImageProps {
 
 /** 图文卡片 props */
 export interface CmsImageTextProps {
-  image: string
+  image?: string
+  /** Admin 装修编辑器保存的图片字段 */
+  image_url?: string
   title: string
   subtitle?: string
   description?: string
   link: CmsLink
+  title_color?: string
+  desc_color?: string
+  title_font_size?: number | string
+  desc_font_size?: number | string
+  title_font_family?: string
+  desc_font_family?: string
+  title_font_weight?: string
+  desc_font_weight?: string
   /** 布局方向 */
-  layout?: 'horizontal' | 'vertical'
+  layout?: 'horizontal' | 'vertical' | 'left-right' | 'right-left' | 'top-bottom'
 }
 
 /** 公告栏 props */
 export interface CmsNoticeProps {
-  notices: Array<{
+  notices?: Array<{
     text: string
     link?: CmsLink
   }>
+  /** Admin 装修编辑器保存的简化公告文本 */
+  texts?: string[]
   /** 滚动速度（px/s），默认 50 */
   speed?: number
   /** 背景色，默认使用主题 accent-bg */
   background_color?: string
+  text_color?: string
   /** 左侧图标 URL 或 emoji */
   icon?: string
 }
@@ -79,7 +109,8 @@ export interface CmsNavProps {
   columns: 3 | 4 | 5
   items: Array<{
     icon: string
-    name: string
+    name?: string
+    label?: string
     link: CmsLink
   }>
 }
@@ -92,6 +123,8 @@ export interface CmsProductListProps {
   product_ids?: number[]
   /** 按分类筛选（category_key） */
   category_key?: string
+  /** 旧版分类 ID 兼容字段；新配置使用 category_key */
+  category_id?: number
   /** 按标签筛选 */
   tag?: string
   /** 展示数量，默认 6 */
@@ -122,11 +155,15 @@ export interface CmsSpacerProps {
 /** 分割线 props */
 export interface CmsDividerProps {
   /** 线型 */
-  line_style: 'solid' | 'dashed'
+  line_style?: 'solid' | 'dashed'
+  /** Admin 装修编辑器保存的线型 */
+  style?: 'solid' | 'dashed'
   /** 线颜色 */
   color?: string
   /** 左右边距（rpx） */
   margin_horizontal?: number
+  /** Admin 装修编辑器保存的左右边距 */
+  margin?: number
 }
 
 /** 视频区块 props */

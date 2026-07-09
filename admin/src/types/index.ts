@@ -93,6 +93,7 @@ export interface CampingExt {
   position_name?: string | null
   area?: string | null
   max_persons?: number | null
+  free_child_age?: number | null
   event_start_date?: string | null
   event_end_date?: string | null
 }

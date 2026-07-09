@@ -22,7 +22,7 @@
           />
           <text v-else class="cms-nav__icon-emoji">{{ (!isImageUrl(item.icon) && item.icon) || '📌' }}</text>
         </view>
-        <text class="cms-nav__name">{{ item.name }}</text>
+        <text class="cms-nav__name">{{ item.name || item.label }}</text>
       </view>
     </view>
   </view>

@@ -35,11 +35,11 @@
             <view class="identity-card__detail-row">
               <view class="identity-card__detail-item">
                 <text class="identity-card__detail-icon">🪪</text>
-                <text class="identity-card__detail-text">{{ maskIdCard(item.id_card) }}</text>
+                <text class="identity-card__detail-text">{{ formatIdentityIdCard(item) }}</text>
               </view>
               <view class="identity-card__detail-item" v-if="item.phone">
                 <text class="identity-card__detail-icon">📱</text>
-                <text class="identity-card__detail-text">{{ maskPhone(item.phone) }}</text>
+                <text class="identity-card__detail-text">{{ formatIdentityPhone(item.phone) }}</text>
               </view>
             </view>
           </view>
@@ -129,7 +129,7 @@
             <view class="form-field__input-wrap">
               <input
                 class="form-field__input"
-                placeholder="请输入18位身份证号码"
+                :placeholder="editingId ? '如需修改，请重新输入完整身份证号' : '请输入18位身份证号码'"
                 placeholder-class="form-field__placeholder"
                 :value="formData.id_card"
                 @input="(e: any) => formData.id_card = e.detail.value"
@@ -137,6 +137,7 @@
               />
             </view>
             <text class="form-field__hint" v-if="formData.id_card && !isValidIdCard(formData.id_card)">请输入正确的18位身份证号</text>
+            <text class="form-field__hint" v-else-if="editingId && !formData.id_card">身份证号已脱敏，修改资料需重新输入完整号码</text>
           </view>
 
           <!-- 手机号 -->
@@ -148,7 +149,7 @@
             <view class="form-field__input-wrap">
               <input
                 class="form-field__input"
-                placeholder="请输入手机号码"
+                :placeholder="editingId ? '如需修改，请重新输入完整手机号' : '请输入手机号码'"
                 placeholder-class="form-field__placeholder"
                 :value="formData.phone"
                 @input="(e: any) => formData.phone = e.detail.value"
@@ -157,6 +158,7 @@
               />
             </view>
             <text class="form-field__hint" v-if="formData.phone && formData.phone.length === 11 && !isValidPhone(formData.phone)">请输入正确的手机号码</text>
+            <text class="form-field__hint" v-else-if="editingId && !formData.phone">手机号已脱敏，修改资料需重新输入完整号码</text>
           </view>
 
           <!-- 设为默认 -->
@@ -253,8 +255,8 @@ function onAddIdentity() {
 function onEditIdentity(item: IIdentity) {
   editingId.value = item.id
   formData.name = item.name
-  formData.id_card = item.id_card
-  formData.phone = item.phone
+  formData.id_card = isMaskedValue(item.id_card) ? '' : (item.id_card || '')
+  formData.phone = isMaskedValue(item.phone) ? '' : (item.phone || '')
   formData.is_default = item.is_default
   showForm.value = true
   nextTick(() => { formAnimated.value = true })
@@ -274,23 +276,27 @@ async function onSaveIdentity() {
     uni.showToast({ title: '请输入姓名', icon: 'none' })
     return
   }
-  if (!isValidIdCard(formData.id_card)) {
-    uni.showToast({ title: '请输入正确的身份证号', icon: 'none' })
-    return
+  if (!editingId.value || formData.id_card) {
+    if (!isValidIdCard(formData.id_card)) {
+      uni.showToast({ title: editingId.value ? '请重新输入完整身份证号' : '请输入正确的身份证号', icon: 'none' })
+      return
+    }
   }
-  if (!isValidPhone(formData.phone)) {
-    uni.showToast({ title: '请输入正确的手机号', icon: 'none' })
-    return
+  if (!editingId.value || formData.phone) {
+    if (!isValidPhone(formData.phone)) {
+      uni.showToast({ title: editingId.value ? '请重新输入完整手机号' : '请输入正确的手机号', icon: 'none' })
+      return
+    }
   }
 
   try {
     saving.value = true
-    const payload = {
+    const payload: Record<string, unknown> = {
       name: formData.name.trim(),
-      id_card: formData.id_card,
-      phone: formData.phone,
       is_default: formData.is_default,
     }
+    if (formData.id_card) payload.id_card = formData.id_card
+    if (formData.phone) payload.phone = formData.phone
 
     if (editingId.value) {
       await put(`/users/identities/${editingId.value}`, payload)
@@ -300,7 +306,7 @@ async function onSaveIdentity() {
 
     uni.showToast({ title: '保存成功', icon: 'success' })
     onCancelForm()
-    loadIdentities()
+    await loadIdentities()
   } catch {
     uni.showToast({ title: '保存失败', icon: 'error' })
   } finally {
@@ -349,6 +355,20 @@ function maskIdCard(idCard: string): string {
 function maskPhone(phone: string): string {
   if (!phone || phone.length < 7) return phone
   return phone.slice(0, 3) + '****' + phone.slice(-4)
+}
+
+function isMaskedValue(value?: string | null): boolean {
+  return Boolean(value && value.includes('*'))
+}
+
+function formatIdentityIdCard(item: IIdentity): string {
+  if (item.id_card_masked) return item.id_card_masked
+  return item.id_card ? maskIdCard(item.id_card) : '未填写身份证'
+}
+
+function formatIdentityPhone(phone?: string | null): string {
+  if (!phone) return ''
+  return isMaskedValue(phone) ? phone : maskPhone(phone)
 }
 </script>
 

@@ -285,7 +285,6 @@ import {
   testSendEnterpriseWechatRobot,
   updateEnterpriseWechatRobot,
 } from '@/api/enterprise-wechat'
-import { requestHighRiskConfirm } from '@/utils/high-risk-confirm'
 import { formatDateTime } from '@/utils'
 import type {
   EnterpriseWechatRobot,
@@ -435,26 +434,13 @@ function buildRobotPayload() {
 async function saveRobot() {
   const valid = await robotFormRef.value?.validate().catch(() => false)
   if (!valid) return
-  const action = editingRobot.value
-    ? `enterprise_wechat:update:${editingRobot.value.id}`
-    : 'enterprise_wechat:create'
   const payload = buildRobotPayload()
-  let confirmToken = ''
-  try {
-    confirmToken = await requestHighRiskConfirm(
-      action,
-      `确认保存企业微信群机器人「${robotForm.name}」？webhook 与 secret 将加密存储，发送日志会做脱敏展示。`,
-      payload,
-    )
-  } catch {
-    return
-  }
   savingRobot.value = true
   try {
     if (editingRobot.value) {
-      await updateEnterpriseWechatRobot(editingRobot.value.id, payload, confirmToken)
+      await updateEnterpriseWechatRobot(editingRobot.value.id, payload)
     } else {
-      await createEnterpriseWechatRobot(payload as EnterpriseWechatRobotPayload, confirmToken)
+      await createEnterpriseWechatRobot(payload as EnterpriseWechatRobotPayload)
     }
     ElMessage.success('企业微信群机器人已保存')
     robotDialogVisible.value = false
@@ -467,22 +453,16 @@ async function saveRobot() {
 async function toggleRobotStatus(row: EnterpriseWechatRobot) {
   const status = row.status === 'active' ? 'inactive' : 'active'
   const actionText = status === 'active' ? '启用' : '停用'
-  let confirmToken = ''
   try {
     await ElMessageBox.confirm(
       `确定${actionText}企业微信群机器人「${row.name}」吗？`,
       `${actionText}机器人确认`,
       { type: status === 'active' ? 'success' : 'warning' },
     )
-    confirmToken = await requestHighRiskConfirm(
-      `enterprise_wechat:update:${row.id}`,
-      `确认${actionText}企业微信群机器人「${row.name}」？`,
-      { status },
-    )
   } catch {
     return
   }
-  await updateEnterpriseWechatRobot(row.id, { status }, confirmToken)
+  await updateEnterpriseWechatRobot(row.id, { status })
   ElMessage.success(status === 'active' ? '机器人已启用' : '机器人已停用')
   fetchRobots()
 }
@@ -513,23 +493,13 @@ async function sendTestMessage() {
   } catch {
     return
   }
-  let confirmToken = ''
   const payload = {
     content: testForm.content.trim(),
     mentioned_mobile_list: testForm.mentioned_mobile_list,
   }
-  try {
-    confirmToken = await requestHighRiskConfirm(
-      `enterprise_wechat:test_send:${testingRobot.value.id}`,
-      `确认发送测试消息到企业微信群机器人「${testingRobot.value.name}」？`,
-      payload,
-    )
-  } catch {
-    return
-  }
   sendingTest.value = true
   try {
-    const res = await testSendEnterpriseWechatRobot(testingRobot.value.id, payload, confirmToken)
+    const res = await testSendEnterpriseWechatRobot(testingRobot.value.id, payload)
     ElMessage.success(`测试消息已发送，日志ID：${res.data.log_id}`)
     testDialogVisible.value = false
     selectedRobotId.value = testingRobot.value.id
@@ -603,19 +573,9 @@ async function sendKnowledgeAskMessage() {
   } catch {
     return
   }
-  let confirmToken = ''
-  try {
-    confirmToken = await requestHighRiskConfirm(
-      `enterprise_wechat:knowledge_ask_send:${knowledgeAskRobot.value.id}`,
-      `确认发送知识库问答到企业微信群机器人「${knowledgeAskRobot.value.name}」？`,
-      payload,
-    )
-  } catch {
-    return
-  }
   sendingKnowledgeAsk.value = true
   try {
-    const res = await askSendEnterpriseWechatRobotKnowledge(knowledgeAskRobot.value.id, payload, confirmToken)
+    const res = await askSendEnterpriseWechatRobotKnowledge(knowledgeAskRobot.value.id, payload)
     ElMessage.success(`知识库问答已发送，日志ID：${res.data.robot_log_id}`)
     knowledgeAskDialogVisible.value = false
     selectedRobotId.value = knowledgeAskRobot.value.id

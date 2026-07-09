@@ -2,6 +2,10 @@
 import { get, post, put } from '@/utils/request'
 import type { ExpenseType, ExpenseRequest, ExpenseStats } from '@/types'
 
+function confirmHeaders(confirmToken?: string) {
+  return confirmToken ? { headers: { 'X-Confirm-Token': confirmToken } } : undefined
+}
+
 // 报销类型
 export function getExpenseTypes() {
   return get<{ code: number; data: ExpenseType[] }>('/admin/expense-types')
@@ -32,8 +36,8 @@ export function approveExpense(id: number, data: { approved: boolean; review_rem
   return post(`/admin/expenses/${id}/approve`, data)
 }
 
-export function markExpensePaid(id: number) {
-  return post(`/admin/expenses/${id}/mark-paid`)
+export function markExpensePaid(id: number, confirmToken?: string) {
+  return post(`/admin/expenses/${id}/mark-paid`, {}, confirmHeaders(confirmToken))
 }
 
 export function getExpenseStats(params?: object) {

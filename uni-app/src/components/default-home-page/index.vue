@@ -204,6 +204,8 @@ function mapProduct(item: Record<string, unknown>): IProduct {
     has_disclaimer: item.require_disclaimer !== false,
     identity_mode: 'optional',
     deposit_amount: ((item.ext_rental as Record<string, unknown>)?.deposit_amount as number) || 0,
+    ext_shop: item.ext_shop as IProduct['ext_shop'],
+    ext_activity: item.ext_activity as IProduct['ext_activity'],
   }
 }
 

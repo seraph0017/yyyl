@@ -2504,12 +2504,6 @@ async def create_enterprise_wechat_robot(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建企业微信群机器人配置，webhook 和 secret 均加密存储。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action="enterprise_wechat:create",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     name = (body.get("name") or "").strip()
     webhook_url = (body.get("webhook_url") or "").strip()
@@ -2546,12 +2540,6 @@ async def update_enterprise_wechat_robot(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新企业微信群机器人配置。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"enterprise_wechat:update:{robot_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     result = await db.execute(
         select(EnterpriseWechatRobotConfig).where(
@@ -2599,12 +2587,6 @@ async def test_send_enterprise_wechat_robot(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """向企业微信群机器人发送测试消息，并记录审计日志。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"enterprise_wechat:test_send:{robot_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     result = await db.execute(
         select(EnterpriseWechatRobotConfig).where(
@@ -2680,12 +2662,6 @@ async def ask_send_enterprise_wechat_robot_knowledge(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """复用智能客服知识库回答，并通过企业微信群机器人发送到群。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"enterprise_wechat:knowledge_ask_send:{robot_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     question = (body.get("question") or "").strip()
     if not question:
@@ -3826,12 +3802,6 @@ async def create_inventory_pool(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """创建跨商品共享库存池。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action="inventory_pool:create",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     pool_code = (body.get("pool_code") or "").strip()
     name = (body.get("name") or "").strip()
@@ -3881,12 +3851,6 @@ async def update_inventory_pool(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新跨商品共享库存池。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"inventory_pool:update:{pool_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     result = await db.execute(
         select(InventoryPool).where(
@@ -3927,12 +3891,6 @@ async def adjust_inventory_pool(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """安全调整共享库存池总量或状态。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"inventory_pool:adjust:{pool_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     result = await inventory_pool_service.adjust_inventory_pool(
         db,
@@ -4038,12 +3996,6 @@ async def create_inventory_pool_binding(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """显式绑定商品、SKU、活动场次或租赁资产到库存池。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"inventory_pool_binding:create:{pool_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     pool_result = await db.execute(
         select(InventoryPool.id).where(
@@ -4092,12 +4044,6 @@ async def update_inventory_pool_binding(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新库存池绑定关系。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"inventory_pool_binding:update:{binding_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     result = await db.execute(
         select(InventoryPoolBinding).where(
@@ -4136,7 +4082,7 @@ async def update_inventory_pool_binding(
     return ResponseModel.success(data=_serialize_inventory_pool_binding(binding), message="库存池绑定更新成功")
 
 
-@router.get("/inventory/calendar", summary="完整库存日历")
+@router.get("/inventory/calendar", summary="完整商品日历")
 async def get_inventory_calendar(
     request: Request,
     date_start: date = Query(...),
@@ -4150,7 +4096,7 @@ async def get_inventory_calendar(
     db: AsyncSession = Depends(get_db),
     admin: AdminUser = Depends(get_current_admin),
 ):
-    """查询完整库存日历，缺失日期也返回关闭状态格子。"""
+    """查询完整商品日历，缺失日期也返回关闭状态格子。"""
     _ensure_super_admin(admin)
     site_id = get_site_id(request)
     data = await inventory_calendar_service.get_inventory_calendar(
@@ -4168,7 +4114,7 @@ async def get_inventory_calendar(
     return ResponseModel.success(data=data)
 
 
-@router.post("/inventory/batch-upsert", summary="批量创建或调整库存日历")
+@router.post("/inventory/batch-upsert", summary="批量创建或调整商品日历")
 async def batch_upsert_inventory_calendar(
     body: dict,
     request: Request,
@@ -4176,12 +4122,6 @@ async def batch_upsert_inventory_calendar(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """批量 upsert 普通日期库存，显式共享池目标会被拒绝。"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action="inventory:batch-upsert",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     data = await inventory_calendar_service.batch_upsert_inventory(
         db,
@@ -4190,7 +4130,7 @@ async def batch_upsert_inventory_calendar(
         operator_id=admin.id,
     )
     await db.commit()
-    return ResponseModel.success(data=data, message="库存日历批量调整完成")
+    return ResponseModel.success(data=data, message="商品日历批量调整完成")
 
 
 @router.get("/inventory", summary="库存列表")
@@ -4251,12 +4191,6 @@ async def update_inventory(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """更新库存"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action=f"inventory:update:{inventory_id}",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     inv = await inventory_calendar_service.update_inventory_cell(
         db,
@@ -4277,12 +4211,6 @@ async def batch_open_inventory(
     admin: AdminUser = Depends(get_current_admin),
 ):
     """批量开放库存"""
-    _require_high_risk_confirm(
-        request,
-        admin,
-        action="inventory:batch-upsert",
-        request_hash=_hash_high_risk_body(body),
-    )
     site_id = get_site_id(request)
     data = await inventory_calendar_service.batch_upsert_inventory(
         db,

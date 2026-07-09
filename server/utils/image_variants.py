@@ -18,6 +18,7 @@ IMAGE_VARIANTS = {
     "large": {"max_side": 1600, "quality": 82},
     "banner": {"max_side": 1400, "quality": 78},
 }
+UPLOAD_ORIGINAL_CONFIG = {"max_side": 1600, "quality": 82}
 
 SUPPORTED_VARIANT_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_IMAGE_DIMENSION = 8000
@@ -59,6 +60,9 @@ def _load_normalized_image(image_path: Path) -> Image.Image:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(image_path) as raw_image:
+                raw_format = (raw_image.format or "").upper()
+                if raw_format == "GIF":
+                    raise ImageVariantError("GIF 图片暂不支持压缩，请上传 JPG/PNG/WebP")
                 raw_image = ImageOps.exif_transpose(raw_image)
                 width, height = raw_image.size
                 if width > MAX_IMAGE_DIMENSION or height > MAX_IMAGE_DIMENSION:
@@ -159,3 +163,41 @@ def generate_image_variants(
     finally:
         raw_image.close()
     return generated
+
+
+def compress_uploaded_image(
+    image_path: Path,
+    *,
+    max_side: int = int(UPLOAD_ORIGINAL_CONFIG["max_side"]),
+    quality: int = int(UPLOAD_ORIGINAL_CONFIG["quality"]),
+) -> tuple[int, int]:
+    """覆盖压缩上传原图到手机清晰宽度，返回压缩后尺寸。"""
+    if not is_supported_variant_image(image_path):
+        return inspect_image_size(image_path)
+
+    image = _load_normalized_image(image_path)
+    try:
+        if max(image.size) > max_side:
+            image.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+        suffix = image_path.suffix.lower()
+        if suffix in {".jpg", ".jpeg"}:
+            if image.mode not in ("RGB", "L"):
+                image = image.convert("RGB")
+            image.save(
+                image_path,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+                progressive=True,
+            )
+        elif suffix == ".png":
+            if image.mode not in ("RGB", "RGBA", "P", "L"):
+                image = image.convert("RGBA")
+            image.save(image_path, format="PNG", optimize=True, compress_level=9)
+        elif suffix == ".webp":
+            if image.mode not in ("RGB", "RGBA"):
+                image = image.convert("RGBA" if "A" in image.getbands() else "RGB")
+            image.save(image_path, format="WEBP", quality=quality, method=6)
+        return image.size
+    finally:
+        image.close()

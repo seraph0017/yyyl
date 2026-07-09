@@ -41,7 +41,7 @@ const adminRoutes: RouteRecordRaw[] = [
         path: 'calendar',
         name: 'Calendar',
         component: () => import('@/views/calendar/index.vue'),
-        meta: { title: '库存日历', icon: 'Calendar', roles: ['super_admin'] },
+        meta: { title: '商品日历', icon: 'Calendar', roles: ['super_admin'] },
       },
       {
         path: 'campsites',

@@ -185,6 +185,7 @@ import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'elem
 import { Search, Plus, TrendCharts, View, Check, Close, Wallet } from '@element-plus/icons-vue'
 import { getExpenses, getExpenseTypes as fetchExpenseTypesApi, getExpenseStats, createExpense, approveExpense, markExpensePaid, getExpenseDetail } from '@/api/expense'
 import { formatPrice, formatDate, formatDateTime } from '@/utils'
+import { requestHighRiskConfirm } from '@/utils/high-risk-confirm'
 import type { ExpenseRequest, ExpenseType, ExpenseStats } from '@/types'
 
 const router = useRouter()
@@ -319,7 +320,13 @@ async function handleApprove(row: ExpenseRequest, approved: boolean) {
 
 async function handleMarkPaid(row: ExpenseRequest) {
   await ElMessageBox.confirm(`确认标记「${row.applicant_name}」的报销（¥${formatPrice(row.amount)}）为已打款？`, '打款确认', { type: 'warning' })
-  await markExpensePaid(row.id)
+  const payload = { expense_id: row.id }
+  const confirmToken = await requestHighRiskConfirm(
+    `finance:expense:mark_paid:${row.id}`,
+    '确认执行财务打款标记？',
+    payload,
+  )
+  await markExpensePaid(row.id, confirmToken)
   ElMessage.success('已标记打款')
   fetchData()
   fetchStats()

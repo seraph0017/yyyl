@@ -53,12 +53,28 @@ export function handleCmsLink(link: CmsLink): void {
       break
 
     case 'miniprogram':
-      handleMiniprogramLink(link.target, link.path)
+      {
+        const parsed = parseMiniprogramTarget(link.target, link.path)
+        handleMiniprogramLink(parsed.appId, parsed.path)
+      }
       break
 
     default:
       console.warn(`[cms-link] 未知链接类型: ${link.type}`)
   }
+}
+
+function parseMiniprogramTarget(target: string, path?: string): { appId: string; path?: string } {
+  try {
+    const parsed = JSON.parse(target)
+    if (parsed && typeof parsed === 'object') {
+      return {
+        appId: String(parsed.appId || parsed.appid || ''),
+        path: parsed.path || path || '',
+      }
+    }
+  } catch {}
+  return { appId: target, path }
 }
 
 /**

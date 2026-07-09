@@ -11,6 +11,12 @@ import type {
 } from '@/types'
 import type { OrderExportTask } from '@/types/order-export'
 
+type OrderExportPayload = { filters: Record<string, any>; file_format: 'csv' | 'xlsx'; include_sensitive: boolean }
+
+function confirmHeaders(confirmToken?: string) {
+  return confirmToken ? { headers: { 'X-Confirm-Token': confirmToken } } : undefined
+}
+
 export function getOrders(params: OrderSearchParams) {
   return get<{ data: PaginatedResponse<Order> }>('/admin/orders', params)
 }
@@ -39,8 +45,8 @@ export function queryTemporaryCodePay(sessionId: number) {
   return post<{ data: TemporaryOrderCodePayResult }>(`/admin/orders/temporary/${sessionId}/query-codepay`, {})
 }
 
-export function createOrderExport(data: { filters: Record<string, any>; file_format: 'csv' | 'xlsx'; include_sensitive: boolean }) {
-  return post<{ data: OrderExportTask }>('/admin/orders/export', data)
+export function createOrderExport(data: OrderExportPayload, confirmToken?: string) {
+  return post<{ data: OrderExportTask }>('/admin/orders/export', data, confirmHeaders(confirmToken))
 }
 
 export function getOrderExportTasks(params?: { page?: number; page_size?: number }) {

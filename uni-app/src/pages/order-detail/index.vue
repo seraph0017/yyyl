@@ -21,14 +21,22 @@
     <view class="detail-section card">
       <view class="detail-section__title">商品信息</view>
       <view class="order-product" v-for="item in order.items" :key="item.id">
-        <view class="order-product__image"><text>🏕️</text></view>
+        <view class="order-product__image">
+          <image
+            :src="getOrderItemImage(item)"
+            mode="aspectFill"
+            v-if="getOrderItemImage(item)"
+          />
+          <text v-else>🏕️</text>
+        </view>
         <view class="order-product__info">
           <text class="order-product__name">{{ item.product_name }}</text>
-          <text class="order-product__date" v-if="item.date">📅 {{ item.date }}</text>
+          <text class="order-product__meta">{{ formatOrderItemMeta(item) }}</text>
+          <text class="order-product__remark" v-if="item.remark">备注：{{ item.remark }}</text>
         </view>
         <view class="order-product__right">
           <text class="order-product__price">¥{{ item.actual_price }}</text>
-          <text class="order-product__qty">x{{ item.quantity }}</text>
+          <text class="order-product__qty">{{ formatOrderItemQty(item) }}</text>
         </view>
       </view>
     </view>
@@ -65,9 +73,21 @@
         <text>下单时间</text>
         <text>{{ order.created_at }}</text>
       </view>
-      <view class="info-line" v-if="order.paid_at">
+      <view class="info-line" v-if="order.user_phone_masked || order.user_phone">
+        <text>手机号</text>
+        <text>{{ order.user_phone_masked || order.user_phone }}</text>
+      </view>
+      <view class="info-line">
+        <text>订单明细</text>
+        <text>{{ getOrderDetailSummary(order) }}</text>
+      </view>
+      <view class="info-line info-line--remark">
+        <text>订单备注</text>
+        <text>{{ order.remark || '-' }}</text>
+      </view>
+      <view class="info-line" v-if="order.payment_time">
         <text>支付时间</text>
-        <text>{{ order.paid_at }}</text>
+        <text>{{ order.payment_time }}</text>
       </view>
     </view>
 
@@ -89,7 +109,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { get, post } from '@/utils/request'
+import { get, post, resolveImageUrl } from '@/utils/request'
 import { ensureLogin } from '@/utils/auth'
 import { getOrderStatusText, formatDate } from '@/utils/util'
 import type { IOrder } from '@/types'
@@ -126,8 +146,8 @@ async function loadOrder(id: string) {
     const steps: StatusStep[] = [
       { label: '提交订单', time: o.created_at ? formatDate(o.created_at, 'MM-DD HH:mm') : '', active: true },
     ]
-    if (o.paid_at) {
-      steps.push({ label: '支付成功', time: formatDate(o.paid_at, 'MM-DD HH:mm'), active: true })
+    if (o.payment_time) {
+      steps.push({ label: '支付成功', time: formatDate(o.payment_time, 'MM-DD HH:mm'), active: true })
     } else {
       steps.push({ label: '支付成功', time: '', active: false })
     }
@@ -168,6 +188,52 @@ function onContactService() {
 function onCopyOrderNo() {
   uni.setClipboardData({ data: order.value?.order_no || '' })
 }
+
+function getOrderDetailSummary(currentOrder: IOrder): string {
+  const itemCount = currentOrder.items.length
+  if (itemCount === 0) return '共0件'
+  const allDated = currentOrder.items.every(item => !!item.date)
+  if (!allDated) {
+    return `共${itemCount}件`
+  }
+  const headCount = currentOrder.items[0]?.quantity || 1
+  const hasTimeSlot = currentOrder.items.some(item => !!item.time_slot)
+  return `共${headCount}人${itemCount}${hasTimeSlot ? '单' : '晚'}`
+}
+
+function formatOrderItemMeta(item: IOrder['items'][number]): string {
+  const parts: string[] = []
+  const skuLabel = formatSkuSpecLabel(item.sku_spec_values)
+  if (skuLabel) parts.push(skuLabel)
+  if (item.date) parts.push(`日期：${item.date}`)
+  if (item.time_slot) parts.push(`场次：${item.time_slot}`)
+  if (item.date) {
+    parts.push(`${item.quantity}人${item.time_slot ? '1单' : '1晚'}`)
+  } else {
+    parts.push(`数量：${item.quantity}`)
+  }
+  return parts.join(' · ')
+}
+
+function formatOrderItemQty(item: IOrder['items'][number]): string {
+  if (item.date) {
+    return `${item.quantity}人${item.time_slot ? '1单' : '1晚'}`
+  }
+  return `x${item.quantity}`
+}
+
+function formatSkuSpecLabel(specValues?: Record<string, unknown> | null): string {
+  if (!specValues) return ''
+  return Object.entries(specValues)
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+    .map(([key, value]) => `${key}：${value}`)
+    .join(' / ')
+}
+
+function getOrderItemImage(item: IOrder['items'][number]): string {
+  const image = item.product_image || item.cover_image
+  return image ? resolveImageUrl(image, 'thumb') : ''
+}
 </script>
 
 <style lang="scss" scoped>
@@ -202,10 +268,12 @@ function onCopyOrderNo() {
 
 .order-product {
   display: flex; align-items: center; padding: 12rpx 0;
-  &__image { width: 100rpx; height: 100rpx; background-color: var(--color-bg-light); border-radius: var(--radius-md); display: flex; justify-content: center; align-items: center; flex-shrink: 0; margin-right: 16rpx; text { font-size: 36rpx; } }
+  &__image { width: 100rpx; height: 100rpx; background-color: var(--color-bg-light); border-radius: var(--radius-md); display: flex; justify-content: center; align-items: center; flex-shrink: 0; margin-right: 16rpx; overflow: hidden; image { width: 100%; height: 100%; } text { font-size: 36rpx; } }
   &__info { flex: 1; min-width: 0; }
   &__name { font-size: var(--font-size-base); color: var(--color-text); font-weight: 500; display: block; }
-  &__date { font-size: var(--font-size-sm); color: var(--color-text-secondary); display: block; margin-top: 4rpx; }
+  &__meta,
+  &__remark { font-size: var(--font-size-sm); color: var(--color-text-secondary); display: block; margin-top: 4rpx; line-height: 1.45; }
+  &__remark { color: var(--color-text-placeholder); }
   &__right { text-align: right; flex-shrink: 0; margin-left: 16rpx; }
   &__price { font-size: var(--font-size-base); color: var(--color-text); font-weight: 500; display: block; }
   &__qty { font-size: var(--font-size-sm); color: var(--color-text-placeholder); }
@@ -221,9 +289,12 @@ function onCopyOrderNo() {
 .fee-total { color: var(--color-orange) !important; font-size: var(--font-size-xl); }
 
 .info-line {
-  display: flex; justify-content: space-between; align-items: center; padding: 10rpx 0;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 24rpx; padding: 10rpx 0;
   font-size: var(--font-size-base); color: var(--color-text-secondary);
   &__right { display: flex; align-items: center; gap: 12rpx; }
+  > text:first-child { flex-shrink: 0; }
+  > text:last-child { text-align: right; word-break: break-word; }
+  &--remark > text:last-child { max-width: 480rpx; }
 }
 
 .info-copy {

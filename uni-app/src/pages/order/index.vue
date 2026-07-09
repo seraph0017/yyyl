@@ -28,6 +28,12 @@
           </text>
         </view>
 
+        <view class="order-card__meta" @tap="onOrderTap(order.id)">
+          <text>手机号：{{ formatOrderPhone(order) }}</text>
+          <text>支付：{{ formatOrderPaymentTime(order) }}</text>
+          <text class="order-card__remark">备注：{{ formatOrderRemark(order) }}</text>
+        </view>
+
         <!-- 商品列表 -->
         <view class="order-card__items" @tap="onOrderTap(order.id)">
           <view
@@ -37,9 +43,9 @@
           >
             <view class="order-item__image">
               <image
-                :src="goods.cover_image"
+                :src="getOrderItemImage(goods)"
                 mode="aspectFill"
-                v-if="goods.cover_image"
+                v-if="getOrderItemImage(goods)"
               />
               <view class="order-item__placeholder" v-else>
                 <text>🏕️</text>
@@ -47,11 +53,11 @@
             </view>
             <view class="order-item__info">
               <text class="order-item__name text-ellipsis">{{ goods.product_name }}</text>
-              <text class="order-item__date">日期：{{ goods.date }}</text>
+              <text class="order-item__meta">{{ formatOrderItemMeta(goods) }}</text>
             </view>
             <view class="order-item__right">
               <text class="order-item__price">¥{{ goods.actual_price }}</text>
-              <text class="order-item__qty">×{{ goods.quantity }}</text>
+              <text class="order-item__qty">{{ formatOrderItemQty(goods) }}</text>
             </view>
           </view>
         </view>
@@ -59,7 +65,7 @@
         <!-- 订单底部 -->
         <view class="order-card__footer">
           <view class="order-card__total">
-            <text>共{{ order.items.length }}件 · 实付</text>
+            <text>{{ getOrderDetailSummary(order) }} · 实付</text>
             <text class="order-card__total-price">¥{{ order.actual_amount }}</text>
           </view>
           <view class="order-card__actions">
@@ -128,7 +134,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { onShow, onReachBottom } from '@dcloudio/uni-app'
-import { get, post } from '@/utils/request'
+import { get, post, resolveImageUrl } from '@/utils/request'
 import { ensureLogin } from '@/utils/auth'
 import { getOrderStatusText, getOrderStatusColor, formatDate } from '@/utils/util'
 import EmptyState from '@/components/empty-state/index.vue'
@@ -242,6 +248,64 @@ function applyPendingTab() {
 // ---- 格式化工具 ----
 function formatOrderDate(date: string): string {
   return formatDate(date, 'MM-DD HH:mm')
+}
+
+function formatOrderPhone(order: IOrder): string {
+  return order.user_phone_masked || order.user_phone || '-'
+}
+
+function formatOrderPaymentTime(order: IOrder): string {
+  return order.payment_time ? formatOrderDate(order.payment_time) : '未支付'
+}
+
+function formatOrderRemark(order: IOrder): string {
+  return order.remark?.trim() || '无备注'
+}
+
+function getOrderDetailSummary(order: IOrder): string {
+  const itemCount = order.items.length
+  if (itemCount === 0) return '共0件'
+  const allDated = order.items.every(item => !!item.date)
+  if (!allDated) {
+    return `共${itemCount}件`
+  }
+  const headCount = order.items[0]?.quantity || 1
+  const hasTimeSlot = order.items.some(item => !!item.time_slot)
+  return `共${headCount}人${itemCount}${hasTimeSlot ? '单' : '晚'}`
+}
+
+function formatOrderItemMeta(item: IOrder['items'][number]): string {
+  const parts: string[] = []
+  const skuLabel = formatSkuSpecLabel(item.sku_spec_values)
+  if (skuLabel) parts.push(skuLabel)
+  if (item.date) parts.push(`日期：${item.date}`)
+  if (item.time_slot) parts.push(`场次：${item.time_slot}`)
+  if (item.date) {
+    parts.push(`${item.quantity}人${item.time_slot ? '1单' : '1晚'}`)
+  } else {
+    parts.push(`数量：${item.quantity}`)
+  }
+  return parts.join(' · ')
+}
+
+function formatOrderItemQty(item: IOrder['items'][number]): string {
+  if (item.date) {
+    return `${item.quantity}人${item.time_slot ? '1单' : '1晚'}`
+  }
+  return `x${item.quantity}`
+}
+
+function formatSkuSpecLabel(specValues?: Record<string, unknown> | null): string {
+  if (!specValues) return ''
+  return Object.entries(specValues)
+    .filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== '')
+    .map(([key, value]) => `${key}：${value}`)
+    .join(' / ')
+}
+
+function getOrderItemImage(item: IOrder['items'][number]): string {
+  const image = item.product_image || item.cover_image
+  return image ? resolveImageUrl(image, 'thumb') : ''
 }
 
 // ---- 事件处理 ----
@@ -399,6 +463,27 @@ function onGoShopping() {
     letter-spacing: 0.5rpx;
   }
 
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8rpx 20rpx;
+    padding: 14rpx 0 4rpx;
+
+    text {
+      max-width: 100%;
+      font-size: 22rpx;
+      line-height: 32rpx;
+      color: var(--color-text-placeholder);
+    }
+  }
+
+  &__remark {
+    flex-basis: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   &__items {
     padding: 16rpx 0;
   }
@@ -475,6 +560,13 @@ function onGoShopping() {
   }
 
   &__date {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-placeholder);
+    margin-top: 8rpx;
+  }
+
+  &__meta {
     display: block;
     font-size: var(--font-size-sm);
     color: var(--color-text-placeholder);

@@ -34,7 +34,7 @@
           </view>
           <view class="identity-item__info">
             <text class="identity-item__name">{{ item.name }}</text>
-            <text class="identity-item__detail">{{ item.id_card }} · {{ item.phone }}</text>
+            <text class="identity-item__detail">{{ formatIdentityIdCard(item) }} · {{ formatIdentityPhone(item.phone) }}</text>
           </view>
         </view>
       </view>
@@ -49,7 +49,7 @@
         <text class="section__title">📍 收货地址</text>
       </view>
       <view class="address-info" v-if="address">
-        <text class="address-info__name">{{ address.name }} {{ address.phone }}</text>
+        <text class="address-info__name">{{ address.contact_name }} {{ address.contact_phone }}</text>
         <text class="address-info__detail">{{ address.province }}{{ address.city }}{{ address.district }}{{ address.detail }}</text>
       </view>
       <view class="address-placeholder" v-else>
@@ -74,6 +74,8 @@
           <view class="confirm-product__dates" v-if="showDates">
             <text class="confirm-product__date" v-for="d in dates" :key="d">📅 {{ d }}</text>
           </view>
+          <text class="confirm-product__meta" v-if="activityTimeSlot">预约时间：{{ activityTimeSlot }}</text>
+          <text class="confirm-product__meta" v-if="activityMeetingPoint">集合地点：{{ activityMeetingPoint }}</text>
           <view class="confirm-product__price-row">
             <PriceTag :price="product.current_price" size="small" />
             <text class="confirm-product__qty">x{{ displayQuantity }}</text>
@@ -145,11 +147,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import { get, post, resolveImageUrl } from '@/utils/request'
 import { ensureLogin, getUserInfo } from '@/utils/auth'
 import { appendAttributionPayload } from '@/utils/attribution'
-import { isCampsiteProduct, normalizeProductCategory } from '@/utils/product-rules'
+import { isCampsiteProduct, isDateBookingProduct, isRetailProduct, normalizeProductCategory } from '@/utils/product-rules'
 import PriceTag from '@/components/price-tag/index.vue'
 import type { IProduct, IIdentity, IAddress, IOrder, IOrderQuoteResponse, ICartItem } from '@/types'
 
@@ -166,7 +168,8 @@ interface CartListResponse {
     product_type?: string
     stock_available?: boolean
     stock?: number
-    sku_spec_values?: Record<string, string> | null
+    sku_spec_values?: Record<string, unknown> | null
+    shipping_required?: boolean
   }>
   summary?: {
     total_count: number
@@ -203,10 +206,11 @@ const directProductImage = ref('')
 const temporaryToken = ref('')
 const temporaryClaimedOrder = ref<(IOrder & { biz_data?: Record<string, any> | null }) | null>(null)
 const temporaryClaimError = ref('')
-const showDates = computed(() => !!product.value && isCampsiteProduct(product.value.category) && dates.value.length > 0)
+const activityTimeSlot = ref('')
+const showDates = computed(() => !!product.value && isDateBookingProduct(product.value.category) && dates.value.length > 0)
 const showIdentitySection = computed(() => !!product.value && isCampsiteProduct(product.value.category) && product.value.identity_mode !== 'none')
 const displayQuantity = computed(() => {
-  if (product.value && isCampsiteProduct(product.value.category)) {
+  if (product.value && isDateBookingProduct(product.value.category)) {
     return dates.value.length || 1
   }
   return quantity.value
@@ -215,6 +219,7 @@ const directProductFallbackText = computed(() => {
   if (!product.value) return '物'
   return isCampsiteProduct(product.value.category) ? '营' : '物'
 })
+const activityMeetingPoint = computed(() => product.value?.ext_activity?.meeting_point || '')
 
 onLoad((options) => {
   const hasTemporaryTokenParam = Boolean(options?.temporary_token || options?.scene)
@@ -222,12 +227,19 @@ onLoad((options) => {
   productId.value = Number(options?.product_id || 0)
   skuId.value = options?.sku_id ? Number(options.sku_id) : null
   dates.value = options?.dates ? options.dates.split(',') : []
+  activityTimeSlot.value = options?.time_slot ? safeDecodeQueryValue(options.time_slot) : ''
   quantity.value = Number(options?.quantity || 1)
   from.value = hasTemporaryTokenParam ? 'temporary' : (options?.from || 'direct')
   cartItemIds.value = options?.cart_item_ids ? options.cart_item_ids.split(',') : []
   disclaimerSigned.value = options?.disclaimer_signed === '1' || options?.disclaimer_signed === 'true'
 
   loadData()
+})
+
+onShow(() => {
+  if (showIdentitySection.value) {
+    loadIdentities()
+  }
 })
 
 function safeDecodeTemporaryToken(value: unknown): string {
@@ -238,6 +250,15 @@ function safeDecodeTemporaryToken(value: unknown): string {
   } catch {
     temporaryClaimError.value = '临时收款码参数无效'
     return ''
+  }
+}
+
+function safeDecodeQueryValue(value: unknown): string {
+  const raw = String(value || '')
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
   }
 }
 
@@ -274,6 +295,7 @@ async function loadData() {
         ? (raw.skus || []).find((sku: Record<string, any>) => Number(sku.id) === skuId.value)
         : null
       const displayPrice = selectedSku ? Number(selectedSku.price || price) : price
+      const displayStock = selectedSku ? resolveSkuAvailableStock(selectedSku, Number(raw.stock || 0)) : Number(raw.stock || 0)
       selectedSkuLabel.value = formatSkuLabel(selectedSku?.spec_values || {})
       directProductImage.value = resolveProductImage(raw, selectedSku)
 
@@ -290,31 +312,35 @@ async function loadData() {
         status: raw.status || 'on_sale',
         tags: [],
         attributes: [],
-        stock: selectedSku ? Number(selectedSku.stock || 0) : Number(raw.stock || 0),
+        stock: displayStock,
         sales_count: 0,
         ticket_start_time: raw.sale_start_at || null,
         is_seckill: raw.is_seckill || false,
         has_disclaimer: raw.require_disclaimer !== false,
         identity_mode: raw.identity_mode || 'optional',
         deposit_amount: raw.ext_rental?.deposit_amount || 0,
+        ext_shop: raw.ext_shop || undefined,
+        ext_activity: raw.ext_activity || undefined,
       }
 
       product.value = p
-      needAddress.value = p.category === 'merchandise'
+      needAddress.value = Boolean(raw.ext_shop?.shipping_required)
 
-      if (!isCampsiteProduct(p.category)) {
+      if (!isDateBookingProduct(p.category)) {
         dates.value = []
+      }
+
+      if (isDateBookingProduct(p.category) && dates.value.length === 0) {
+        resetOrderAmounts()
+        uni.showToast({ title: '请选择预约日期', icon: 'none' })
+        return
       }
 
       await refreshQuote(false)
     }
 
     if (showIdentitySection.value) {
-      const idList = await get<IIdentity[]>('/users/identities')
-      identities.value = idList || []
-      const defaultId = identities.value.find(i => i.is_default)
-      if (defaultId) selectedIdentity.value = defaultId
-      else if (identities.value.length > 0) selectedIdentity.value = identities.value[0]
+      await loadIdentities()
     } else {
       identities.value = []
       selectedIdentity.value = null
@@ -324,12 +350,15 @@ async function loadData() {
   }
 }
 
-function formatSkuLabel(specValues?: Record<string, string> | null): string {
-  return Object.values(specValues || {}).filter(Boolean).join(' / ')
+function formatSkuLabel(specValues?: Record<string, unknown> | null): string {
+  return Object.values(specValues || {}).filter(Boolean).map(value => String(value)).join(' / ')
 }
 
-function isRetailProduct(category?: string): boolean {
-  return !isCampsiteProduct(category || '')
+function resolveSkuAvailableStock(sku: Record<string, any>, fallbackStock = 0): number {
+  if (sku.inventory_mode === 'shared_product' || sku.inventory_pool_id) {
+    return Number(sku.inventory_pool_available ?? fallbackStock)
+  }
+  return Number(sku.stock || 0)
 }
 
 function resolveProductImage(raw: Record<string, any>, selectedSku?: Record<string, any> | null): string {
@@ -355,8 +384,9 @@ async function loadCartCheckoutPreview(item_ids: number[]) {
     selected: item.checked !== false,
     stock: Number(item.stock ?? item.quantity),
     category: item.product_type as ICartItem['category'],
+    shipping_required: Boolean(item.shipping_required),
   }))
-  needAddress.value = cartProducts.value.some(item => item.category === 'merchandise')
+  needAddress.value = cartProducts.value.some(item => item.shipping_required)
   const quoteData = await post<IOrderQuoteResponse>(
     '/cart/quote',
     { item_ids, disclaimer_signed: disclaimerSigned.value },
@@ -524,9 +554,10 @@ function buildOrderPayload(includeIdentity = true): Record<string, unknown> {
   const item: Record<string, unknown> = {
     product_id: productId.value,
     sku_id: skuId.value,
-    dates: isCampsiteProduct(p.category) ? dates.value : [],
+    dates: isDateBookingProduct(p.category) ? dates.value : [],
     quantity: quantity.value,
   }
+  if (activityTimeSlot.value) item.time_slot = activityTimeSlot.value
   if (includeIdentity && showIdentitySection.value && selectedIdentity.value) {
     item.identity_ids = [selectedIdentity.value.id]
   }
@@ -541,10 +572,26 @@ function buildOrderPayload(includeIdentity = true): Record<string, unknown> {
 
 async function refreshQuote(showError = true): Promise<IOrderQuoteResponse | null> {
   if (!product.value || from.value === 'cart') return null
+  if (isDateBookingProduct(product.value.category) && dates.value.length === 0) {
+    if (showError) {
+      uni.showToast({ title: '请选择预约日期', icon: 'none' })
+    }
+    return null
+  }
   const payload = buildOrderPayload(false)
   const data = await post<IOrderQuoteResponse>('/orders/quote', payload, { showError })
   applyQuote(data)
   return data
+}
+
+async function loadIdentities() {
+  if (!showIdentitySection.value) return
+  const previousSelectedId = selectedIdentity.value?.id
+  const idList = await get<IIdentity[]>('/users/identities')
+  identities.value = idList || []
+  const matched = previousSelectedId ? identities.value.find(i => i.id === previousSelectedId) : null
+  const defaultId = identities.value.find(i => i.is_default)
+  selectedIdentity.value = matched || defaultId || identities.value[0] || null
 }
 
 /** 选择身份 */
@@ -560,7 +607,14 @@ function onAddIdentity() {
 
 /** 选择地址 */
 function onSelectAddress() {
-  uni.navigateTo({ url: '/pages/address/index?action=select' })
+  uni.navigateTo({
+    url: '/pages/address/index?action=select',
+    events: {
+      select(addr: IAddress) {
+        address.value = addr
+      },
+    },
+  })
 }
 
 /** 提交订单 */
@@ -571,6 +625,10 @@ async function onSubmitOrder() {
   if (!p && from.value !== 'cart' && from.value !== 'temporary') return
   if (p && isRetailProduct(p.category) && p.stock <= 0) {
     uni.showToast({ title: '该商品已售罄', icon: 'none' })
+    return
+  }
+  if (p && isDateBookingProduct(p.category) && dates.value.length === 0) {
+    uni.showToast({ title: '请选择预约日期', icon: 'none' })
     return
   }
 
@@ -671,6 +729,30 @@ async function onSubmitOrder() {
   } finally {
     submitting.value = false
   }
+}
+
+function isMaskedValue(value?: string | null): boolean {
+  return Boolean(value && value.includes('*'))
+}
+
+function maskIdCard(idCard: string): string {
+  if (!idCard || idCard.length < 8) return idCard
+  return idCard.slice(0, 4) + '****' + idCard.slice(-4)
+}
+
+function maskPhone(phone: string): string {
+  if (!phone || phone.length < 7) return phone
+  return phone.slice(0, 3) + '****' + phone.slice(-4)
+}
+
+function formatIdentityIdCard(item: IIdentity): string {
+  if (item.id_card_masked) return item.id_card_masked
+  return item.id_card ? maskIdCard(item.id_card) : '未填写身份证'
+}
+
+function formatIdentityPhone(phone?: string | null): string {
+  if (!phone) return ''
+  return isMaskedValue(phone) ? phone : maskPhone(phone)
 }
 </script>
 
@@ -925,6 +1007,14 @@ async function onSubmitOrder() {
     font-size: var(--font-size-xs);
     color: var(--color-text-placeholder);
     line-height: 1.4;
+  }
+
+  &__meta {
+    display: block;
+    margin-top: 8rpx;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    line-height: 1.45;
   }
 
   &__price-row {
